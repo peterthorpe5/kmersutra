@@ -2,7 +2,13 @@
 
 import unittest
 
-from kmersutra.kmers import canonical_kmer, hamming_distance, iter_kmers, reverse_complement
+from kmersutra.kmers import (
+    canonical_kmer,
+    hamming_distance,
+    is_valid_kmer,
+    iter_kmers,
+    reverse_complement,
+)
 
 
 class TestKmers(unittest.TestCase):
@@ -25,6 +31,22 @@ class TestKmers(unittest.TestCase):
         observed = list(iter_kmers(sequence="AACCG", k=3, canonical=False))
         self.assertEqual(observed, [(0, "AAC"), (1, "ACC"), (2, "CCG")])
 
+    def test_iter_kmers_rejects_non_positive_k(self) -> None:
+        """K-mer iteration should reject non-positive k values."""
+        with self.assertRaises(ValueError):
+            list(iter_kmers(sequence="ACGT", k=0))
+
+    def test_is_valid_kmer(self) -> None:
+        """K-mer validator should reject ambiguous and empty k-mers."""
+        self.assertTrue(is_valid_kmer("ACGT"))
+        self.assertFalse(is_valid_kmer("ACGN"))
+        self.assertFalse(is_valid_kmer(""))
+
     def test_hamming_distance(self) -> None:
         """Hamming distance should count mismatches."""
         self.assertEqual(hamming_distance(left="AAAA", right="AATA"), 1)
+
+    def test_hamming_distance_rejects_unequal_lengths(self) -> None:
+        """Hamming distance should require equal-length strings."""
+        with self.assertRaises(ValueError):
+            hamming_distance(left="AAAA", right="AAA")

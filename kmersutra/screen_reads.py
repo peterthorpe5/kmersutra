@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import logging
+from collections.abc import Iterable, Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
 from kmersutra.build_panel import DiagnosticKmer, load_panel
 from kmersutra.fasta import SequenceRecord, read_fasta_records, read_fastq_records
-from kmersutra.kmers import hamming_distance, iter_kmers
+from kmersutra.kmers import VALID_BASES, hamming_distance, iter_kmers
+
+_GLOBAL_PANEL_INDEX: dict[int, dict[str, list[DiagnosticKmer]]] | None = None
+_GLOBAL_SAMPLE_ID = ""
+_GLOBAL_SEQUENCE_TYPE = ""
+_GLOBAL_MAX_MISMATCHES = 0
+_GLOBAL_FUZZY_MIN_K = 71
 
 
 @dataclass(frozen=True)
@@ -79,26 +87,68 @@ class KmerHit:
 def _exact_hits(
     *,
     query_kmer: str,
-    query_position: int,
     diagnostics: dict[str, list[DiagnosticKmer]],
 ) -> list[tuple[int, DiagnosticKmer]]:
-    """Find exact diagnostic k-mer hits.
+    """Find exact diagnostic k-mer hits."""
+    return [(0, item) for item in diagnostics.get(query_kmer, [])]
+
+
+def iter_mismatch_neighbourhood(*, kmer: str, max_mismatches: int) -> Iterator[str]:
+    """Yield sequence neighbours within one or two substitutions.
 
     Parameters
     ----------
-    query_kmer : str
+    kmer : str
         Query k-mer.
-    query_position : int
-        Query position.
-    diagnostics : dict[str, list[DiagnosticKmer]]
-        Diagnostic lookup for one k.
+    max_mismatches : int
+        Maximum number of substitutions to generate.
 
-    Returns
-    -------
-    list[tuple[int, DiagnosticKmer]]
-        Mismatch count and diagnostic record pairs.
+    Yields
+    ------
+    str
+        Candidate neighbouring k-mer.
     """
-    return [(0, item) for item in diagnostics.get(query_kmer, [])]
+    if max_mismatches <= 0:
+        return
+    if max_mismatches > 2:
+        raise ValueError("Fuzzy matching currently supports at most two mismatches")
+
+    bases = tuple(sorted(VALID_BASES))
+    kmer_list = list(kmer)
+    seen: set[str] = set()
+
+    for first_index, original_first in enumerate(kmer_list):
+        for first_base in bases:
+            if first_base == original_first:
+                continue
+            mutated = kmer_list.copy()
+            mutated[first_index] = first_base
+            candidate = "".join(mutated)
+            if candidate not in seen:
+                seen.add(candidate)
+                yield candidate
+
+    if max_mismatches < 2:
+        return
+
+    length = len(kmer_list)
+    for first_index in range(length - 1):
+        original_first = kmer_list[first_index]
+        for second_index in range(first_index + 1, length):
+            original_second = kmer_list[second_index]
+            for first_base in bases:
+                if first_base == original_first:
+                    continue
+                for second_base in bases:
+                    if second_base == original_second:
+                        continue
+                    mutated = kmer_list.copy()
+                    mutated[first_index] = first_base
+                    mutated[second_index] = second_base
+                    candidate = "".join(mutated)
+                    if candidate not in seen:
+                        seen.add(candidate)
+                        yield candidate
 
 
 def _fuzzy_hits(
@@ -107,27 +157,18 @@ def _fuzzy_hits(
     diagnostics: dict[str, list[DiagnosticKmer]],
     max_mismatches: int,
 ) -> list[tuple[int, DiagnosticKmer]]:
-    """Find fuzzy diagnostic k-mer hits by Hamming distance.
-
-    Parameters
-    ----------
-    query_kmer : str
-        Query k-mer.
-    diagnostics : dict[str, list[DiagnosticKmer]]
-        Diagnostic lookup for one k.
-    max_mismatches : int
-        Maximum allowed mismatches.
-
-    Returns
-    -------
-    list[tuple[int, DiagnosticKmer]]
-        Mismatch count and diagnostic record pairs.
-    """
+    """Find fuzzy diagnostic k-mer hits using neighbourhood lookup."""
     if max_mismatches <= 0:
         return []
     hits: list[tuple[int, DiagnosticKmer]] = []
-    for panel_kmer, panel_items in diagnostics.items():
-        distance = hamming_distance(left=query_kmer, right=panel_kmer)
+    for candidate in iter_mismatch_neighbourhood(
+        kmer=query_kmer,
+        max_mismatches=max_mismatches,
+    ):
+        panel_items = diagnostics.get(candidate, [])
+        if not panel_items:
+            continue
+        distance = hamming_distance(left=query_kmer, right=candidate)
         if 0 < distance <= max_mismatches:
             hits.extend((distance, item) for item in panel_items)
     return hits
@@ -164,14 +205,15 @@ def screen_sequence_for_kmers(
     list[KmerHit]
         Query hits.
     """
+    if max_mismatches < 0:
+        raise ValueError("max_mismatches must be zero or greater")
+    if max_mismatches > 2:
+        raise ValueError("max_mismatches above two is not currently supported")
+
     hits: list[KmerHit] = []
     for k, diagnostics in panel_index.items():
         for position, query_kmer in iter_kmers(sequence=sequence_record.sequence, k=k):
-            matched = _exact_hits(
-                query_kmer=query_kmer,
-                query_position=position,
-                diagnostics=diagnostics,
-            )
+            matched = _exact_hits(query_kmer=query_kmer, diagnostics=diagnostics)
             if max_mismatches > 0 and k >= fuzzy_min_k:
                 matched.extend(
                     _fuzzy_hits(
@@ -199,6 +241,90 @@ def screen_sequence_for_kmers(
     return hits
 
 
+def _chunks(*, records: Iterable[SequenceRecord], chunk_size: int) -> Iterator[list[SequenceRecord]]:
+    """Yield fixed-size chunks from a record iterable.
+
+    Parameters
+    ----------
+    records : iterable of SequenceRecord
+        Records to chunk.
+    chunk_size : int
+        Number of records per chunk.
+
+    Yields
+    ------
+    list[SequenceRecord]
+        Record chunk.
+    """
+    chunk: list[SequenceRecord] = []
+    for record in records:
+        chunk.append(record)
+        if len(chunk) >= chunk_size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
+
+
+def _screen_chunk(
+    *,
+    records: list[SequenceRecord],
+    panel_index: dict[int, dict[str, list[DiagnosticKmer]]],
+    sample_id: str,
+    sequence_type: str,
+    max_mismatches: int,
+    fuzzy_min_k: int,
+) -> list[KmerHit]:
+    """Screen one chunk of records."""
+    hits: list[KmerHit] = []
+    for record in records:
+        hits.extend(
+            screen_sequence_for_kmers(
+                sequence_record=record,
+                panel_index=panel_index,
+                sample_id=sample_id,
+                sequence_type=sequence_type,
+                max_mismatches=max_mismatches,
+                fuzzy_min_k=fuzzy_min_k,
+            )
+        )
+    return hits
+
+
+def _init_worker(
+    panel_index: dict[int, dict[str, list[DiagnosticKmer]]],
+    sample_id: str,
+    sequence_type: str,
+    max_mismatches: int,
+    fuzzy_min_k: int,
+) -> None:
+    """Initialise worker process globals for screening."""
+    global _GLOBAL_PANEL_INDEX
+    global _GLOBAL_SAMPLE_ID
+    global _GLOBAL_SEQUENCE_TYPE
+    global _GLOBAL_MAX_MISMATCHES
+    global _GLOBAL_FUZZY_MIN_K
+    _GLOBAL_PANEL_INDEX = panel_index
+    _GLOBAL_SAMPLE_ID = sample_id
+    _GLOBAL_SEQUENCE_TYPE = sequence_type
+    _GLOBAL_MAX_MISMATCHES = max_mismatches
+    _GLOBAL_FUZZY_MIN_K = fuzzy_min_k
+
+
+def _screen_chunk_worker(records: list[SequenceRecord]) -> list[KmerHit]:
+    """Screen one record chunk inside a worker process."""
+    if _GLOBAL_PANEL_INDEX is None:
+        raise RuntimeError("Worker panel index has not been initialised")
+    return _screen_chunk(
+        records=records,
+        panel_index=_GLOBAL_PANEL_INDEX,
+        sample_id=_GLOBAL_SAMPLE_ID,
+        sequence_type=_GLOBAL_SEQUENCE_TYPE,
+        max_mismatches=_GLOBAL_MAX_MISMATCHES,
+        fuzzy_min_k=_GLOBAL_FUZZY_MIN_K,
+    )
+
+
 def screen_records_for_species_kmers(
     *,
     records: Iterable[SequenceRecord],
@@ -207,6 +333,9 @@ def screen_records_for_species_kmers(
     sequence_type: str,
     max_mismatches: int = 0,
     fuzzy_min_k: int = 71,
+    threads: int = 1,
+    chunk_size: int = 1000,
+    logger: logging.Logger | None = None,
 ) -> list[KmerHit]:
     """Screen query records for species or clade diagnostic k-mers.
 
@@ -224,24 +353,82 @@ def screen_records_for_species_kmers(
         Maximum mismatches for fuzzy matching.
     fuzzy_min_k : int, optional
         Minimum k value eligible for fuzzy matching.
+    threads : int, optional
+        Number of worker processes.
+    chunk_size : int, optional
+        Number of records submitted per worker task.
+    logger : logging.Logger | None, optional
+        Logger for progress messages.
 
     Returns
     -------
     list[KmerHit]
         Query hits.
     """
+    if threads <= 0:
+        raise ValueError("threads must be a positive integer")
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be a positive integer")
+
+    if logger:
+        logger.info(
+            "Screening records using %d worker(s), chunk_size=%d, max_mismatches=%d",
+            threads,
+            chunk_size,
+            max_mismatches,
+        )
+
+    if threads == 1:
+        all_hits: list[KmerHit] = []
+        n_records = 0
+        for chunk in _chunks(records=records, chunk_size=chunk_size):
+            n_records += len(chunk)
+            all_hits.extend(
+                _screen_chunk(
+                    records=chunk,
+                    panel_index=panel_index,
+                    sample_id=sample_id,
+                    sequence_type=sequence_type,
+                    max_mismatches=max_mismatches,
+                    fuzzy_min_k=fuzzy_min_k,
+                )
+            )
+        if logger:
+            logger.info("Screened %d records and retained %d hits", n_records, len(all_hits))
+        return all_hits
+
+    chunks = list(_chunks(records=records, chunk_size=chunk_size))
+    if logger:
+        logger.info("Prepared %d screening chunks", len(chunks))
+
     all_hits: list[KmerHit] = []
-    for record in records:
-        all_hits.extend(
-            screen_sequence_for_kmers(
-                sequence_record=record,
+    n_records = sum(len(chunk) for chunk in chunks)
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        futures = [
+            executor.submit(
+                _screen_chunk,
+                records=chunk,
                 panel_index=panel_index,
                 sample_id=sample_id,
                 sequence_type=sequence_type,
                 max_mismatches=max_mismatches,
                 fuzzy_min_k=fuzzy_min_k,
             )
-        )
+            for chunk in chunks
+        ]
+        for index, future in enumerate(as_completed(futures), start=1):
+            chunk_hits = future.result()
+            all_hits.extend(chunk_hits)
+            if logger and (index == 1 or index % 10 == 0 or index == len(futures)):
+                logger.info(
+                    "Completed %d/%d chunks; retained %d hits so far",
+                    index,
+                    len(futures),
+                    len(all_hits),
+                )
+
+    if logger:
+        logger.info("Screened %d records and retained %d hits", n_records, len(all_hits))
     return all_hits
 
 
@@ -253,6 +440,9 @@ def screen_file_for_species_kmers(
     input_format: str,
     max_mismatches: int = 0,
     fuzzy_min_k: int = 71,
+    threads: int = 1,
+    chunk_size: int = 1000,
+    logger: logging.Logger | None = None,
 ) -> list[KmerHit]:
     """Screen a FASTA or FASTQ file against a diagnostic panel.
 
@@ -270,13 +460,29 @@ def screen_file_for_species_kmers(
         Maximum mismatches for fuzzy matching.
     fuzzy_min_k : int, optional
         Minimum k value eligible for fuzzy matching.
+    threads : int, optional
+        Number of worker processes.
+    chunk_size : int, optional
+        Number of records submitted per worker task.
+    logger : logging.Logger | None, optional
+        Logger for progress messages.
 
     Returns
     -------
     list[KmerHit]
         Query hits.
     """
+    if logger:
+        logger.info("Loading panel: %s", panel_path)
     panel_index = load_panel(panel_path=panel_path)
+    if logger:
+        n_panel_kmers = sum(len(kmer_map) for kmer_map in panel_index.values())
+        logger.info(
+            "Loaded panel with %d k values and %d unique panel k-mer keys",
+            len(panel_index),
+            n_panel_kmers,
+        )
+
     if input_format == "fasta":
         records = read_fasta_records(fasta_path=input_path)
         sequence_type = "contig"
@@ -285,6 +491,7 @@ def screen_file_for_species_kmers(
         sequence_type = "read"
     else:
         raise ValueError("input_format must be either fasta or fastq")
+
     return screen_records_for_species_kmers(
         records=records,
         panel_index=panel_index,
@@ -292,4 +499,7 @@ def screen_file_for_species_kmers(
         sequence_type=sequence_type,
         max_mismatches=max_mismatches,
         fuzzy_min_k=fuzzy_min_k,
+        threads=threads,
+        chunk_size=chunk_size,
+        logger=logger,
     )

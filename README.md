@@ -2,47 +2,6 @@
 
 KmerSutra is an outgroup-aware k-mer framework for clade- and species-resolved metagenomic detection. The first intended application is species-resolved *Plasmodium* detection in Oxford Nanopore Technologies metagenomic reads and assemblies, but the code is designed for any clade of interest.
 
-
-## Requirements
-
-KmerSutra has lightweight Python dependencies and is designed to run in a standard scientific Python environment.
-
-### Core requirements
-
-- Python >= 3.10  
-- pandas  
-- numpy  
-- jinja2  
-- biopython  
-- openpyxl  
-- matplotlib  
-- nose2  
-
-### Installation (conda recommended)
-
-```bash
-conda create -n kmersutra python=3.10
-conda activate kmersutra
-
-pip install pandas numpy jinja2 biopython openpyxl matplotlib nose2
-```
-
-
-### Install KmerSutra
-
-From the repository root:
-
-```bash
-pip install -e .
-```
-
-### Run tests
-
-```bash
-nose2
-```
-
-
 ## Core idea
 
 KmerSutra builds diagnostic k-mer panels from target genomes and outgroup genomes. It then screens reads or assemblies for evidence that supports:
@@ -141,3 +100,49 @@ nose2
 ```
 
 The tests use deterministic toy genomes and reads so that expected outputs are known exactly.
+
+## Parallel execution
+
+KmerSutra supports worker-process parallelism in both the panel-building and screening stages.
+
+Build a panel with multiple workers:
+
+```bash
+python scripts/build_clade_kmer_panel.py \
+  --genome_config examples/example_genome_config.tsv \
+  --out_dir example_panel_build \
+  --k_values 71 101 \
+  --target_clade Demo \
+  --threads 4 \
+  --verbose
+```
+
+Screen reads or assemblies with multiple workers:
+
+```bash
+python scripts/screen_reads_for_clade_kmers.py \
+  --input reads.fastq.gz \
+  --input_format fastq \
+  --panel example_panel_build/species_kmer_panel.tsv.gz \
+  --sample_id sample_001 \
+  --out_dir sample_001_kmersutra \
+  --threads 4 \
+  --chunk_size 1000 \
+  --max_mismatches 0 \
+  --verbose
+```
+
+For raw ONT read screening, exact matching should be tested first. Fuzzy matching is currently limited to one or two substitutions and should be restricted to longer k-mers, for example:
+
+```bash
+--max_mismatches 1 --fuzzy_min_k 101
+```
+
+## Development tests
+
+KmerSutra tests are written with the standard `unittest` framework and are compatible with `nose2`.
+
+```bash
+pip install -e '.[dev]'
+nose2 -v
+```

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from collections.abc import Iterable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -99,11 +101,71 @@ class DiagnosticKmer:
         }
 
 
+def _collect_for_genome(
+    genome_config: GenomeConfig,
+    k_values: tuple[int, ...],
+) -> tuple[list[KmerObservation], dict[str, object]]:
+    """Collect k-mer observations for one genome.
+
+    Parameters
+    ----------
+    genome_config : GenomeConfig
+        Genome metadata record.
+    k_values : tuple[int, ...]
+        K-mer lengths to collect.
+
+    Returns
+    -------
+    tuple[list[KmerObservation], dict[str, object]]
+        Observations and a compact per-genome collection summary.
+    """
+    observations: list[KmerObservation] = []
+    contigs = 0
+    total_bases = 0
+    per_k_counts = {k: 0 for k in k_values}
+
+    for fasta_record in read_fasta_records(fasta_path=genome_config.genome_fasta):
+        contigs += 1
+        total_bases += len(fasta_record.sequence)
+        for k in k_values:
+            count = 0
+            for position, kmer in iter_kmers(sequence=fasta_record.sequence, k=k):
+                observations.append(
+                    KmerObservation(
+                        kmer=kmer,
+                        k=k,
+                        species_name=genome_config.species_name,
+                        genome_id=genome_config.genome_id,
+                        contig_id=fasta_record.identifier,
+                        position=position,
+                        role=genome_config.role,
+                        clade=genome_config.clade,
+                    )
+                )
+                count += 1
+            per_k_counts[k] += count
+
+    summary = {
+        "genome_id": genome_config.genome_id,
+        "species_name": genome_config.species_name,
+        "role": genome_config.role,
+        "clade": genome_config.clade,
+        "genome_fasta": str(genome_config.genome_fasta),
+        "contigs": contigs,
+        "total_bases": total_bases,
+        "total_observations": len(observations),
+        **{f"observations_k{k}": per_k_counts[k] for k in k_values},
+    }
+    return observations, summary
+
+
 def collect_kmer_observations(
     *,
     genome_configs: Iterable[GenomeConfig],
     k_values: Iterable[int],
-) -> list[KmerObservation]:
+    threads: int = 1,
+    logger: logging.Logger | None = None,
+) -> tuple[list[KmerObservation], list[dict[str, object]]]:
     """Collect reference k-mer observations from configured genomes.
 
     Parameters
@@ -112,36 +174,81 @@ def collect_kmer_observations(
         Genome metadata records.
     k_values : iterable of int
         K-mer lengths to process.
+    threads : int, optional
+        Number of worker processes for per-genome collection.
+    logger : logging.Logger | None, optional
+        Logger for progress messages.
 
     Returns
     -------
-    list[KmerObservation]
-        Observed reference k-mers.
+    tuple[list[KmerObservation], list[dict[str, object]]]
+        Observed reference k-mers and per-genome collection summaries.
     """
+    configs = list(genome_configs)
+    k_tuple = tuple(k_values)
+    if threads <= 0:
+        raise ValueError("threads must be a positive integer")
+
+    if logger:
+        logger.info(
+            "Collecting k-mers for %d genomes, %d k values, using %d worker(s)",
+            len(configs),
+            len(k_tuple),
+            threads,
+        )
+
     observations: list[KmerObservation] = []
-    for genome_config in genome_configs:
-        for fasta_record in read_fasta_records(fasta_path=genome_config.genome_fasta):
-            for k in k_values:
-                for position, kmer in iter_kmers(sequence=fasta_record.sequence, k=k):
-                    observations.append(
-                        KmerObservation(
-                            kmer=kmer,
-                            k=k,
-                            species_name=genome_config.species_name,
-                            genome_id=genome_config.genome_id,
-                            contig_id=fasta_record.identifier,
-                            position=position,
-                            role=genome_config.role,
-                            clade=genome_config.clade,
-                        )
-                    )
-    return observations
+    summaries: list[dict[str, object]] = []
+
+    if threads == 1 or len(configs) <= 1:
+        for index, genome_config in enumerate(configs, start=1):
+            if logger:
+                logger.info(
+                    "Collecting genome %d/%d: %s (%s)",
+                    index,
+                    len(configs),
+                    genome_config.genome_id,
+                    genome_config.species_name,
+                )
+            genome_observations, summary = _collect_for_genome(genome_config, k_tuple)
+            observations.extend(genome_observations)
+            summaries.append(summary)
+            if logger:
+                logger.info(
+                    "Collected %d observations from %s",
+                    len(genome_observations),
+                    genome_config.genome_id,
+                )
+        return observations, summaries
+
+    max_workers = min(threads, len(configs))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_config = {
+            executor.submit(_collect_for_genome, genome_config, k_tuple): genome_config
+            for genome_config in configs
+        }
+        for future in as_completed(future_to_config):
+            genome_config = future_to_config[future]
+            genome_observations, summary = future.result()
+            observations.extend(genome_observations)
+            summaries.append(summary)
+            if logger:
+                logger.info(
+                    "Collected %d observations from %s (%s)",
+                    len(genome_observations),
+                    genome_config.genome_id,
+                    genome_config.species_name,
+                )
+
+    summaries.sort(key=lambda record: str(record["genome_id"]))
+    return observations, summaries
 
 
 def identify_species_unique_kmers(
     *,
     observations: Iterable[KmerObservation],
     target_species: set[str],
+    logger: logging.Logger | None = None,
 ) -> list[DiagnosticKmer]:
     """Identify k-mers unique to each target species.
 
@@ -151,6 +258,8 @@ def identify_species_unique_kmers(
         Reference k-mer observations.
     target_species : set[str]
         Species labels treated as target species.
+    logger : logging.Logger | None, optional
+        Logger for progress messages.
 
     Returns
     -------
@@ -160,6 +269,9 @@ def identify_species_unique_kmers(
     by_key: dict[tuple[int, str], list[KmerObservation]] = defaultdict(list)
     for observation in observations:
         by_key[(observation.k, observation.kmer)].append(observation)
+
+    if logger:
+        logger.info("Testing %d distinct reference k-mer keys for species uniqueness", len(by_key))
 
     diagnostics: list[DiagnosticKmer] = []
     for (k, kmer), group in by_key.items():
@@ -179,6 +291,8 @@ def identify_species_unique_kmers(
                     example_position=first.position,
                 )
             )
+    if logger:
+        logger.info("Identified %d species-unique diagnostic k-mers", len(diagnostics))
     return diagnostics
 
 
@@ -186,6 +300,7 @@ def identify_clade_core_kmers(
     *,
     observations: Iterable[KmerObservation],
     target_clade: str,
+    logger: logging.Logger | None = None,
 ) -> list[DiagnosticKmer]:
     """Identify k-mers present only within a named clade.
 
@@ -195,6 +310,8 @@ def identify_clade_core_kmers(
         Reference k-mer observations.
     target_clade : str
         Clade label defining the clade-level panel.
+    logger : logging.Logger | None, optional
+        Logger for progress messages.
 
     Returns
     -------
@@ -207,6 +324,9 @@ def identify_clade_core_kmers(
     by_key: dict[tuple[int, str], list[KmerObservation]] = defaultdict(list)
     for observation in observations:
         by_key[(observation.k, observation.kmer)].append(observation)
+
+    if logger:
+        logger.info("Testing %d distinct reference k-mer keys for clade specificity", len(by_key))
 
     diagnostics: list[DiagnosticKmer] = []
     for (k, kmer), group in by_key.items():
@@ -226,6 +346,8 @@ def identify_clade_core_kmers(
                     example_position=first.position,
                 )
             )
+    if logger:
+        logger.info("Identified %d clade-core diagnostic k-mers", len(diagnostics))
     return diagnostics
 
 
@@ -233,6 +355,7 @@ def thin_diagnostic_kmers(
     *,
     diagnostic_kmers: Iterable[DiagnosticKmer],
     max_per_species_per_k: int | None = None,
+    logger: logging.Logger | None = None,
 ) -> list[DiagnosticKmer]:
     """Thin diagnostic k-mers to a maximum count per species and k.
 
@@ -242,21 +365,24 @@ def thin_diagnostic_kmers(
         Diagnostic k-mers.
     max_per_species_per_k : int | None, optional
         Maximum number retained per panel type, species/clade and k.
+    logger : logging.Logger | None, optional
+        Logger for progress messages.
 
     Returns
     -------
     list[DiagnosticKmer]
         Thinned diagnostic k-mers.
     """
+    diagnostics = list(diagnostic_kmers)
     if max_per_species_per_k is None:
-        return list(diagnostic_kmers)
+        return diagnostics
     if max_per_species_per_k <= 0:
         raise ValueError("max_per_species_per_k must be positive")
 
     counts: dict[tuple[str, str, str, int], int] = defaultdict(int)
     retained: list[DiagnosticKmer] = []
     for item in sorted(
-        diagnostic_kmers,
+        diagnostics,
         key=lambda x: (x.panel_type, x.species_name, x.clade, x.k, x.kmer),
     ):
         key = (item.panel_type, item.species_name, item.clade, item.k)
@@ -264,6 +390,13 @@ def thin_diagnostic_kmers(
             continue
         retained.append(item)
         counts[key] += 1
+    if logger:
+        logger.info(
+            "Thinned diagnostic k-mers from %d to %d using max_per_species_per_k=%d",
+            len(diagnostics),
+            len(retained),
+            max_per_species_per_k,
+        )
     return retained
 
 
@@ -273,7 +406,9 @@ def build_panel(
     k_values: list[int],
     target_clade: str = "",
     max_per_species_per_k: int | None = None,
-) -> tuple[list[DiagnosticKmer], list[dict[str, object]]]:
+    threads: int = 1,
+    logger: logging.Logger | None = None,
+) -> tuple[list[DiagnosticKmer], list[dict[str, object]], list[dict[str, object]]]:
     """Build species and optional clade diagnostic k-mer panels.
 
     Parameters
@@ -286,31 +421,46 @@ def build_panel(
         Optional clade label for clade-core k-mers.
     max_per_species_per_k : int | None, optional
         Optional thinning limit.
+    threads : int, optional
+        Number of worker processes used during reference k-mer collection.
+    logger : logging.Logger | None, optional
+        Logger for progress messages.
 
     Returns
     -------
-    tuple[list[DiagnosticKmer], list[dict[str, object]]]
-        Diagnostic k-mers and summary records.
+    tuple[list[DiagnosticKmer], list[dict[str, object]], list[dict[str, object]]]
+        Diagnostic k-mers, panel summary records and collection summaries.
     """
-    observations = collect_kmer_observations(
+    observations, collection_summary = collect_kmer_observations(
         genome_configs=genome_configs,
         k_values=k_values,
+        threads=threads,
+        logger=logger,
     )
+    if logger:
+        logger.info("Collected %d total reference k-mer observations", len(observations))
+
     target_species = {config.species_name for config in genome_configs if config.is_target}
+    if logger:
+        logger.info("Target species: %s", "; ".join(sorted(target_species)))
+
     species_unique = identify_species_unique_kmers(
         observations=observations,
         target_species=target_species,
+        logger=logger,
     )
     clade_core = identify_clade_core_kmers(
         observations=observations,
         target_clade=target_clade,
+        logger=logger,
     )
     diagnostics = thin_diagnostic_kmers(
         diagnostic_kmers=[*species_unique, *clade_core],
         max_per_species_per_k=max_per_species_per_k,
+        logger=logger,
     )
     summary = summarise_panel(diagnostic_kmers=diagnostics)
-    return diagnostics, summary
+    return diagnostics, summary, collection_summary
 
 
 def summarise_panel(

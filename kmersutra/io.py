@@ -81,7 +81,11 @@ def read_tsv(*, input_path: str | Path) -> list[dict[str, str]]:
         records: list[dict[str, str]] = []
         for line in handle:
             values = line.rstrip("\n").split("\t")
-            records.append(dict(zip(header, values, strict=False)))
+            if len(values) < len(header):
+                values = values + ([""] * (len(header) - len(values)))
+            elif len(values) > len(header):
+                values = values[: len(header)]
+            records.append(dict(zip(header, values)))
     return records
 
 
