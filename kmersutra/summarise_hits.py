@@ -4,8 +4,24 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable
+from pathlib import Path
 
+from kmersutra.io import read_tsv
 from kmersutra.screen_reads import KmerHit
+
+
+SPECIES_EVIDENCE_FIELDNAMES = [
+    "sample_id",
+    "species_name",
+    "clade",
+    "n_hits",
+    "n_unique_kmers",
+    "n_positive_sequences",
+    "n_k_values_positive",
+    "best_k",
+    "n_exact_hits",
+    "n_fuzzy_hits",
+]
 
 
 def summarise_species_hits(*, hits: Iterable[KmerHit]) -> list[dict[str, object]]:
@@ -88,3 +104,79 @@ def summarise_sample_species_evidence(
             }
         )
     return records
+
+
+def load_panel_species_metadata(*, panel_path: str | Path) -> list[dict[str, str]]:
+    """Load species labels represented in a KmerSutra panel.
+
+    Parameters
+    ----------
+    panel_path : str or pathlib.Path
+        KmerSutra diagnostic k-mer panel TSV or TSV.GZ.
+
+    Returns
+    -------
+    list[dict[str, str]]
+        One record per species with ``species_name`` and ``clade`` fields.
+    """
+    records = read_tsv(input_path=panel_path)
+    species_to_clade: dict[str, str] = {}
+    for record in records:
+        if record.get("panel_type") != "species_unique":
+            continue
+        species_name = record.get("species_name", "")
+        if not species_name:
+            continue
+        species_to_clade.setdefault(species_name, record.get("clade", ""))
+    return [
+        {"species_name": species_name, "clade": species_to_clade[species_name]}
+        for species_name in sorted(species_to_clade)
+    ]
+
+
+def complete_sample_species_evidence(
+    *,
+    evidence_records: Iterable[dict[str, object]],
+    expected_species: Iterable[dict[str, str]],
+    sample_id: str,
+) -> list[dict[str, object]]:
+    """Add explicit zero-evidence rows for expected species not observed.
+
+    Parameters
+    ----------
+    evidence_records : iterable of dict[str, object]
+        Observed sample/species evidence records.
+    expected_species : iterable of dict[str, str]
+        Expected species metadata, usually from the diagnostic panel.
+    sample_id : str
+        Sample identifier to use for zero-evidence records.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        Completed evidence table with one row per expected species.
+    """
+    completed = [dict(record) for record in evidence_records]
+    observed = {str(record.get("species_name", "")) for record in completed}
+
+    for species_record in expected_species:
+        species_name = str(species_record.get("species_name", ""))
+        if not species_name or species_name in observed:
+            continue
+        completed.append(
+            {
+                "sample_id": sample_id,
+                "species_name": species_name,
+                "clade": species_record.get("clade", ""),
+                "n_hits": 0,
+                "n_unique_kmers": 0,
+                "n_positive_sequences": 0,
+                "n_k_values_positive": 0,
+                "best_k": 0,
+                "n_exact_hits": 0,
+                "n_fuzzy_hits": 0,
+            }
+        )
+
+    completed.sort(key=lambda row: (str(row.get("sample_id", "")), str(row.get("species_name", ""))))
+    return completed

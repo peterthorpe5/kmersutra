@@ -23,3 +23,23 @@ class TestCliModules(unittest.TestCase):
         """NCBI downloader CLI module should expose a main function."""
         module = importlib.import_module("kmersutra.cli.download_ncbi_taxon_genomes")
         self.assertTrue(callable(module.main))
+
+    def test_extract_features_cli_imports(self):
+        """Feature-extraction CLI module should expose a main function."""
+        module = importlib.import_module("kmersutra.cli.extract_ml_features")
+        self.assertTrue(callable(module.main))
+
+    def test_train_classifier_cli_imports(self):
+        """Classifier-training CLI module should expose a main function."""
+        module = importlib.import_module("kmersutra.cli.train_classifier")
+        self.assertTrue(callable(module.main))
+
+    def test_predict_classifier_cli_imports(self):
+        """Classifier-prediction CLI module should expose a main function."""
+        module = importlib.import_module("kmersutra.cli.predict_classifier")
+        self.assertTrue(callable(module.main))
+    def test_summarise_run_cli_imports(self):
+        """Run-summary CLI module should expose a main function."""
+        module = importlib.import_module("kmersutra.cli.summarise_spikein_run")
+        self.assertTrue(callable(module.main))
+

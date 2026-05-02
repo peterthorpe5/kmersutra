@@ -50,7 +50,7 @@ class TestThresholds(unittest.TestCase):
         self.assertLess(conflicted, clean)
 
     def test_call_species_presence_high_confidence(self) -> None:
-        """Sufficient clean evidence should call high confidence presence."""
+        """Sufficient clean evidence should call high-confidence presence."""
         evidence = [
             {
                 "sample_id": "s1",
@@ -87,8 +87,8 @@ class TestThresholds(unittest.TestCase):
         calls = call_species_presence(evidence_records=evidence)
         self.assertEqual(calls[0]["call"], "present_low_confidence")
 
-    def test_call_species_presence_ambiguous(self) -> None:
-        """Conflicting evidence should produce an ambiguous call."""
+    def test_call_species_presence_identifies_true_mixed_samples(self) -> None:
+        """Multiple independently supported species should be mixed-present calls."""
         evidence = [
             {
                 "sample_id": "s1",
@@ -116,7 +116,58 @@ class TestThresholds(unittest.TestCase):
             },
         ]
         calls = call_species_presence(evidence_records=evidence)
-        self.assertEqual({call["call"] for call in calls}, {"ambiguous_mixed_signal"})
+        self.assertEqual({call["call"] for call in calls}, {"present_in_mixed_sample"})
+        self.assertTrue(all(float(call["confidence_score"]) > 0.5 for call in calls))
+
+    def test_call_species_presence_can_disallow_mixed_samples(self) -> None:
+        """Mixed evidence can still be treated as conflicting when requested."""
+        evidence = [
+            {
+                "sample_id": "s1",
+                "species_name": "Alpha",
+                "clade": "Demo",
+                "n_hits": 10,
+                "n_unique_kmers": 5,
+                "n_positive_sequences": 3,
+                "n_k_values_positive": 2,
+                "best_k": 71,
+                "n_exact_hits": 10,
+                "n_fuzzy_hits": 0,
+            },
+            {
+                "sample_id": "s1",
+                "species_name": "Beta",
+                "clade": "Demo",
+                "n_hits": 8,
+                "n_unique_kmers": 4,
+                "n_positive_sequences": 3,
+                "n_k_values_positive": 2,
+                "best_k": 71,
+                "n_exact_hits": 8,
+                "n_fuzzy_hits": 0,
+            },
+        ]
+        calls = call_species_presence(evidence_records=evidence, allow_mixed_species=False)
+        self.assertEqual({call["call"] for call in calls}, {"ambiguous_conflicting_signal"})
+
+    def test_call_species_presence_reports_not_detected(self) -> None:
+        """Explicit zero-evidence rows should be called not detected."""
+        evidence = [
+            {
+                "sample_id": "s1",
+                "species_name": "Alpha",
+                "clade": "Demo",
+                "n_hits": 0,
+                "n_unique_kmers": 0,
+                "n_positive_sequences": 0,
+                "n_k_values_positive": 0,
+                "best_k": 0,
+                "n_exact_hits": 0,
+                "n_fuzzy_hits": 0,
+            }
+        ]
+        calls = call_species_presence(evidence_records=evidence)
+        self.assertEqual(calls[0]["call"], "not_detected")
 
     def test_call_species_presence_handles_empty_evidence(self) -> None:
         """Empty evidence should produce no calls."""

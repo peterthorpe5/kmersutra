@@ -1,22 +1,90 @@
-"""Tests for hit summarisation."""
+"""Tests for KmerSutra hit summarisation."""
 
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
+from kmersutra.io import write_tsv
 from kmersutra.screen_reads import KmerHit
-from kmersutra.summarise_hits import summarise_sample_species_evidence, summarise_species_hits
+from kmersutra.summarise_hits import (
+    complete_sample_species_evidence,
+    load_panel_species_metadata,
+    summarise_sample_species_evidence,
+    summarise_species_hits,
+)
 
 
 class TestSummariseHits(unittest.TestCase):
-    """Tests for hit summary functions."""
+    """Tests for summarising diagnostic k-mer hits."""
 
-    def test_summarise_species_hits(self) -> None:
-        """Hit summarisation should count unique k-mers and sequences."""
+    def test_summarise_species_hits_groups_by_species_and_k(self) -> None:
+        """Hit summary should aggregate hits by species, panel type and k."""
         hits = [
-            KmerHit(sample_id="s1", sequence_id="r1", sequence_type="read", k=5, query_position=0, matched_kmer="AAAAA", query_kmer="AAAAA", mismatches=0, panel_type="species_unique", species_name="Alpha", clade="Demo"),
-            KmerHit(sample_id="s1", sequence_id="r2", sequence_type="read", k=5, query_position=1, matched_kmer="AAAAC", query_kmer="AAAAC", mismatches=0, panel_type="species_unique", species_name="Alpha", clade="Demo"),
+            KmerHit("s1", "r1", "read", 5, 0, "AAAAA", "AAAAA", 0, "species_unique", "Alpha", "Demo"),
+            KmerHit("s1", "r2", "read", 5, 0, "AAAAC", "AAAAC", 0, "species_unique", "Alpha", "Demo"),
         ]
         summary = summarise_species_hits(hits=hits)
-        self.assertEqual(summary[0]["n_unique_kmers"], 2)
+        self.assertEqual(summary[0]["n_hits"], 2)
         self.assertEqual(summary[0]["n_positive_sequences"], 2)
+
+    def test_summarise_sample_species_evidence_collapses_k_values(self) -> None:
+        """Species evidence should collapse k-specific rows into one record."""
+        summary = [
+            {
+                "sample_id": "s1", "panel_type": "species_unique", "label": "Alpha",
+                "clade": "Demo", "k": 5, "n_hits": 2, "n_unique_kmers": 2,
+                "n_positive_sequences": 1, "n_exact_hits": 2, "n_fuzzy_hits": 0,
+            },
+            {
+                "sample_id": "s1", "panel_type": "species_unique", "label": "Alpha",
+                "clade": "Demo", "k": 7, "n_hits": 3, "n_unique_kmers": 3,
+                "n_positive_sequences": 2, "n_exact_hits": 3, "n_fuzzy_hits": 0,
+            },
+        ]
         evidence = summarise_sample_species_evidence(species_summary=summary)
-        self.assertEqual(evidence[0]["species_name"], "Alpha")
+        self.assertEqual(evidence[0]["n_hits"], 5)
+        self.assertEqual(evidence[0]["n_k_values_positive"], 2)
+        self.assertEqual(evidence[0]["best_k"], 7)
+
+    def test_load_panel_species_metadata(self) -> None:
+        """Panel metadata loader should recover expected species labels."""
+        with TemporaryDirectory() as tmpdir:
+            panel_path = Path(tmpdir) / "panel.tsv"
+            write_tsv(
+                records=[
+                    {
+                        "kmer": "AAAAA", "k": 5, "panel_type": "species_unique",
+                        "species_name": "Alpha", "clade": "Demo", "source_genomes": "g1",
+                        "source_contigs": "c1", "example_position": 0,
+                    },
+                    {
+                        "kmer": "CCCCC", "k": 5, "panel_type": "clade_core",
+                        "species_name": "", "clade": "Demo", "source_genomes": "g1;g2",
+                        "source_contigs": "c1", "example_position": 0,
+                    },
+                ],
+                output_path=panel_path,
+            )
+            species = load_panel_species_metadata(panel_path=panel_path)
+            self.assertEqual(species, [{"species_name": "Alpha", "clade": "Demo"}])
+
+    def test_complete_sample_species_evidence_adds_zero_rows(self) -> None:
+        """Completed evidence should include not-observed expected species."""
+        completed = complete_sample_species_evidence(
+            evidence_records=[
+                {
+                    "sample_id": "s1", "species_name": "Alpha", "clade": "Demo",
+                    "n_hits": 5, "n_unique_kmers": 5, "n_positive_sequences": 2,
+                    "n_k_values_positive": 1, "best_k": 71, "n_exact_hits": 5,
+                    "n_fuzzy_hits": 0,
+                }
+            ],
+            expected_species=[
+                {"species_name": "Alpha", "clade": "Demo"},
+                {"species_name": "Beta", "clade": "Demo"},
+            ],
+            sample_id="s1",
+        )
+        beta = [row for row in completed if row["species_name"] == "Beta"][0]
+        self.assertEqual(beta["n_unique_kmers"], 0)
+        self.assertEqual(beta["best_k"], 0)

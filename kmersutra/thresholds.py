@@ -15,7 +15,7 @@ def calculate_conflict_ratio(
     Parameters
     ----------
     target_unique_kmers : int
-        Unique diagnostic k-mers for the strongest species.
+        Unique diagnostic k-mers for the focal species.
     conflicting_unique_kmers : int
         Unique diagnostic k-mers supporting other species.
 
@@ -51,25 +51,41 @@ def calculate_confidence_score(
     best_k : int
         Longest positive k value.
     conflict_ratio : float
-        Conflicting-evidence ratio.
+        Conflicting-evidence ratio used as a penalty.
 
     Returns
     -------
     float
         Score between 0 and 1. This is not yet a calibrated probability.
     """
-    kmer_score = min(n_unique_kmers / 10.0, 1.0)
-    sequence_score = min(n_positive_sequences / 5.0, 1.0)
-    multi_k_score = min(n_k_values_positive / 3.0, 1.0)
-    long_k_score = min(best_k / 101.0, 1.0)
+    kmer_score = min(max(n_unique_kmers, 0) / 10.0, 1.0)
+    sequence_score = min(max(n_positive_sequences, 0) / 5.0, 1.0)
+    multi_k_score = min(max(n_k_values_positive, 0) / 3.0, 1.0)
+    long_k_score = min(max(best_k, 0) / 101.0, 1.0)
     raw_score = (
         0.35 * kmer_score
         + 0.25 * sequence_score
         + 0.20 * multi_k_score
         + 0.20 * long_k_score
     )
-    penalised = raw_score * (1.0 - min(max(conflict_ratio, 0.0), 1.0))
+    penalty = min(max(conflict_ratio, 0.0), 1.0)
+    penalised = raw_score * (1.0 - penalty)
     return round(max(0.0, min(1.0, penalised)), 4)
+
+
+def _passes_species_evidence(
+    *,
+    row: dict[str, object],
+    min_unique_kmers: int,
+    min_positive_sequences: int,
+    min_k_values_positive: int,
+) -> bool:
+    """Return whether a species evidence row passes detection minima."""
+    return (
+        int(row["n_unique_kmers"]) >= min_unique_kmers
+        and int(row["n_positive_sequences"]) >= min_positive_sequences
+        and int(row["n_k_values_positive"]) >= min_k_values_positive
+    )
 
 
 def call_species_presence(
@@ -79,6 +95,7 @@ def call_species_presence(
     min_positive_sequences: int = 2,
     min_k_values_positive: int = 1,
     max_conflict_ratio: float = 0.10,
+    allow_mixed_species: bool = True,
 ) -> list[dict[str, object]]:
     """Call species presence from summarised evidence.
 
@@ -93,7 +110,13 @@ def call_species_presence(
     min_k_values_positive : int, optional
         Minimum positive k values.
     max_conflict_ratio : float, optional
-        Maximum tolerated conflict ratio.
+        Maximum tolerated conflict ratio for a single-species high-confidence
+        call.
+    allow_mixed_species : bool, optional
+        If true, multiple species that independently pass evidence thresholds
+        are called as ``present_in_mixed_sample`` rather than penalised as
+        conflicting. This is appropriate for metagenomic samples where true
+        mixed-species infections or spike-ins are possible.
 
     Returns
     -------
@@ -111,6 +134,18 @@ def call_species_presence(
             str(row["species_name"]): int(row["n_unique_kmers"])
             for row in sample_records
         }
+        passing_species = {
+            str(row["species_name"])
+            for row in sample_records
+            if _passes_species_evidence(
+                row=row,
+                min_unique_kmers=min_unique_kmers,
+                min_positive_sequences=min_positive_sequences,
+                min_k_values_positive=min_k_values_positive,
+            )
+        }
+        sample_is_mixed = allow_mixed_species and len(passing_species) > 1
+
         for row in sample_records:
             species_name = str(row["species_name"])
             target_unique = int(row["n_unique_kmers"])
@@ -121,22 +156,22 @@ def call_species_presence(
                 target_unique_kmers=target_unique,
                 conflicting_unique_kmers=conflict_unique,
             )
+            passes_evidence = species_name in passing_species
+            conflict_for_score = 0.0 if sample_is_mixed and passes_evidence else conflict_ratio
             confidence_score = calculate_confidence_score(
                 n_unique_kmers=target_unique,
                 n_positive_sequences=int(row["n_positive_sequences"]),
                 n_k_values_positive=int(row["n_k_values_positive"]),
                 best_k=int(row["best_k"]),
-                conflict_ratio=conflict_ratio,
+                conflict_ratio=conflict_for_score,
             )
-            passes_evidence = (
-                target_unique >= min_unique_kmers
-                and int(row["n_positive_sequences"]) >= min_positive_sequences
-                and int(row["n_k_values_positive"]) >= min_k_values_positive
-            )
-            if passes_evidence and conflict_ratio <= max_conflict_ratio:
+
+            if passes_evidence and sample_is_mixed:
+                call = "present_in_mixed_sample"
+            elif passes_evidence and conflict_ratio <= max_conflict_ratio:
                 call = "present_high_confidence"
             elif passes_evidence and conflict_ratio > max_conflict_ratio:
-                call = "ambiguous_mixed_signal"
+                call = "ambiguous_conflicting_signal"
             elif target_unique > 0:
                 call = "present_low_confidence"
             else:
