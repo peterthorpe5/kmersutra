@@ -62,11 +62,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--input_dirs",
+        "--input_dir",
         nargs="+",
         required=True,
         help=(
             "One or more KmerSutra run directories, or parent directories "
-            "containing KmerSutra run directories."
+            "containing KmerSutra run directories. The singular alias "
+            "--input_dir is also accepted."
         ),
     )
     parser.add_argument(
@@ -427,6 +429,11 @@ def resolve_output_path(*, raw_path: object, run_dir: Path) -> Path | None:
     if candidate.exists():
         return candidate
 
+    if not candidate.is_absolute():
+        relative_candidate = run_dir / candidate
+        if relative_candidate.exists():
+            return relative_candidate
+
     # Fallback: search by basename below the run directory. This helps when
     # paths were copied back from a job-local directory but not rewritten.
     matches = list(run_dir.rglob(candidate.name))
@@ -549,7 +556,7 @@ def load_hit_summary_files(*, summary_df: pd.DataFrame) -> pd.DataFrame:
     return normalise_numeric_columns(dataframe=combined, columns=numeric_cols)
 
 
-def classify_call_state(*, call_value: object) -> str:
+def classify_call_state(call_value: object) -> str:
     """Classify a KmerSutra call into broad states.
 
     Parameters
@@ -563,6 +570,8 @@ def classify_call_state(*, call_value: object) -> str:
         Broad call state: positive, ambiguous, not_detected, or other.
     """
     call_text = str(call_value).strip()
+    if call_text.lower() in {"none", "na", "nan"}:
+        return "not_detected"
     if call_text in POSITIVE_CALLS:
         return "positive"
     if call_text in AMBIGUOUS_CALLS:
@@ -620,6 +629,9 @@ def build_by_spike_summary(*, species_df: pd.DataFrame) -> pd.DataFrame:
     work_df["call_state"] = work_df["call"].apply(classify_call_state)
     work_df["is_positive_call"] = work_df["call_state"].eq("positive")
     work_df["is_ambiguous_call"] = work_df["call_state"].eq("ambiguous")
+    if "conflict_ratio" not in work_df.columns:
+        work_df["conflict_ratio"] = math.nan
+
     work_df = normalise_numeric_columns(
         dataframe=work_df,
         columns=[
@@ -648,9 +660,7 @@ def build_by_spike_summary(*, species_df: pd.DataFrame) -> pd.DataFrame:
             median_positive_sequences=("n_positive_sequences", "median"),
             mean_confidence_score=("confidence_score", "mean"),
             median_confidence_score=("confidence_score", "median"),
-            mean_conflict_ratio=("conflict_ratio", "mean")
-            if "conflict_ratio" in work_df.columns
-            else ("confidence_score", "size"),
+            mean_conflict_ratio=("conflict_ratio", "mean"),
         )
         .reset_index()
     )
