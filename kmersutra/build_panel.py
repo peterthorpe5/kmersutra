@@ -1,4 +1,4 @@
-"""Build clade-aware and species-aware diagnostic k-mer panels."""
+"""Build taxonomically aware diagnostic k-mer panels."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from pathlib import Path
 from kmersutra.config import GenomeConfig
 from kmersutra.fasta import read_fasta_records
 from kmersutra.kmers import iter_kmers
+from kmersutra.taxonomy import CORE_RANK_ORDER, TaxonomyDatabase
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,8 @@ class KmerObservation:
         Source genome role.
     clade : str
         Source clade label.
+    taxid : str
+        Source NCBI taxid, when available.
     """
 
     kmer: str
@@ -46,6 +49,7 @@ class KmerObservation:
     position: int
     role: str
     clade: str
+    taxid: str = ""
 
 
 @dataclass(frozen=True)
@@ -59,9 +63,9 @@ class DiagnosticKmer:
     k : int
         K-mer length.
     panel_type : str
-        Diagnostic class, such as species_unique or clade_core.
+        Evidence class, such as species_unique, genus_core or clade_core.
     species_name : str
-        Species label for species-level k-mers. Empty for clade-level k-mers.
+        Species label for species-level k-mers. Empty for broader evidence.
     clade : str
         Clade/group label.
     source_genomes : str
@@ -70,6 +74,16 @@ class DiagnosticKmer:
         Semicolon-separated source contig identifiers.
     example_position : int
         Example zero-based source position.
+    evidence_taxid : str
+        Taxid represented by this evidence level, when available.
+    evidence_name : str
+        Taxonomic name represented by this evidence level, when available.
+    evidence_rank : str
+        Taxonomic rank represented by this evidence level, when available.
+    lineage_taxids : str
+        Semicolon-separated lineage taxids for the evidence taxid.
+    source_taxids : str
+        Semicolon-separated source taxids in which this k-mer was observed.
     """
 
     kmer: str
@@ -80,6 +94,11 @@ class DiagnosticKmer:
     source_genomes: str
     source_contigs: str
     example_position: int
+    evidence_taxid: str = ""
+    evidence_name: str = ""
+    evidence_rank: str = ""
+    lineage_taxids: str = ""
+    source_taxids: str = ""
 
     def to_record(self) -> dict[str, object]:
         """Convert the diagnostic k-mer to a serialisable record.
@@ -98,6 +117,11 @@ class DiagnosticKmer:
             "source_genomes": self.source_genomes,
             "source_contigs": self.source_contigs,
             "example_position": self.example_position,
+            "evidence_taxid": self.evidence_taxid,
+            "evidence_name": self.evidence_name,
+            "evidence_rank": self.evidence_rank,
+            "lineage_taxids": self.lineage_taxids,
+            "source_taxids": self.source_taxids,
         }
 
 
@@ -140,6 +164,7 @@ def _collect_for_genome(
                         position=position,
                         role=genome_config.role,
                         clade=genome_config.clade,
+                        taxid=genome_config.taxid,
                     )
                 )
                 count += 1
@@ -148,6 +173,7 @@ def _collect_for_genome(
     summary = {
         "genome_id": genome_config.genome_id,
         "species_name": genome_config.species_name,
+        "taxid": genome_config.taxid,
         "role": genome_config.role,
         "clade": genome_config.clade,
         "genome_fasta": str(genome_config.genome_fasta),
@@ -204,11 +230,12 @@ def collect_kmer_observations(
         for index, genome_config in enumerate(configs, start=1):
             if logger:
                 logger.info(
-                    "Collecting genome %d/%d: %s (%s)",
+                    "Collecting genome %d/%d: %s (%s; taxid=%s)",
                     index,
                     len(configs),
                     genome_config.genome_id,
                     genome_config.species_name,
+                    genome_config.taxid or "NA",
                 )
             genome_observations, summary = _collect_for_genome(genome_config, k_tuple)
             observations.extend(genome_observations)
@@ -234,14 +261,57 @@ def collect_kmer_observations(
             summaries.append(summary)
             if logger:
                 logger.info(
-                    "Collected %d observations from %s (%s)",
+                    "Collected %d observations from %s (%s; taxid=%s)",
                     len(genome_observations),
                     genome_config.genome_id,
                     genome_config.species_name,
+                    genome_config.taxid or "NA",
                 )
 
     summaries.sort(key=lambda record: str(record["genome_id"]))
     return observations, summaries
+
+
+def _group_observations_by_kmer(
+    observations: Iterable[KmerObservation],
+) -> dict[tuple[int, str], list[KmerObservation]]:
+    """Group observations by k value and k-mer sequence."""
+    by_key: dict[tuple[int, str], list[KmerObservation]] = defaultdict(list)
+    for observation in observations:
+        by_key[(observation.k, observation.kmer)].append(observation)
+    return by_key
+
+
+def _diagnostic_from_group(
+    *,
+    k: int,
+    kmer: str,
+    group: list[KmerObservation],
+    panel_type: str,
+    species_name: str,
+    clade: str,
+    evidence_taxid: str = "",
+    evidence_name: str = "",
+    evidence_rank: str = "",
+    lineage_taxids: str = "",
+) -> DiagnosticKmer:
+    """Create a diagnostic k-mer record from grouped observations."""
+    first = group[0]
+    return DiagnosticKmer(
+        kmer=kmer,
+        k=k,
+        panel_type=panel_type,
+        species_name=species_name,
+        clade=clade,
+        source_genomes=";".join(sorted({item.genome_id for item in group})),
+        source_contigs=";".join(sorted({item.contig_id for item in group})),
+        example_position=first.position,
+        evidence_taxid=evidence_taxid,
+        evidence_name=evidence_name,
+        evidence_rank=evidence_rank,
+        lineage_taxids=lineage_taxids,
+        source_taxids=";".join(sorted({item.taxid for item in group if item.taxid})),
+    )
 
 
 def identify_species_unique_kmers(
@@ -266,9 +336,7 @@ def identify_species_unique_kmers(
     list[DiagnosticKmer]
         Species-unique diagnostic k-mers.
     """
-    by_key: dict[tuple[int, str], list[KmerObservation]] = defaultdict(list)
-    for observation in observations:
-        by_key[(observation.k, observation.kmer)].append(observation)
+    by_key = _group_observations_by_kmer(observations)
 
     if logger:
         logger.info("Testing %d distinct reference k-mer keys for species uniqueness", len(by_key))
@@ -280,15 +348,16 @@ def identify_species_unique_kmers(
         if len(species) == 1 and len(target_overlap) == 1:
             first = group[0]
             diagnostics.append(
-                DiagnosticKmer(
-                    kmer=kmer,
+                _diagnostic_from_group(
                     k=k,
+                    kmer=kmer,
+                    group=group,
                     panel_type="species_unique",
                     species_name=first.species_name,
                     clade=first.clade,
-                    source_genomes=";".join(sorted({item.genome_id for item in group})),
-                    source_contigs=";".join(sorted({item.contig_id for item in group})),
-                    example_position=first.position,
+                    evidence_taxid=first.taxid,
+                    evidence_name=first.species_name,
+                    evidence_rank="species",
                 )
             )
     if logger:
@@ -321,9 +390,7 @@ def identify_clade_core_kmers(
     if not target_clade:
         return []
 
-    by_key: dict[tuple[int, str], list[KmerObservation]] = defaultdict(list)
-    for observation in observations:
-        by_key[(observation.k, observation.kmer)].append(observation)
+    by_key = _group_observations_by_kmer(observations)
 
     if logger:
         logger.info("Testing %d distinct reference k-mer keys for clade specificity", len(by_key))
@@ -332,22 +399,126 @@ def identify_clade_core_kmers(
     for (k, kmer), group in by_key.items():
         clades = {item.clade for item in group}
         if clades == {target_clade}:
-            first = group[0]
             species = {item.species_name for item in group}
+            first = group[0]
             diagnostics.append(
-                DiagnosticKmer(
-                    kmer=kmer,
+                _diagnostic_from_group(
                     k=k,
+                    kmer=kmer,
+                    group=group,
                     panel_type="clade_core",
                     species_name="" if len(species) > 1 else first.species_name,
                     clade=target_clade,
-                    source_genomes=";".join(sorted({item.genome_id for item in group})),
-                    source_contigs=";".join(sorted({item.contig_id for item in group})),
-                    example_position=first.position,
+                    evidence_name=target_clade,
+                    evidence_rank="clade",
                 )
             )
     if logger:
         logger.info("Identified %d clade-core diagnostic k-mers", len(diagnostics))
+    return diagnostics
+
+
+def identify_taxonomic_evidence_kmers(
+    *,
+    observations: Iterable[KmerObservation],
+    taxonomy_db: TaxonomyDatabase,
+    target_taxid: str = "",
+    preferred_ranks: list[str] | None = None,
+    logger: logging.Logger | None = None,
+) -> list[DiagnosticKmer]:
+    """Identify diagnostic k-mers at their best supported taxonomic level.
+
+    Parameters
+    ----------
+    observations : iterable of KmerObservation
+        Reference k-mer observations.
+    taxonomy_db : TaxonomyDatabase
+        Parsed NCBI taxonomy database.
+    target_taxid : str, optional
+        Optional taxid whose subtree should be retained.
+    preferred_ranks : list[str] | None, optional
+        Taxonomic ranks to retain as evidence levels.
+    logger : logging.Logger | None, optional
+        Logger for progress messages.
+
+    Returns
+    -------
+    list[DiagnosticKmer]
+        Taxonomically assigned diagnostic k-mers.
+    """
+    ranks = preferred_ranks or CORE_RANK_ORDER
+    by_key = _group_observations_by_kmer(observations)
+    target_taxid = taxonomy_db.normalise_taxid(target_taxid)
+
+    if logger:
+        logger.info(
+            "Testing %d distinct reference k-mer keys for taxonomic evidence levels",
+            len(by_key),
+        )
+        if target_taxid:
+            logger.info(
+                "Restricting taxonomic evidence to descendants of taxid %s (%s)",
+                target_taxid,
+                taxonomy_db.get_name(target_taxid) or "unnamed",
+            )
+
+    diagnostics: list[DiagnosticKmer] = []
+    skipped_no_taxid = 0
+    skipped_outside_target = 0
+    skipped_unranked = 0
+
+    for (k, kmer), group in by_key.items():
+        source_taxids = {
+            taxonomy_db.normalise_taxid(item.taxid) for item in group if item.taxid
+        }
+        source_taxids = {taxid for taxid in source_taxids if taxid}
+        if not source_taxids:
+            skipped_no_taxid += 1
+            continue
+
+        evidence_node = taxonomy_db.best_named_ancestor(
+            taxids=source_taxids,
+            preferred_ranks=ranks,
+        )
+        if evidence_node is None:
+            skipped_unranked += 1
+            continue
+        if target_taxid and not taxonomy_db.is_descendant(
+            taxid=evidence_node.taxid,
+            ancestor_taxid=target_taxid,
+        ):
+            skipped_outside_target += 1
+            continue
+        if evidence_node.rank not in ranks:
+            skipped_unranked += 1
+            continue
+
+        species = {item.species_name for item in group}
+        clades = {item.clade for item in group if item.clade}
+        species_name = next(iter(species)) if evidence_node.rank == "species" and len(species) == 1 else ""
+        clade = next(iter(clades)) if len(clades) == 1 else evidence_node.name
+        panel_type = "species_unique" if evidence_node.rank == "species" else f"{evidence_node.rank}_core"
+
+        diagnostics.append(
+            _diagnostic_from_group(
+                k=k,
+                kmer=kmer,
+                group=group,
+                panel_type=panel_type,
+                species_name=species_name,
+                clade=clade,
+                evidence_taxid=evidence_node.taxid,
+                evidence_name=evidence_node.name,
+                evidence_rank=evidence_node.rank,
+                lineage_taxids=";".join(taxonomy_db.get_lineage(evidence_node.taxid)),
+            )
+        )
+
+    if logger:
+        logger.info("Identified %d taxonomic evidence k-mers", len(diagnostics))
+        logger.info("Skipped %d k-mers without usable taxids", skipped_no_taxid)
+        logger.info("Skipped %d k-mers outside target taxid", skipped_outside_target)
+        logger.info("Skipped %d k-mers without a retained evidence rank", skipped_unranked)
     return diagnostics
 
 
@@ -357,14 +528,14 @@ def thin_diagnostic_kmers(
     max_per_species_per_k: int | None = None,
     logger: logging.Logger | None = None,
 ) -> list[DiagnosticKmer]:
-    """Thin diagnostic k-mers to a maximum count per species and k.
+    """Thin diagnostic k-mers to a maximum count per evidence level and k.
 
     Parameters
     ----------
     diagnostic_kmers : iterable of DiagnosticKmer
         Diagnostic k-mers.
     max_per_species_per_k : int | None, optional
-        Maximum number retained per panel type, species/clade and k.
+        Maximum number retained per panel type, taxon/species/clade and k.
     logger : logging.Logger | None, optional
         Logger for progress messages.
 
@@ -379,13 +550,13 @@ def thin_diagnostic_kmers(
     if max_per_species_per_k <= 0:
         raise ValueError("max_per_species_per_k must be positive")
 
-    counts: dict[tuple[str, str, str, int], int] = defaultdict(int)
+    counts: dict[tuple[str, str, str, str, int], int] = defaultdict(int)
     retained: list[DiagnosticKmer] = []
     for item in sorted(
         diagnostics,
-        key=lambda x: (x.panel_type, x.species_name, x.clade, x.k, x.kmer),
+        key=lambda x: (x.panel_type, x.evidence_taxid, x.species_name, x.clade, x.k, x.kmer),
     ):
-        key = (item.panel_type, item.species_name, item.clade, item.k)
+        key = (item.panel_type, item.evidence_taxid, item.species_name, item.clade, item.k)
         if counts[key] >= max_per_species_per_k:
             continue
         retained.append(item)
@@ -407,9 +578,12 @@ def build_panel(
     target_clade: str = "",
     max_per_species_per_k: int | None = None,
     threads: int = 1,
+    taxonomy_db: TaxonomyDatabase | None = None,
+    target_taxid: str = "",
+    preferred_ranks: list[str] | None = None,
     logger: logging.Logger | None = None,
 ) -> tuple[list[DiagnosticKmer], list[dict[str, object]], list[dict[str, object]]]:
-    """Build species and optional clade diagnostic k-mer panels.
+    """Build diagnostic k-mer panels.
 
     Parameters
     ----------
@@ -418,11 +592,17 @@ def build_panel(
     k_values : list[int]
         K-mer lengths.
     target_clade : str, optional
-        Optional clade label for clade-core k-mers.
+        Optional clade label for clade-core k-mers when no taxonomy is used.
     max_per_species_per_k : int | None, optional
         Optional thinning limit.
     threads : int, optional
         Number of worker processes used during reference k-mer collection.
+    taxonomy_db : TaxonomyDatabase | None, optional
+        Optional NCBI taxonomy database for taxonomic evidence assignment.
+    target_taxid : str, optional
+        Optional root taxid for retained evidence when taxonomy is used.
+    preferred_ranks : list[str] | None, optional
+        Retained evidence ranks when taxonomy is used.
     logger : logging.Logger | None, optional
         Logger for progress messages.
 
@@ -440,27 +620,37 @@ def build_panel(
     if logger:
         logger.info("Collected %d total reference k-mer observations", len(observations))
 
-    target_species = {config.species_name for config in genome_configs if config.is_target}
-    if logger:
-        logger.info("Target species: %s", "; ".join(sorted(target_species)))
+    if taxonomy_db is not None:
+        diagnostics = identify_taxonomic_evidence_kmers(
+            observations=observations,
+            taxonomy_db=taxonomy_db,
+            target_taxid=target_taxid,
+            preferred_ranks=preferred_ranks,
+            logger=logger,
+        )
+    else:
+        target_species = {config.species_name for config in genome_configs if config.is_target}
+        if logger:
+            logger.info("Target species: %s", "; ".join(sorted(target_species)))
+        species_unique = identify_species_unique_kmers(
+            observations=observations,
+            target_species=target_species,
+            logger=logger,
+        )
+        clade_core = identify_clade_core_kmers(
+            observations=observations,
+            target_clade=target_clade,
+            logger=logger,
+        )
+        diagnostics = [*species_unique, *clade_core]
 
-    species_unique = identify_species_unique_kmers(
-        observations=observations,
-        target_species=target_species,
-        logger=logger,
-    )
-    clade_core = identify_clade_core_kmers(
-        observations=observations,
-        target_clade=target_clade,
-        logger=logger,
-    )
-    diagnostics = thin_diagnostic_kmers(
-        diagnostic_kmers=[*species_unique, *clade_core],
+    thinned = thin_diagnostic_kmers(
+        diagnostic_kmers=diagnostics,
         max_per_species_per_k=max_per_species_per_k,
         logger=logger,
     )
-    summary = summarise_panel(diagnostic_kmers=diagnostics)
-    return diagnostics, summary, collection_summary
+    summary = summarise_panel(diagnostic_kmers=thinned)
+    return thinned, summary, collection_summary
 
 
 def summarise_panel(
@@ -477,21 +667,31 @@ def summarise_panel(
     Returns
     -------
     list[dict[str, object]]
-        Summary records by panel type, species/clade and k.
+        Summary records by panel type, taxonomic evidence and k.
     """
-    counts: dict[tuple[str, str, str, int], int] = defaultdict(int)
+    counts: dict[tuple[str, str, str, str, str, int], int] = defaultdict(int)
     for item in diagnostic_kmers:
-        key = (item.panel_type, item.species_name, item.clade, item.k)
+        key = (
+            item.panel_type,
+            item.species_name,
+            item.clade,
+            item.evidence_taxid,
+            item.evidence_rank,
+            item.k,
+        )
         counts[key] += 1
     return [
         {
             "panel_type": panel_type,
             "species_name": species_name,
             "clade": clade,
+            "evidence_taxid": evidence_taxid,
+            "evidence_rank": evidence_rank,
             "k": k,
             "diagnostic_kmers": count,
         }
-        for (panel_type, species_name, clade, k), count in sorted(counts.items())
+        for (panel_type, species_name, clade, evidence_taxid, evidence_rank, k), count
+        in sorted(counts.items())
     ]
 
 
@@ -521,6 +721,11 @@ def load_panel(*, panel_path: str | Path) -> dict[int, dict[str, list[Diagnostic
             source_genomes=record.get("source_genomes", ""),
             source_contigs=record.get("source_contigs", ""),
             example_position=int(record.get("example_position", "0") or 0),
+            evidence_taxid=record.get("evidence_taxid", ""),
+            evidence_name=record.get("evidence_name", ""),
+            evidence_rank=record.get("evidence_rank", ""),
+            lineage_taxids=record.get("lineage_taxids", ""),
+            source_taxids=record.get("source_taxids", ""),
         )
         index[item.k][item.kmer].append(item)
     return index

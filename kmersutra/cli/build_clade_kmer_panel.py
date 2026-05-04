@@ -10,6 +10,23 @@ from kmersutra.config import load_genome_config
 from kmersutra.io import write_json, write_tsv
 from kmersutra.logging_utils import configure_logging
 from kmersutra.reporting import write_html_report
+from kmersutra.taxonomy import CORE_RANK_ORDER, TaxonomyDatabase
+
+PANEL_FIELDNAMES = [
+    "kmer",
+    "k",
+    "panel_type",
+    "species_name",
+    "clade",
+    "source_genomes",
+    "source_contigs",
+    "example_position",
+    "evidence_taxid",
+    "evidence_name",
+    "evidence_rank",
+    "lineage_taxids",
+    "source_taxids",
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -27,6 +44,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out_dir", required=True)
     parser.add_argument("--k_values", nargs="+", type=int, default=[31, 51, 71, 101])
     parser.add_argument("--target_clade", default="")
+    parser.add_argument("--target_taxid", default="")
+    parser.add_argument("--taxonomy_dir", default="")
+    parser.add_argument("--download_taxonomy_if_missing", action="store_true")
+    parser.add_argument(
+        "--taxonomy_url",
+        default="https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdmp.zip",
+    )
+    parser.add_argument(
+        "--evidence_ranks",
+        nargs="+",
+        default=CORE_RANK_ORDER,
+        help="Taxonomic ranks retained as evidence levels when taxonomy is used.",
+    )
     parser.add_argument("--max_per_species_per_k", type=int, default=None)
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument("--verbose", action="store_true")
@@ -44,6 +74,17 @@ def main() -> None:
     logger.info("k values: %s", args.k_values)
     logger.info("Worker processes: %d", args.threads)
 
+    taxonomy_db = None
+    if args.taxonomy_dir:
+        logger.info("Loading NCBI taxonomy from %s", args.taxonomy_dir)
+        taxonomy_db = TaxonomyDatabase.from_taxdump(
+            taxonomy_dir=args.taxonomy_dir,
+            download_if_missing=args.download_taxonomy_if_missing,
+            url=args.taxonomy_url,
+            logger=logger,
+        )
+        logger.info("Taxonomic evidence ranks: %s", ", ".join(args.evidence_ranks))
+
     genome_configs = load_genome_config(config_path=args.genome_config)
     logger.info("Loaded %d genome records", len(genome_configs))
 
@@ -53,6 +94,9 @@ def main() -> None:
         target_clade=args.target_clade,
         max_per_species_per_k=args.max_per_species_per_k,
         threads=args.threads,
+        taxonomy_db=taxonomy_db,
+        target_taxid=args.target_taxid,
+        preferred_ranks=args.evidence_ranks,
         logger=logger,
     )
     logger.info("Retained %d diagnostic k-mers", len(diagnostic_kmers))
@@ -66,21 +110,20 @@ def main() -> None:
     write_tsv(
         records=[item.to_record() for item in diagnostic_kmers],
         output_path=panel_path,
-        fieldnames=[
-            "kmer",
-            "k",
-            "panel_type",
-            "species_name",
-            "clade",
-            "source_genomes",
-            "source_contigs",
-            "example_position",
-        ],
+        fieldnames=PANEL_FIELDNAMES,
     )
     write_tsv(
         records=summary,
         output_path=summary_path,
-        fieldnames=["panel_type", "species_name", "clade", "k", "diagnostic_kmers"],
+        fieldnames=[
+            "panel_type",
+            "species_name",
+            "clade",
+            "evidence_taxid",
+            "evidence_rank",
+            "k",
+            "diagnostic_kmers",
+        ],
     )
     collection_fieldnames = sorted({key for record in collection_summary for key in record})
     write_tsv(
@@ -93,6 +136,10 @@ def main() -> None:
             "genome_config": str(args.genome_config),
             "k_values": args.k_values,
             "target_clade": args.target_clade,
+            "target_taxid": args.target_taxid,
+            "taxonomy_dir": args.taxonomy_dir,
+            "download_taxonomy_if_missing": args.download_taxonomy_if_missing,
+            "evidence_ranks": args.evidence_ranks,
             "max_per_species_per_k": args.max_per_species_per_k,
             "threads": args.threads,
             "n_genomes": len(genome_configs),

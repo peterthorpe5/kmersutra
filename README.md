@@ -326,3 +326,123 @@ With that option, multiple species passing evidence thresholds are labelled as
 For benchmarking, KmerSutra now writes explicit zero-evidence rows for every
 species represented in the diagnostic panel. This means zero-spike controls are
 reported as `not_detected` rather than producing header-only call tables.
+
+## Taxonomy-aware evidence levels
+
+KmerSutra can optionally use the NCBI taxonomy dump to assign diagnostic k-mers to the most appropriate evidence level rather than only labelling k-mers as species-specific. This allows a k-mer shared by several species within one genus to be retained as genus-level evidence, while k-mers shared across unrelated groups can be excluded or assigned to broader levels.
+
+Download NCBI taxonomy files:
+
+```bash
+kmersutra-download-taxonomy \
+  --taxonomy_dir ncbi_taxonomy \
+  --verbose
+```
+
+The downloader retrieves `taxdmp.zip` from NCBI and extracts the required files:
+
+```text
+nodes.dmp
+names.dmp
+merged.dmp
+delnodes.dmp
+```
+
+Build a taxonomy-aware panel:
+
+```bash
+kmersutra-build-panel \
+  --genome_config examples/example_genome_config.tsv \
+  --out_dir example_taxonomy_panel \
+  --k_values 51 71 101 151 \
+  --taxonomy_dir ncbi_taxonomy \
+  --download_taxonomy_if_missing \
+  --target_taxid 5820 \
+  --evidence_ranks species genus family order class phylum superkingdom \
+  --threads 12 \
+  --verbose
+```
+
+The output panel now includes additional taxonomy-aware fields:
+
+```text
+evidence_taxid
+evidence_name
+evidence_rank
+lineage_taxids
+source_taxids
+```
+
+This supports the central KmerSutra question:
+
+```text
+What level of taxonomic evidence is supported across the k-mer ladder?
+```
+
+For example, a read may be reported as species-level, genus-level, broader clade-level, or unresolved depending on which evidence tiers are supported.
+
+## Merging independently built panels
+
+Large all-pathogen databases can be expensive to build in one pass. KmerSutra
+therefore supports a modular workflow where separate panels are built for
+host/background genomes, target clades, viruses, bacteria, fungi, or other
+pathogen groups, then merged into a globally validated master panel.
+
+Merge panels without taxonomy-aware reassignment:
+
+```bash
+kmersutra-merge-panels \
+  --panels module_human/species_kmer_panel.tsv.gz module_plasmodium/species_kmer_panel.tsv.gz \
+  --out_dir master_kmersutra_panel \
+  --verbose
+```
+
+Merge panels with NCBI taxonomy-aware evidence reassignment:
+
+```bash
+kmersutra-merge-panels \
+  --panels module_human/species_kmer_panel.tsv.gz module_plasmodium/species_kmer_panel.tsv.gz module_viral/species_kmer_panel.tsv.gz \
+  --out_dir master_kmersutra_panel \
+  --taxonomy_dir ncbi_taxonomy \
+  --download_taxonomy_if_missing \
+  --evidence_ranks species genus family order class phylum superkingdom \
+  --verbose
+```
+
+The merge step groups identical k-mers across all input panels and assigns the
+most specific globally valid evidence level. A k-mer that was species-specific
+inside one module may be downgraded to genus-, family-, or broader-level
+evidence if it is also found in related taxa. K-mers that cannot be assigned to
+a useful evidence rank are written to the removed-conflict table rather than the
+master diagnostic panel.
+
+Merge outputs include:
+
+```text
+master_kmer_panel.tsv.gz
+master_panel_metadata.json
+master_validation_summary.tsv
+taxonomic_level_summary.tsv
+downgraded_kmers.tsv.gz
+removed_conflicting_kmers.tsv.gz
+```
+
+Validate any panel:
+
+```bash
+kmersutra-validate-panel \
+  --panel master_kmersutra_panel/master_kmer_panel.tsv.gz \
+  --out_dir master_kmersutra_panel/validation \
+  --verbose
+```
+
+Validation outputs include:
+
+```text
+panel_validation_summary.tsv
+panel_validation_issues.tsv
+taxonomic_level_summary.tsv
+```
+
+This module-level design allows KmerSutra to scale to multiple taxonomic spaces
+while still checking global specificity before any k-mer is used for detection.

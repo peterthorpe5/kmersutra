@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kmersutra"
-version = "0.5.0"
+version = "0.7.0"
 description = "Outgroup-aware k-mer framework for clade and species-resolved metagenomic detection"
 requires-python = ">=3.10"
 dependencies = []
@@ -17,15 +17,19 @@ kmersutra-extract-features = "kmersutra.cli.extract_ml_features:main"
 kmersutra-train-classifier = "kmersutra.cli.train_classifier:main"
 kmersutra-predict = "kmersutra.cli.predict_classifier:main"
 kmersutra-summarise-run = "kmersutra.cli.summarise_spikein_run:main"
+kmersutra-download-taxonomy = "kmersutra.cli.download_taxonomy:main"
+kmersutra-merge-panels = "kmersutra.cli.merge_panels:main"
+kmersutra-validate-panel = "kmersutra.cli.validate_panel:main"
 
 [project.optional-dependencies]
 dev = ["nose2"]
 reporting = ["matplotlib", "openpyxl"]
 interactive = ["plotly"]
 stats = ["scipy"]
+ml = ["scikit-learn", "joblib"]
 parquet = ["pyarrow"]
 ncbi = ["requests", "biopython"]
-all = ["nose2", "matplotlib", "openpyxl", "plotly", "scipy", "pyarrow", "requests", "biopython"]
+all = ["nose2", "matplotlib", "openpyxl", "plotly", "scipy", "pyarrow", "requests", "biopython", "scikit-learn", "joblib"]
 
 [tool.setuptools.packages.find]
 where = ["."]

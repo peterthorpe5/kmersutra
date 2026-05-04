@@ -43,3 +43,18 @@ class TestCliModules(unittest.TestCase):
         module = importlib.import_module("kmersutra.cli.summarise_spikein_run")
         self.assertTrue(callable(module.main))
 
+
+    def test_download_taxonomy_cli_imports(self):
+        """Taxonomy downloader CLI module should expose a main function."""
+        module = importlib.import_module("kmersutra.cli.download_taxonomy")
+        self.assertTrue(callable(module.main))
+
+    def test_merge_panels_cli_imports(self):
+        """Panel-merge CLI module should expose a main function."""
+        module = importlib.import_module("kmersutra.cli.merge_panels")
+        self.assertTrue(callable(module.main))
+
+    def test_validate_panel_cli_imports(self):
+        """Panel-validation CLI module should expose a main function."""
+        module = importlib.import_module("kmersutra.cli.validate_panel")
+        self.assertTrue(callable(module.main))
