@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import subprocess
 import sys
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -237,24 +237,20 @@ class TestCompactBuildCli(unittest.TestCase):
                 f"{beta}\tBeta\ttarget_species\tDemo\n",
                 encoding="utf-8",
             )
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    "-m",
-                    "kmersutra.cli.build_clade_kmer_panel",
-                    "--genome_config",
-                    str(config),
-                    "--out_dir",
-                    str(out_dir),
-                    "--k_values",
-                    "5",
-                    "--compact_build",
-                    "--profile",
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
+            from kmersutra.cli.build_clade_kmer_panel import main
+
+            argv = [
+                "kmersutra-build-panel",
+                "--genome_config",
+                str(config),
+                "--out_dir",
+                str(out_dir),
+                "--k_values",
+                "5",
+                "--compact_build",
+                "--profile",
+            ]
+            with patch.object(sys, "argv", argv):
+                main()
             self.assertTrue((out_dir / "build_profile_timing.tsv").exists())
             self.assertTrue((out_dir / "species_kmer_panel.tsv.gz").exists())

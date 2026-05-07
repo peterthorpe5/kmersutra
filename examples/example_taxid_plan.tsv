@@ -1,0 +1,5 @@
+taxid	role	clade	group_label	max_assemblies	best_per_species
+5820	near_neighbour	Plasmodium	Plasmodium		1
+5811	apicomplexan_outgroup	Apicomplexa	Toxoplasma	1	1
+5807	apicomplexan_outgroup	Apicomplexa	Cryptosporidium	1	1
+77566	apicomplexan_outgroup	Apicomplexa	Hepatocystis	1	1

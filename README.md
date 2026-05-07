@@ -571,3 +571,73 @@ kmersutra-validate-panel \
 
 This keeps module builds manageable while still checking the final master panel
 for cross-module conflicts.
+
+## KmerSutra v0.10.0 additions
+
+Version 0.10.0 bundles two workflow tools that were previously being used as separate scripts.
+
+### Download NCBI genomes into a KmerSutra-ready layout
+
+Use `kmersutra-download-genomes` to download assemblies under one or more NCBI taxids and write organised genome folders plus metadata tables.
+
+```bash
+kmersutra-download-genomes \
+  --taxid_plan example_taxid_plan.tsv \
+  --out_dir ncbi_genomes_for_kmersutra \
+  --email your.email@example.ac.uk \
+  --source prefer_refseq \
+  --formats genomic_fna \
+  --decompress \
+  --verbose
+```
+
+The downloader writes tab-separated metadata and a ready-to-use KmerSutra genome config:
+
+```text
+genomes/
+ncbi_download_metadata.tsv
+kmersutra_genome_config.tsv
+query_summary.tsv
+run_config.json
+logs/download.log
+```
+
+A taxid plan should contain columns like:
+
+```text
+taxid	role	clade	group_label	max_assemblies	best_per_species
+5820	near_neighbour	Plasmodium	Plasmodium		1
+5811	apicomplexan_outgroup	Apicomplexa	Toxoplasma	1	1
+5807	apicomplexan_outgroup	Apicomplexa	Cryptosporidium	1	1
+```
+
+The resulting `kmersutra_genome_config.tsv` can be passed directly to `kmersutra-build-panel`.
+
+### Summarise one or more spike-in benchmark run folders
+
+Use `kmersutra-summarise-spikeins` to combine one or more KmerSutra spike-in run folders into TSV, Excel and HTML outputs.
+
+```bash
+kmersutra-summarise-spikeins \
+  --input_dirs runs \
+  --out_dir kmersutra_spikein_summary \
+  --run_glob 'spikein_multi_kmersutra*' \
+  --expected_replicates 12 \
+  --expected_spike_levels '0 1 5 10 25 50 100 250 500 1000 2500 5000' \
+  --verbose
+```
+
+Outputs include:
+
+```text
+combined_run_summary.tsv
+species_long_from_wide_summary.tsv
+combined_detection_calls.tsv
+combined_hit_summary.tsv
+authoritative_species_summary.tsv
+by_spike_species_summary.tsv
+call_counts.tsv
+run_qc.tsv
+kmersutra_spikein_overall_summary.xlsx
+kmersutra_spikein_overall_summary.html
+```

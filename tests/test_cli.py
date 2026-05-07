@@ -20,8 +20,13 @@ class TestCliModules(unittest.TestCase):
         self.assertTrue(callable(module.main))
 
     def test_ncbi_cli_imports(self):
-        """NCBI downloader CLI module should expose a main function."""
+        """Legacy NCBI downloader CLI module should expose a main function."""
         module = importlib.import_module("kmersutra.cli.download_ncbi_taxon_genomes")
+        self.assertTrue(callable(module.main))
+
+    def test_download_genomes_cli_imports(self):
+        """KmerSutra genome downloader CLI module should expose a main function."""
+        module = importlib.import_module("kmersutra.cli.download_genomes_for_kmersutra")
         self.assertTrue(callable(module.main))
 
     def test_extract_features_cli_imports(self):
@@ -38,9 +43,15 @@ class TestCliModules(unittest.TestCase):
         """Classifier-prediction CLI module should expose a main function."""
         module = importlib.import_module("kmersutra.cli.predict_classifier")
         self.assertTrue(callable(module.main))
+
     def test_summarise_run_cli_imports(self):
         """Run-summary CLI module should expose a main function."""
         module = importlib.import_module("kmersutra.cli.summarise_spikein_run")
+        self.assertTrue(callable(module.main))
+
+    def test_summarise_spikeins_cli_imports(self):
+        """Multi-run spike-in summary CLI module should expose a main function."""
+        module = importlib.import_module("kmersutra.cli.summarise_kmersutra_spikeins")
         self.assertTrue(callable(module.main))
 
 
