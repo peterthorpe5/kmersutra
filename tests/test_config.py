@@ -39,6 +39,39 @@ class TestConfig(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_genome_config(config_path=config_path)
 
+
+    def test_load_genome_config_accepts_specialised_outgroup_roles(self) -> None:
+        """Genome config parser should accept biologically useful outgroup roles."""
+        with TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "config.tsv"
+            config_path.write_text(
+                "genome_fasta\tspecies_name\trole\tclade\n"
+                "a.fna\tSpecies alpha\ttarget_species\tDemo\n"
+                "b.fna\tSpecies beta\tapicomplexan_outgroup\tApicomplexa\n"
+                "c.fna\tSpecies gamma\tdistant_outgroup\tCiliophora\n"
+                "d.fna\tSpecies delta\thost_or_background\tHost\n",
+                encoding="utf-8",
+            )
+            records = load_genome_config(config_path=config_path)
+        self.assertEqual(len(records), 4)
+        self.assertEqual(records[1].role, "apicomplexan_outgroup")
+        self.assertEqual(records[2].role, "distant_outgroup")
+        self.assertEqual(records[3].role, "host_or_background")
+
+    def test_load_genome_config_accepts_downloaded_role_when_target_present(self) -> None:
+        """Genome config parser should accept generic downloaded non-target rows."""
+        with TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "config.tsv"
+            config_path.write_text(
+                "genome_fasta\tspecies_name\trole\n"
+                "a.fna\tSpecies alpha\ttarget_species\n"
+                "b.fna\tSpecies beta\tdownloaded\n",
+                encoding="utf-8",
+            )
+            records = load_genome_config(config_path=config_path)
+        self.assertEqual(len(records), 2)
+        self.assertEqual(records[1].role, "downloaded")
+
     def test_load_genome_config_rejects_invalid_role(self) -> None:
         """Genome config parser should reject unsupported roles."""
         with TemporaryDirectory() as tmpdir:

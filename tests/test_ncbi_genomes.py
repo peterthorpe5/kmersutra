@@ -56,6 +56,122 @@ class TestNcbiGenomeDownloader(unittest.TestCase):
         self.assertEqual(plans[0].max_assemblies, 10)
         self.assertEqual(plans[0].best_per_species, 1)
 
+
+    def test_build_taxon_plan_reads_quality_filters(self):
+        """Taxid plan files should parse per-taxon assembly quality filters."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            plan_path = Path(tmp_dir) / "plan.tsv"
+            plan_path.write_text(
+                "taxid\trole\tclade\tgroup_label\tmax_assemblies\tbest_per_species\t"
+                "min_total_length\tmax_total_length\tmin_scaffold_n50\tmin_contig_n50\n"
+                "5911\tdistant_outgroup\tCiliophora\tTetrahymena\t2\t\t10000000\t50000000\t500000\t100000\n",
+                encoding="utf-8",
+            )
+            args = argparse.Namespace(
+                taxid_plan=str(plan_path),
+                taxids=None,
+                default_role="downloaded",
+                default_clade="",
+                max_assemblies_per_taxid=None,
+                best_per_species=None,
+                min_total_length=None,
+                max_total_length=None,
+                min_scaffold_n50=None,
+                min_contig_n50=None,
+            )
+            plans = ncbi_genomes.build_taxon_plan(args)
+        self.assertEqual(plans[0].min_total_length, 10000000)
+        self.assertEqual(plans[0].max_total_length, 50000000)
+        self.assertEqual(plans[0].min_scaffold_n50, 500000)
+        self.assertEqual(plans[0].min_contig_n50, 100000)
+
+    def test_filter_records_applies_length_and_n50_filters(self):
+        """Assembly filters should remove very small or fragmented records."""
+        small = ncbi_genomes.AssemblyRecord(
+            query_taxid="5911",
+            assembly_uid="1",
+            assembly_accession="GCA_small",
+            assembly_name="small",
+            organism_name="Tetrahymena thermophila",
+            species_name="Tetrahymena thermophila",
+            species_taxid="5911",
+            taxid="5911",
+            strain_name="small",
+            assembly_level="scaffold",
+            refseq_category="",
+            scaffold_n50=1000,
+            contig_n50=1000,
+            total_length=900000,
+            ftp_path_refseq="",
+            ftp_path_genbank="ftp://example/small",
+            selected_source="genbank",
+            selected_ftp_path="ftp://example/small",
+            role="distant_outgroup",
+            clade="Ciliophora",
+            group_label="Tetrahymena",
+        )
+        large = ncbi_genomes.AssemblyRecord(
+            query_taxid="5911",
+            assembly_uid="2",
+            assembly_accession="GCA_large",
+            assembly_name="large",
+            organism_name="Tetrahymena thermophila",
+            species_name="Tetrahymena thermophila",
+            species_taxid="5911",
+            taxid="5911",
+            strain_name="large",
+            assembly_level="chromosome",
+            refseq_category="",
+            scaffold_n50=20000000,
+            contig_n50=20000000,
+            total_length=40000000,
+            ftp_path_refseq="",
+            ftp_path_genbank="ftp://example/large",
+            selected_source="genbank",
+            selected_ftp_path="ftp://example/large",
+            role="distant_outgroup",
+            clade="Ciliophora",
+            group_label="Tetrahymena",
+        )
+        observed = ncbi_genomes.filter_records(
+            records=[small, large],
+            min_total_length=10000000,
+            min_scaffold_n50=500000,
+            min_contig_n50=500000,
+        )
+        self.assertEqual([record.assembly_accession for record in observed], ["GCA_large"])
+
+    def test_filter_records_applies_max_total_length(self):
+        """Assembly filters should optionally exclude unexpectedly large records."""
+        record = ncbi_genomes.AssemblyRecord(
+            query_taxid="1",
+            assembly_uid="1",
+            assembly_accession="GCA_large",
+            assembly_name="large",
+            organism_name="Species large",
+            species_name="Species large",
+            species_taxid="1",
+            taxid="1",
+            strain_name="",
+            assembly_level="chromosome",
+            refseq_category="",
+            scaffold_n50=1000,
+            contig_n50=1000,
+            total_length=999999999,
+            ftp_path_refseq="",
+            ftp_path_genbank="ftp://example/large",
+            selected_source="genbank",
+            selected_ftp_path="ftp://example/large",
+            role="outgroup",
+            clade="Demo",
+            group_label="",
+        )
+        observed = ncbi_genomes.filter_records(
+            records=[record],
+            max_total_length=1000000,
+        )
+        self.assertEqual(observed, [])
+
     def test_select_best_per_species_uses_quality_order(self):
         """Best-per-species selection should retain the highest-quality assembly."""
         low = ncbi_genomes.AssemblyRecord(

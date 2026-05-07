@@ -572,9 +572,9 @@ kmersutra-validate-panel \
 This keeps module builds manageable while still checking the final master panel
 for cross-module conflicts.
 
-## KmerSutra v0.10.0 additions
+## KmerSutra v0.10.0 and v0.11.0 additions
 
-Version 0.10.0 bundles two workflow tools that were previously being used as separate scripts.
+Version 0.10.0 bundled two workflow tools that were previously being used as separate scripts. Version 0.11.0 extends this with broader biological role support and optional assembly quality filters for cleaner database construction.
 
 ### Download NCBI genomes into a KmerSutra-ready layout
 
@@ -605,13 +605,45 @@ logs/download.log
 A taxid plan should contain columns like:
 
 ```text
-taxid	role	clade	group_label	max_assemblies	best_per_species
-5820	near_neighbour	Plasmodium	Plasmodium		1
-5811	apicomplexan_outgroup	Apicomplexa	Toxoplasma	1	1
-5807	apicomplexan_outgroup	Apicomplexa	Cryptosporidium	1	1
+taxid	role	clade	group_label	max_assemblies	best_per_species	min_total_length	max_total_length	min_scaffold_n50	min_contig_n50
+5820	near_neighbour	Plasmodium	Plasmodium		1				
+5811	apicomplexan_outgroup	Apicomplexa	Toxoplasma	2					
+5807	apicomplexan_outgroup	Apicomplexa	Cryptosporidium	2					
+5911	distant_outgroup	Ciliophora	Tetrahymena	2		10000000		500000	100000
 ```
 
 The resulting `kmersutra_genome_config.tsv` can be passed directly to `kmersutra-build-panel`.
+
+Version 0.11.0 accepts biologically descriptive roles such as:
+
+```text
+target_species
+target_clade_member
+near_neighbour
+apicomplexan_outgroup
+distant_outgroup
+host_or_background
+background_pathogen
+outgroup
+exclude
+```
+
+Only target roles are treated as targets during panel construction. Specialist
+outgroup and background roles are retained as metadata but treated as non-target
+records for uniqueness and conflict checking.
+
+The downloader also supports optional quality filters in the taxid plan or on the
+command line:
+
+```text
+min_total_length
+max_total_length
+min_scaffold_n50
+min_contig_n50
+```
+
+These are useful when a taxid has very small partial assemblies that should not
+be used as outgroup representatives.
 
 ### Summarise one or more spike-in benchmark run folders
 

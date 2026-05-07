@@ -60,6 +60,10 @@ class TaxonPlan:
     group_label: str = ""
     max_assemblies: int | None = None
     best_per_species: int | None = None
+    min_total_length: int | None = None
+    max_total_length: int | None = None
+    min_scaffold_n50: int | None = None
+    min_contig_n50: int | None = None
 
 
 @dataclass(frozen=True)
@@ -108,8 +112,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help=(
             "Optional TSV with columns: taxid, role, clade, group_label, "
-            "max_assemblies, best_per_species. Values in this table can "
-            "override command-line defaults per taxid."
+            "max_assemblies, best_per_species, min_total_length, "
+            "max_total_length, min_scaffold_n50, min_contig_n50. Values in "
+            "this table can override command-line defaults per taxid."
         ),
     )
     parser.add_argument(
@@ -146,6 +151,42 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         choices=("complete genome", "chromosome", "scaffold", "contig"),
         help="Optional assembly-level filter. If omitted, all levels are kept.",
+    )
+    parser.add_argument(
+        "--min_total_length",
+        type=int,
+        default=None,
+        help=(
+            "Optional minimum assembly length retained across all taxids. "
+            "Per-taxid values in --taxid_plan override this."
+        ),
+    )
+    parser.add_argument(
+        "--max_total_length",
+        type=int,
+        default=None,
+        help=(
+            "Optional maximum assembly length retained across all taxids. "
+            "Per-taxid values in --taxid_plan override this."
+        ),
+    )
+    parser.add_argument(
+        "--min_scaffold_n50",
+        type=int,
+        default=None,
+        help=(
+            "Optional minimum scaffold N50 retained across all taxids. "
+            "Per-taxid values in --taxid_plan override this."
+        ),
+    )
+    parser.add_argument(
+        "--min_contig_n50",
+        type=int,
+        default=None,
+        help=(
+            "Optional minimum contig N50 retained across all taxids. "
+            "Per-taxid values in --taxid_plan override this."
+        ),
     )
     parser.add_argument(
         "--max_assemblies_per_taxid",
@@ -335,6 +376,10 @@ def build_taxon_plan(args: argparse.Namespace) -> list[TaxonPlan]:
                     group_label=row.get("group_label", "").strip(),
                     max_assemblies=parse_optional_int(row.get("max_assemblies", "")),
                     best_per_species=parse_optional_int(row.get("best_per_species", "")),
+                    min_total_length=parse_optional_int(row.get("min_total_length", "")),
+                    max_total_length=parse_optional_int(row.get("max_total_length", "")),
+                    min_scaffold_n50=parse_optional_int(row.get("min_scaffold_n50", "")),
+                    min_contig_n50=parse_optional_int(row.get("min_contig_n50", "")),
                 )
             )
     if args.taxids:
@@ -347,6 +392,10 @@ def build_taxon_plan(args: argparse.Namespace) -> list[TaxonPlan]:
                     group_label="",
                     max_assemblies=args.max_assemblies_per_taxid,
                     best_per_species=args.best_per_species,
+                    min_total_length=args.min_total_length,
+                    max_total_length=args.max_total_length,
+                    min_scaffold_n50=args.min_scaffold_n50,
+                    min_contig_n50=args.min_contig_n50,
                 )
             )
     if not plans:
@@ -564,14 +613,49 @@ def filter_records(
     records: list[AssemblyRecord],
     assembly_levels: list[str] | None = None,
     include_unplaced: bool = False,
+    min_total_length: int | None = None,
+    max_total_length: int | None = None,
+    min_scaffold_n50: int | None = None,
+    min_contig_n50: int | None = None,
 ) -> list[AssemblyRecord]:
-    """Filter assembly records by level and downloadability."""
+    """Filter assembly records by level, downloadability, and quality.
+
+    Parameters
+    ----------
+    records : list[AssemblyRecord]
+        Candidate assembly records.
+    assembly_levels : list[str] | None
+        Optional retained assembly levels.
+    include_unplaced : bool
+        Whether to retain records without a selected FTP path.
+    min_total_length : int | None
+        Optional minimum total assembly length.
+    max_total_length : int | None
+        Optional maximum total assembly length.
+    min_scaffold_n50 : int | None
+        Optional minimum scaffold N50.
+    min_contig_n50 : int | None
+        Optional minimum contig N50.
+
+    Returns
+    -------
+    list[AssemblyRecord]
+        Records passing all filters.
+    """
     filtered: list[AssemblyRecord] = []
     allowed_levels = {level.lower() for level in assembly_levels or []}
     for record in records:
         if allowed_levels and record.assembly_level.lower() not in allowed_levels:
             continue
         if not include_unplaced and not record.selected_ftp_path:
+            continue
+        if min_total_length is not None and record.total_length < min_total_length:
+            continue
+        if max_total_length is not None and record.total_length > max_total_length:
+            continue
+        if min_scaffold_n50 is not None and record.scaffold_n50 < min_scaffold_n50:
+            continue
+        if min_contig_n50 is not None and record.contig_n50 < min_contig_n50:
             continue
         filtered.append(record)
     return filtered
@@ -851,6 +935,10 @@ def collect_records_for_plan(
         records=records,
         assembly_levels=args.assembly_levels,
         include_unplaced=args.include_unplaced,
+        min_total_length=plan.min_total_length or args.min_total_length,
+        max_total_length=plan.max_total_length or args.max_total_length,
+        min_scaffold_n50=plan.min_scaffold_n50 or args.min_scaffold_n50,
+        min_contig_n50=plan.min_contig_n50 or args.min_contig_n50,
     )
     best_n = plan.best_per_species or args.best_per_species
     records = select_best_per_species(records=records, best_per_species=best_n)

@@ -10,15 +10,24 @@ from kmersutra.io import read_tsv
 VALID_ROLES = {
     "target_species",
     "target_clade_member",
-    "near_neighbour",
-    "distant_outgroup",
-    "background_pathogen",
-    "host",
-    "outgroup",
     "target",
+    "near_neighbour",
+    "near_neighbor",
+    "outgroup",
+    "apicomplexan_outgroup",
+    "distant_outgroup",
+    "host",
+    "host_or_background",
+    "background_host",
+    "host_background",
+    "background",
+    "background_pathogen",
+    "environmental_background",
+    "non_target",
+    "downloaded",
     "exclude",
 }
-TARGET_ROLES = {"target_species", "target"}
+TARGET_ROLES = {"target_species", "target", "target_clade_member"}
 NON_TARGET_ROLES = VALID_ROLES - TARGET_ROLES - {"exclude"}
 
 
@@ -37,7 +46,9 @@ class GenomeConfig:
     taxid : str
         Optional NCBI taxonomy identifier.
     role : str
-        Biological role in the panel.
+        Biological role in the panel. Roles are used to distinguish target
+        species from near-neighbours, outgroups, host/background records, and
+        other non-target genomes.
     clade : str
         Optional clade/group label.
     assembly_accession : str
