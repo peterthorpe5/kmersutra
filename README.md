@@ -493,3 +493,81 @@ taxonomic_level_summary.tsv
 
 This module-level design allows KmerSutra to scale to multiple taxonomic spaces
 while still checking global specificity before any k-mer is used for detection.
+
+## KmerSutra v0.9.0: scalable panel building
+
+Version 0.9.0 adds a more scalable build path for larger taxonomic databases.
+The original builder stored every k-mer occurrence in memory before deciding
+whether each k-mer was species-specific, genus-level, clade-level, or
+non-diagnostic. That is simple but scales poorly as more pathogen, host, and
+outgroup genomes are added.
+
+The default build command now uses compact set-based grouping. This stores one
+record per distinct `(k, k-mer)` key and tracks only the metadata needed for
+classification, such as source species, source genomes, source clades, and
+source taxids. This should reduce memory use substantially for larger database
+builds while preserving the same diagnostic output as the legacy builder for
+small panels.
+
+### Compact build mode
+
+Compact build mode is enabled by default:
+
+```bash
+kmersutra-build-panel \
+  --genome_config pathogen_genomes.tsv \
+  --out_dir pathogen_panel \
+  --k_values 51 71 101 151 \
+  --threads 24 \
+  --profile \
+  --verbose
+```
+
+To force the older occurrence-level builder for debugging or regression checks:
+
+```bash
+kmersutra-build-panel \
+  --genome_config pathogen_genomes.tsv \
+  --out_dir pathogen_panel_legacy \
+  --k_values 51 71 101 151 \
+  --legacy_observation_build \
+  --threads 24 \
+  --profile \
+  --verbose
+```
+
+### Build profiling
+
+The `--profile` option writes:
+
+```text
+build_profile_timing.tsv
+```
+
+This file reports wall-clock time for key build stages, including config
+loading, panel construction, panel writing, and summary writing.
+
+### Recommended scalable database strategy
+
+For large pathogen databases, build smaller modules first and then merge and
+validate them globally:
+
+```bash
+kmersutra-build-panel --genome_config host_primates.tsv --out_dir module_host --k_values 51 71 101 151 --threads 24 --profile
+kmersutra-build-panel --genome_config plasmodium.tsv --out_dir module_plasmodium --k_values 51 71 101 151 --threads 24 --profile
+kmersutra-build-panel --genome_config viruses.tsv --out_dir module_viruses --k_values 51 71 101 151 --threads 24 --profile
+
+kmersutra-merge-panels \
+  --panels module_host/species_kmer_panel.tsv.gz module_plasmodium/species_kmer_panel.tsv.gz module_viruses/species_kmer_panel.tsv.gz \
+  --out_dir master_kmersutra_panel \
+  --taxonomy_dir ncbi_taxonomy \
+  --verbose
+
+kmersutra-validate-panel \
+  --panel master_kmersutra_panel/master_kmer_panel.tsv.gz \
+  --out_dir master_kmersutra_panel/validation \
+  --verbose
+```
+
+This keeps module builds manageable while still checking the final master panel
+for cross-module conflicts.

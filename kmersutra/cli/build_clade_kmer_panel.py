@@ -9,6 +9,7 @@ from kmersutra.build_panel import build_panel
 from kmersutra.config import load_genome_config
 from kmersutra.io import write_json, write_tsv
 from kmersutra.logging_utils import configure_logging
+from kmersutra.profiling import WorkflowProfiler
 from kmersutra.reporting import write_html_report
 from kmersutra.taxonomy import CORE_RANK_ORDER, TaxonomyDatabase
 
@@ -59,6 +60,24 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--max_per_species_per_k", type=int, default=None)
     parser.add_argument("--threads", type=int, default=1)
+    parser.add_argument(
+        "--compact_build",
+        dest="compact_build",
+        action="store_true",
+        default=True,
+        help="Use compact set-based k-mer grouping. This is the default and is recommended for larger databases.",
+    )
+    parser.add_argument(
+        "--legacy_observation_build",
+        dest="compact_build",
+        action="store_false",
+        help="Use the older occurrence-level builder for debugging/regression checks.",
+    )
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help="Write build_profile_timing.tsv with wall-clock timings for build stages.",
+    )
     parser.add_argument("--verbose", action="store_true")
     return parser.parse_args()
 
@@ -73,6 +92,9 @@ def main() -> None:
     logger.info("Genome config: %s", args.genome_config)
     logger.info("k values: %s", args.k_values)
     logger.info("Worker processes: %d", args.threads)
+    logger.info("Compact build: %s", args.compact_build)
+    logger.info("Build profiling: %s", args.profile)
+    profiler = WorkflowProfiler()
 
     taxonomy_db = None
     if args.taxonomy_dir:
@@ -85,20 +107,26 @@ def main() -> None:
         )
         logger.info("Taxonomic evidence ranks: %s", ", ".join(args.evidence_ranks))
 
-    genome_configs = load_genome_config(config_path=args.genome_config)
+    with profiler.time_stage(stage="load_genome_config", detail=str(args.genome_config)):
+        genome_configs = load_genome_config(config_path=args.genome_config)
     logger.info("Loaded %d genome records", len(genome_configs))
 
-    diagnostic_kmers, summary, collection_summary = build_panel(
-        genome_configs=genome_configs,
-        k_values=args.k_values,
-        target_clade=args.target_clade,
-        max_per_species_per_k=args.max_per_species_per_k,
-        threads=args.threads,
-        taxonomy_db=taxonomy_db,
-        target_taxid=args.target_taxid,
-        preferred_ranks=args.evidence_ranks,
-        logger=logger,
-    )
+    with profiler.time_stage(
+        stage="build_panel",
+        detail=f"compact_build={args.compact_build};k_values={','.join(map(str, args.k_values))}",
+    ):
+        diagnostic_kmers, summary, collection_summary = build_panel(
+            genome_configs=genome_configs,
+            k_values=args.k_values,
+            target_clade=args.target_clade,
+            max_per_species_per_k=args.max_per_species_per_k,
+            threads=args.threads,
+            taxonomy_db=taxonomy_db,
+            target_taxid=args.target_taxid,
+            preferred_ranks=args.evidence_ranks,
+            compact_build=args.compact_build,
+            logger=logger,
+        )
     logger.info("Retained %d diagnostic k-mers", len(diagnostic_kmers))
 
     panel_path = out_dir / "species_kmer_panel.tsv.gz"
@@ -107,30 +135,32 @@ def main() -> None:
     metadata_path = out_dir / "species_kmer_panel_metadata.json"
     html_path = out_dir / "species_detection_report.html"
 
-    write_tsv(
-        records=[item.to_record() for item in diagnostic_kmers],
-        output_path=panel_path,
-        fieldnames=PANEL_FIELDNAMES,
-    )
-    write_tsv(
-        records=summary,
-        output_path=summary_path,
-        fieldnames=[
-            "panel_type",
-            "species_name",
-            "clade",
-            "evidence_taxid",
-            "evidence_rank",
-            "k",
-            "diagnostic_kmers",
-        ],
-    )
-    collection_fieldnames = sorted({key for record in collection_summary for key in record})
-    write_tsv(
-        records=collection_summary,
-        output_path=collection_summary_path,
-        fieldnames=collection_fieldnames,
-    )
+    with profiler.time_stage(stage="write_panel", detail=str(panel_path)):
+        write_tsv(
+            records=[item.to_record() for item in diagnostic_kmers],
+            output_path=panel_path,
+            fieldnames=PANEL_FIELDNAMES,
+        )
+    with profiler.time_stage(stage="write_summaries", detail=str(summary_path)):
+        write_tsv(
+            records=summary,
+            output_path=summary_path,
+            fieldnames=[
+                "panel_type",
+                "species_name",
+                "clade",
+                "evidence_taxid",
+                "evidence_rank",
+                "k",
+                "diagnostic_kmers",
+            ],
+        )
+        collection_fieldnames = sorted({key for record in collection_summary for key in record})
+        write_tsv(
+            records=collection_summary,
+            output_path=collection_summary_path,
+            fieldnames=collection_fieldnames,
+        )
     write_json(
         data={
             "genome_config": str(args.genome_config),
@@ -142,11 +172,19 @@ def main() -> None:
             "evidence_ranks": args.evidence_ranks,
             "max_per_species_per_k": args.max_per_species_per_k,
             "threads": args.threads,
+            "compact_build": args.compact_build,
+            "profile": args.profile,
             "n_genomes": len(genome_configs),
             "n_diagnostic_kmers": len(diagnostic_kmers),
         },
         output_path=metadata_path,
     )
+    if args.profile:
+        write_tsv(
+            records=profiler.to_records(),
+            output_path=out_dir / "build_profile_timing.tsv",
+            fieldnames=["stage", "seconds", "detail"],
+        )
     write_html_report(
         output_path=html_path,
         title="KmerSutra panel build report",
