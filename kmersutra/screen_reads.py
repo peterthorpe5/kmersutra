@@ -6,9 +6,11 @@ import logging
 from collections.abc import Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+import time
 from pathlib import Path
 
-from kmersutra.build_panel import DiagnosticKmer, load_panel
+from kmersutra.build_panel import DiagnosticKmer
+from kmersutra.panel_cache import load_panel_with_cache
 from kmersutra.fasta import SequenceRecord, read_fasta_records, read_fastq_records
 from kmersutra.kmers import VALID_BASES, hamming_distance, iter_kmers
 
@@ -335,6 +337,7 @@ def screen_records_for_species_kmers(
     fuzzy_min_k: int = 71,
     threads: int = 1,
     chunk_size: int = 1000,
+    max_pending_chunks: int | None = None,
     logger: logging.Logger | None = None,
 ) -> list[KmerHit]:
     """Screen query records for species or clade diagnostic k-mers.
@@ -357,6 +360,10 @@ def screen_records_for_species_kmers(
         Number of worker processes.
     chunk_size : int, optional
         Number of records submitted per worker task.
+    max_pending_chunks : int or None, optional
+        Maximum number of submitted chunks kept in the worker queue. If omitted,
+        twice the worker count is used. This avoids materialising all chunks in
+        memory for large FASTQ/FASTA files.
     logger : logging.Logger | None, optional
         Logger for progress messages.
 
@@ -397,33 +404,53 @@ def screen_records_for_species_kmers(
             logger.info("Screened %d records and retained %d hits", n_records, len(all_hits))
         return all_hits
 
-    chunks = list(_chunks(records=records, chunk_size=chunk_size))
-    if logger:
-        logger.info("Prepared %d screening chunks", len(chunks))
-
     all_hits: list[KmerHit] = []
-    n_records = sum(len(chunk) for chunk in chunks)
+    n_records = 0
+    submitted = 0
+    completed = 0
+    max_pending = max(threads * 2, 1) if max_pending_chunks is None else max_pending_chunks
+    if max_pending <= 0:
+        raise ValueError("max_pending_chunks must be a positive integer")
+
+    def submit_chunk(executor: ThreadPoolExecutor, chunk: list[SequenceRecord]):
+        return executor.submit(
+            _screen_chunk,
+            records=chunk,
+            panel_index=panel_index,
+            sample_id=sample_id,
+            sequence_type=sequence_type,
+            max_mismatches=max_mismatches,
+            fuzzy_min_k=fuzzy_min_k,
+        )
+
     with ThreadPoolExecutor(max_workers=threads) as executor:
-        futures = [
-            executor.submit(
-                _screen_chunk,
-                records=chunk,
-                panel_index=panel_index,
-                sample_id=sample_id,
-                sequence_type=sequence_type,
-                max_mismatches=max_mismatches,
-                fuzzy_min_k=fuzzy_min_k,
-            )
-            for chunk in chunks
-        ]
-        for index, future in enumerate(as_completed(futures), start=1):
-            chunk_hits = future.result()
-            all_hits.extend(chunk_hits)
-            if logger and (index == 1 or index % 10 == 0 or index == len(futures)):
+        pending = set()
+        for chunk in _chunks(records=records, chunk_size=chunk_size):
+            n_records += len(chunk)
+            pending.add(submit_chunk(executor, chunk))
+            submitted += 1
+
+            if len(pending) >= max_pending:
+                done = next(as_completed(pending))
+                pending.remove(done)
+                all_hits.extend(done.result())
+                completed += 1
+                if logger and (completed == 1 or completed % 10 == 0):
+                    logger.info(
+                        "Completed %d chunks; submitted %d chunks; retained %d hits so far",
+                        completed,
+                        submitted,
+                        len(all_hits),
+                    )
+
+        for future in as_completed(pending):
+            all_hits.extend(future.result())
+            completed += 1
+            if logger and (completed == 1 or completed % 10 == 0 or completed == submitted):
                 logger.info(
                     "Completed %d/%d chunks; retained %d hits so far",
-                    index,
-                    len(futures),
+                    completed,
+                    submitted,
                     len(all_hits),
                 )
 
@@ -442,6 +469,11 @@ def screen_file_for_species_kmers(
     fuzzy_min_k: int = 71,
     threads: int = 1,
     chunk_size: int = 1000,
+    max_pending_chunks: int | None = None,
+    panel_cache_path: str | Path | None = None,
+    use_panel_cache: bool = False,
+    write_panel_cache: bool = False,
+    profile_records: list[dict[str, object]] | None = None,
     logger: logging.Logger | None = None,
 ) -> list[KmerHit]:
     """Screen a FASTA or FASTQ file against a diagnostic panel.
@@ -464,6 +496,10 @@ def screen_file_for_species_kmers(
         Number of worker processes.
     chunk_size : int, optional
         Number of records submitted per worker task.
+    max_pending_chunks : int or None, optional
+        Maximum number of submitted chunks kept in the worker queue. If omitted,
+        twice the worker count is used. This avoids materialising all chunks in
+        memory for large FASTQ/FASTA files.
     logger : logging.Logger | None, optional
         Logger for progress messages.
 
@@ -474,15 +510,33 @@ def screen_file_for_species_kmers(
     """
     if logger:
         logger.info("Loading panel: %s", panel_path)
-    panel_index = load_panel(panel_path=panel_path)
+        logger.info("Use panel cache: %s", use_panel_cache)
+        logger.info("Write panel cache: %s", write_panel_cache)
+    panel_start = time.perf_counter()
+    panel_index, panel_source = load_panel_with_cache(
+        panel_path=panel_path,
+        cache_path=panel_cache_path,
+        use_cache=use_panel_cache,
+        write_cache=write_panel_cache,
+    )
+    panel_seconds = time.perf_counter() - panel_start
+    if profile_records is not None:
+        profile_records.append({
+            "stage": "load_panel",
+            "seconds": f"{panel_seconds:.6f}",
+            "detail": panel_source,
+        })
     if logger:
         n_panel_kmers = sum(len(kmer_map) for kmer_map in panel_index.values())
         logger.info(
-            "Loaded panel with %d k values and %d unique panel k-mer keys",
+            "Loaded panel from %s with %d k values and %d unique panel k-mer keys in %.3fs",
+            panel_source,
             len(panel_index),
             n_panel_kmers,
+            panel_seconds,
         )
 
+    parse_start = time.perf_counter()
     if input_format == "fasta":
         records = read_fasta_records(fasta_path=input_path)
         sequence_type = "contig"
@@ -491,8 +545,16 @@ def screen_file_for_species_kmers(
         sequence_type = "read"
     else:
         raise ValueError("input_format must be either fasta or fastq")
+    parse_seconds = time.perf_counter() - parse_start
+    if profile_records is not None:
+        profile_records.append({
+            "stage": "prepare_input_iterator",
+            "seconds": f"{parse_seconds:.6f}",
+            "detail": input_format,
+        })
 
-    return screen_records_for_species_kmers(
+    screen_start = time.perf_counter()
+    hits = screen_records_for_species_kmers(
         records=records,
         panel_index=panel_index,
         sample_id=sample_id,
@@ -501,5 +563,14 @@ def screen_file_for_species_kmers(
         fuzzy_min_k=fuzzy_min_k,
         threads=threads,
         chunk_size=chunk_size,
+        max_pending_chunks=max_pending_chunks,
         logger=logger,
     )
+    screen_seconds = time.perf_counter() - screen_start
+    if profile_records is not None:
+        profile_records.append({
+            "stage": "screen_records",
+            "seconds": f"{screen_seconds:.6f}",
+            "detail": f"hits={len(hits)}",
+        })
+    return hits

@@ -44,7 +44,54 @@ kmersutra-download-ncbi
 kmersutra-extract-features
 kmersutra-train-classifier
 kmersutra-predict
+kmersutra-download-taxonomy
+kmersutra-merge-panels
+kmersutra-validate-panel
+kmersutra-summarise-run
 ```
+
+
+## v0.8 speed and diagnostics options
+
+KmerSutra v0.8 adds practical speed and diagnostic controls for large ONT
+metagenomic screens. Exact matching remains the recommended first benchmark.
+
+Useful screening options:
+
+```bash
+kmersutra-screen \
+  --input sample.fastq.gz \
+  --input_format fastq \
+  --panel master_kmer_panel.tsv.gz \
+  --sample_id sample_001 \
+  --out_dir sample_001_kmersutra \
+  --threads 12 \
+  --chunk_size 5000 \
+  --use_panel_cache \
+  --profile \
+  --max_mismatches 0
+```
+
+For very large screens where read-level hit output is not needed:
+
+```bash
+kmersutra-screen \
+  --input sample.fastq.gz \
+  --input_format fastq \
+  --panel master_kmer_panel.tsv.gz \
+  --sample_id sample_001 \
+  --out_dir sample_001_kmersutra \
+  --threads 12 \
+  --chunk_size 10000 \
+  --use_panel_cache \
+  --no_read_level_hits \
+  --profile
+```
+
+These options write `profile_timing.tsv`, which reports wall-clock time for
+panel loading, screening, summarisation, and report writing. Panel caching writes
+or reuses a pickled index next to the panel by default, avoiding repeated parsing
+of large gzip-compressed TSV panels.
 
 ## Genome configuration
 

@@ -170,3 +170,53 @@ class TestScreenReads(unittest.TestCase):
                 sequence_type="read",
                 chunk_size=0,
             )
+
+    def test_streaming_parallel_screening_rejects_bad_pending_count(self) -> None:
+        """Streaming scheduler should reject non-positive pending chunk limits."""
+        with self.assertRaises(ValueError):
+            screen_records_for_species_kmers(
+                records=[],
+                panel_index={},
+                sample_id="sample1",
+                sequence_type="read",
+                threads=2,
+                max_pending_chunks=0,
+            )
+
+    def test_streaming_parallel_screening_matches_single_worker(self) -> None:
+        """Streaming scheduler should preserve hits when pending chunks are limited."""
+        diagnostic = DiagnosticKmer(
+            kmer="AAAAA",
+            k=5,
+            panel_type="species_unique",
+            species_name="Alpha",
+            clade="Demo",
+            source_genomes="g1",
+            source_contigs="c1",
+            example_position=0,
+        )
+        panel = {5: {"AAAAA": [diagnostic]}}
+        records = [
+            SequenceRecord(identifier=f"read{i}", description=f"read{i}", sequence="GGGAAAAATTT")
+            for i in range(6)
+        ]
+        serial = screen_records_for_species_kmers(
+            records=records,
+            panel_index=panel,
+            sample_id="sample1",
+            sequence_type="read",
+            threads=1,
+            chunk_size=2,
+        )
+        parallel = screen_records_for_species_kmers(
+            records=records,
+            panel_index=panel,
+            sample_id="sample1",
+            sequence_type="read",
+            threads=2,
+            chunk_size=2,
+            max_pending_chunks=1,
+        )
+        serial_ids = sorted(hit.sequence_id for hit in serial)
+        parallel_ids = sorted(hit.sequence_id for hit in parallel)
+        self.assertEqual(serial_ids, parallel_ids)

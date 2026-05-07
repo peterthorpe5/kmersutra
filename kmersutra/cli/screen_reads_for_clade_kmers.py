@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import nullcontext
 from pathlib import Path
 
 from kmersutra.features import FEATURE_FIELDNAMES, summarise_sequence_features
 from kmersutra.io import write_tsv
+from kmersutra.profiling import WorkflowProfiler
 from kmersutra.logging_utils import configure_logging
 from kmersutra.reporting import write_html_report
 from kmersutra.screen_reads import screen_file_for_species_kmers
@@ -39,7 +41,38 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_mismatches", type=int, default=0)
     parser.add_argument("--fuzzy_min_k", type=int, default=71)
     parser.add_argument("--threads", type=int, default=1)
-    parser.add_argument("--chunk_size", type=int, default=1000)
+    parser.add_argument("--chunk_size", type=int, default=5000)
+    parser.add_argument(
+        "--max_pending_chunks",
+        type=int,
+        default=None,
+        help="Maximum queued chunks during threaded screening. Default: twice --threads.",
+    )
+    parser.add_argument(
+        "--panel_cache",
+        default=None,
+        help="Optional pickled panel-index cache path.",
+    )
+    parser.add_argument(
+        "--use_panel_cache",
+        action="store_true",
+        help="Use a current panel-index cache if available; otherwise build one.",
+    )
+    parser.add_argument(
+        "--write_panel_cache",
+        action="store_true",
+        help="Write a pickled panel-index cache after loading the TSV panel.",
+    )
+    parser.add_argument(
+        "--no_read_level_hits",
+        action="store_true",
+        help="Do not write read_level_species_kmer_hits.tsv.gz. This speeds up large screens.",
+    )
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help="Write profile_timing.tsv with wall-clock timings for major stages.",
+    )
     parser.add_argument("--min_unique_kmers", type=int, default=3)
     parser.add_argument("--min_positive_sequences", type=int, default=2)
     parser.add_argument("--min_k_values_positive", type=int, default=1)
@@ -67,11 +100,21 @@ def main() -> None:
     logger.info("Panel: %s", args.panel)
     logger.info("Worker processes: %d", args.threads)
     logger.info("Chunk size: %d", args.chunk_size)
+    logger.info("Maximum pending chunks: %s", args.max_pending_chunks or "auto")
+    logger.info("Panel cache: %s", args.panel_cache or "default")
+    logger.info("Use panel cache: %s", args.use_panel_cache)
+    logger.info("Write panel cache: %s", args.write_panel_cache)
+    logger.info("Write read-level hits: %s", not args.no_read_level_hits)
+    logger.info("Profiling enabled: %s", args.profile)
     logger.info("Maximum mismatches: %d", args.max_mismatches)
     logger.info("Fuzzy minimum k: %d", args.fuzzy_min_k)
     logger.info("Mixed-species calls allowed: %s", not args.disallow_mixed_species)
 
-    expected_species = load_panel_species_metadata(panel_path=args.panel)
+    profiler = WorkflowProfiler() if args.profile else None
+    screen_profile_records: list[dict[str, object]] = []
+
+    with (profiler.time_stage(stage="load_expected_species", detail="panel_metadata") if profiler else nullcontext()):
+        expected_species = load_panel_species_metadata(panel_path=args.panel)
     logger.info("Loaded %d expected species labels from panel", len(expected_species))
 
     hits = screen_file_for_species_kmers(
@@ -83,46 +126,67 @@ def main() -> None:
         fuzzy_min_k=args.fuzzy_min_k,
         threads=args.threads,
         chunk_size=args.chunk_size,
+        max_pending_chunks=args.max_pending_chunks,
+        panel_cache_path=args.panel_cache,
+        use_panel_cache=args.use_panel_cache,
+        write_panel_cache=args.write_panel_cache,
+        profile_records=screen_profile_records if profiler else None,
         logger=logger,
     )
     logger.info("Detected %d diagnostic k-mer hits", len(hits))
 
-    sequence_features = summarise_sequence_features(hits=hits, logger=logger)
-    hit_summary = summarise_species_hits(hits=hits)
-    observed_evidence = summarise_sample_species_evidence(species_summary=hit_summary)
-    evidence = complete_sample_species_evidence(
-        evidence_records=observed_evidence,
-        expected_species=expected_species,
-        sample_id=args.sample_id,
-    )
+    with (profiler.time_stage(stage="summarise_sequence_features", detail="ml_features") if profiler else nullcontext()):
+        sequence_features = summarise_sequence_features(hits=hits, logger=logger)
+    with (profiler.time_stage(stage="summarise_hits", detail="sample_species") if profiler else nullcontext()):
+        hit_summary = summarise_species_hits(hits=hits)
+        observed_evidence = summarise_sample_species_evidence(species_summary=hit_summary)
+        evidence = complete_sample_species_evidence(
+            evidence_records=observed_evidence,
+            expected_species=expected_species,
+            sample_id=args.sample_id,
+        )
     logger.info("Built %d completed species evidence rows", len(evidence))
-    detection_calls = call_species_presence(
-        evidence_records=evidence,
-        min_unique_kmers=args.min_unique_kmers,
-        min_positive_sequences=args.min_positive_sequences,
-        min_k_values_positive=args.min_k_values_positive,
-        max_conflict_ratio=args.max_conflict_ratio,
-        allow_mixed_species=not args.disallow_mixed_species,
-    )
+    with (profiler.time_stage(stage="call_species_presence", detail="thresholds") if profiler else nullcontext()):
+        detection_calls = call_species_presence(
+            evidence_records=evidence,
+            min_unique_kmers=args.min_unique_kmers,
+            min_positive_sequences=args.min_positive_sequences,
+            min_k_values_positive=args.min_k_values_positive,
+            max_conflict_ratio=args.max_conflict_ratio,
+            allow_mixed_species=not args.disallow_mixed_species,
+        )
     logger.info("Built %d species detection-call rows", len(detection_calls))
 
-    write_tsv(
-        records=[hit.to_record() for hit in hits],
-        output_path=out_dir / "read_level_species_kmer_hits.tsv.gz",
-        fieldnames=[
-            "sample_id",
-            "sequence_id",
-            "sequence_type",
-            "k",
-            "query_position",
-            "matched_kmer",
-            "query_kmer",
-            "mismatches",
-            "panel_type",
-            "species_name",
-            "clade",
-        ],
-    )
+    read_level_fieldnames = [
+        "sample_id",
+        "sequence_id",
+        "sequence_type",
+        "k",
+        "query_position",
+        "matched_kmer",
+        "query_kmer",
+        "mismatches",
+        "panel_type",
+        "species_name",
+        "clade",
+    ]
+    if args.no_read_level_hits:
+        logger.info("Skipping read-level hit output by user request")
+        write_tsv(
+            records=[{
+                "sample_id": args.sample_id,
+                "note": "read-level hit output disabled; use without --no_read_level_hits to write this file",
+            }],
+            output_path=out_dir / "read_level_species_kmer_hits.disabled.tsv",
+            fieldnames=["sample_id", "note"],
+        )
+    else:
+        with (profiler.time_stage(stage="write_read_level_hits", detail=f"hits={len(hits)}") if profiler else nullcontext()):
+            write_tsv(
+                records=[hit.to_record() for hit in hits],
+                output_path=out_dir / "read_level_species_kmer_hits.tsv.gz",
+                fieldnames=read_level_fieldnames,
+            )
     write_tsv(
         records=sequence_features,
         output_path=out_dir / "sequence_ml_features.tsv",
@@ -171,12 +235,20 @@ def main() -> None:
             "call",
         ],
     )
-    write_html_report(
-        output_path=out_dir / "species_detection_report.html",
-        title="KmerSutra species detection report",
-        hit_summary=hit_summary,
-        detection_calls=detection_calls,
-    )
+    with (profiler.time_stage(stage="write_html_report", detail="species_detection_report") if profiler else nullcontext()):
+        write_html_report(
+            output_path=out_dir / "species_detection_report.html",
+            title="KmerSutra species detection report",
+            hit_summary=hit_summary,
+            detection_calls=detection_calls,
+        )
+    if profiler:
+        write_tsv(
+            records=[*screen_profile_records, *profiler.to_records()],
+            output_path=out_dir / "profile_timing.tsv",
+            fieldnames=["stage", "seconds", "detail"],
+        )
+        logger.info("Wrote profile timings: %s", out_dir / "profile_timing.tsv")
     logger.info("Done")
 
 

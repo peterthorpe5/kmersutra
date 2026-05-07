@@ -28,7 +28,9 @@ def configure_logging(
     """
     logger = logging.getLogger("kmersutra")
     logger.setLevel(logging.DEBUG)
-    logger.handlers.clear()
+    for handler in list(logger.handlers):
+        handler.close()
+        logger.removeHandler(handler)
 
     formatter = logging.Formatter(
         "%(asctime)s %(levelname)s [%(name)s] %(message)s",
