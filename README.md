@@ -673,3 +673,135 @@ run_qc.tsv
 kmersutra_spikein_overall_summary.xlsx
 kmersutra_spikein_overall_summary.html
 ```
+
+## Version 0.12.0: low-memory target-evidence building and RAM logging
+
+Version 0.12.0 adds a new build path for larger near-neighbour and outgroup
+panels. The original compact builder is still available and remains useful for
+small to moderate panels, but it still holds a global dictionary of every
+distinct `(k, k-mer)` key in memory. For long k values and many genomes, most
+k-mers are unique, so that dictionary can become too large for normal cluster
+jobs.
+
+The new `--target_evidence_only` mode is designed for the immediate KmerSutra
+benchmarking question:
+
+> Do the named target species still retain species-level evidence after adding
+> near-neighbour and outgroup genomes?
+
+This mode stores candidate k-mers from genomes labelled `target_species` in an
+SQLite database and then streams all other genomes against those candidates.
+Non-target genomes are therefore used as filters or downgrade evidence, but the
+builder does not hold all non-target k-mers in memory and does not create a full
+species-level panel for every near-neighbour species.
+
+### Why this is lower memory
+
+The previous compact path keeps a Python dictionary for all observed k-mers from
+all genomes. The new target-evidence path keeps only target-candidate k-mers on
+disk and updates those records when the same k-mer is seen in near-neighbours or
+outgroups. This trades some runtime and disk use for much lower peak RAM.
+
+### What this mode reports
+
+For each target-candidate k-mer, KmerSutra checks whether it is:
+
+- unique to one target species, giving species-level evidence;
+- shared with other taxa inside the retained target taxid, giving genus or
+  higher taxonomic evidence where supported by the taxonomy database;
+- also present outside the retained target taxid, in which case it is not
+  retained for the target panel.
+
+This is intentionally conservative. It is not a replacement for a future full
+master-panel builder that globally validates every species in a large database.
+It is a pragmatic build mode for the current Plasmodium/outgroup benchmark and
+for larger target-centred diagnostic panels.
+
+### RAM monitoring
+
+`kmersutra-build-panel` now writes a RAM log by default. The file is:
+
+```bash
+ram_usage.tsv
+```
+
+inside the output directory, unless `--ram_log_path` is supplied. The log
+contains elapsed time, current RSS and peak RSS in bytes and MB. This is useful
+on clusters where `/usr/bin/time -v` is not installed or not reliable.
+
+To change the sampling interval:
+
+```bash
+--ram_log_interval_seconds 30
+```
+
+To disable RAM logging:
+
+```bash
+--ram_log_interval_seconds 0
+```
+
+### Recommended command for the 33-genome Plasmodium/outgroup panel
+
+For the current Plasmodium benchmark, first build one k value at a time:
+
+```bash
+kmersutra-build-panel \
+  --genome_config ncbi_genomes_plasmodium_outgroups_v3/kmersutra_genome_config_targets.tsv \
+  --out_dir kmersutra_plasmodium_outgroups_v3_target_evidence_k101 \
+  --k_values 101 \
+  --taxonomy_dir ncbi_taxonomy \
+  --download_taxonomy_if_missing \
+  --target_taxid 5820 \
+  --evidence_ranks species genus family order class phylum superkingdom \
+  --target_evidence_only \
+  --sqlite_batch_size 50000 \
+  --max_per_species_per_k 50000 \
+  --profile \
+  --verbose
+```
+
+Then repeat with `--k_values 71`, or run a combined test only after confirming
+that RAM and disk use are acceptable.
+
+`--max_per_species_per_k` is optional. For exploratory builds it is strongly
+recommended because a full unthinned long-k panel can contain many millions of
+species-level records. Remove or increase the limit only when you are ready for
+the corresponding output size.
+
+### New output files
+
+When `--target_evidence_only` is used, the output directory contains the normal
+panel files plus:
+
+- `target_evidence_candidates.sqlite`: SQLite candidate database.
+- `target_evidence_build_summary.tsv`: target-candidate and overlap counts.
+- `ram_usage.tsv`: RAM usage over time.
+
+The standard files are still written:
+
+- `species_kmer_panel.tsv.gz`
+- `kmer_uniqueness_summary.tsv`
+- `kmer_collection_summary.tsv`
+- `species_kmer_panel_metadata.json`
+- `build_profile_timing.tsv` when `--profile` is used
+- `species_detection_report.html`
+
+### Tests added in v0.12.0
+
+Version 0.12.0 adds tests for:
+
+- SQLite target-candidate database creation.
+- Non-target overlap marking.
+- species-level and genus-level evidence from the target-evidence path.
+- diagnostic stream thinning.
+- CLI output generation in `--target_evidence_only` mode.
+- RAM helper functions and RAM-log writing.
+
+The full test suite currently contains 139 tests and passed with:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+The tests are also compatible with `nose2` when it is installed.

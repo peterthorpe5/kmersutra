@@ -102,3 +102,35 @@ def write_json(*, data: object, output_path: str | Path) -> None:
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def write_tsv_stream(
+    *,
+    records: Iterable[Mapping[str, object]],
+    output_path: str | Path,
+    fieldnames: list[str],
+) -> int:
+    """Write records to a tab-separated file without materialising them.
+
+    Parameters
+    ----------
+    records : iterable of mappings
+        Records to write.
+    output_path : str or pathlib.Path
+        Output path. May end in ``.gz``.
+    fieldnames : list[str]
+        Explicit output column order.
+
+    Returns
+    -------
+    int
+        Number of data records written.
+    """
+    n_records = 0
+    with open_text(output_path, "wt") as handle:
+        handle.write("\t".join(fieldnames) + "\n")
+        for record in records:
+            values = [str(record.get(column, "")) for column in fieldnames]
+            handle.write("\t".join(values) + "\n")
+            n_records += 1
+    return n_records
