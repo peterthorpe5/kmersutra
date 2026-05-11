@@ -805,3 +805,104 @@ python -m unittest discover -s tests -v
 ```
 
 The tests are also compatible with `nose2` when it is installed.
+
+## Version 0.13.0: query-agnostic all-candidate evidence builds
+
+Version 0.13.0 adds a second SQLite-backed low-memory build mode for real-world
+unknown-sample screening. Version 0.12.0 introduced `--target_evidence_only`,
+which is useful when the benchmark truth is known and the question is whether
+named targets retain species-level evidence after near-neighbour and outgroup
+filtering. That mode is not sufficient for real samples, because the true target
+will not usually be known in advance.
+
+The new mode is:
+
+```bash
+kmersutra-build-panel \
+  --genome_config kmersutra_genome_config.tsv \
+  --out_dir kmersutra_all_candidate_panel \
+  --k_values 71 101 \
+  --taxonomy_dir ncbi_taxonomy \
+  --download_taxonomy_if_missing \
+  --evidence_ranks species genus family order class phylum superkingdom \
+  --all_candidate_evidence \
+  --max_per_species_per_k 50000 \
+  --sqlite_batch_size 50000 \
+  --ram_log_interval_seconds 30 \
+  --profile \
+  --verbose
+```
+
+This mode is intentionally query-agnostic. It iterates over every eligible
+candidate species in the genome configuration, treats that species as the
+temporary candidate, streams all other genomes as filters, and retains validated
+evidence for the most specific supported taxonomic level. The final panel can
+therefore contain markers for many Plasmodium species, selected apicomplexan
+outgroups, distant outgroups, and shared genus- or clade-level evidence. This is
+the appropriate database design for asking what is present in an unknown sample.
+
+By default, `--all_candidate_evidence` makes all non-host, non-background and
+non-excluded genomes reportable candidates. This means roles such as
+`target_species`, `near_neighbour`, `outgroup`, `apicomplexan_outgroup`,
+`distant_outgroup`, `non_target` and `downloaded` can all contribute reportable
+evidence. If a narrower module is required, use `--candidate_roles` to whitelist
+specific roles. For example:
+
+```bash
+--candidate_roles target_species near_neighbour apicomplexan_outgroup distant_outgroup
+```
+
+Do not use `--target_taxid` for a fully query-agnostic broad panel, because it
+restricts retained evidence to that subtree. Use `--target_taxid 5820` only when
+building a Plasmodium-only module and deliberately excluding reportable outgroup
+evidence.
+
+New v0.13.0 outputs include:
+
+- `all_candidate_evidence.sqlite`: retained diagnostic evidence for all selected
+  candidate taxa.
+- `species_kmer_panel.tsv.gz`: merged panel used by `kmersutra-screen`.
+- `target_evidence_build_summary.tsv`: coarse all-candidate build summary. The
+  filename is retained for compatibility with v0.12.0 scripts.
+- `kmer_collection_summary.tsv`: per-candidate and per-filter collection records.
+- `ram_usage.tsv`: RAM usage sampled during the build.
+- `build_profile_timing.tsv`: wall-clock timing for major build stages.
+
+The all-candidate build is expected to be slower than `--target_evidence_only`,
+because each candidate species is validated against all other genomes. The gain
+is that the resulting database is appropriate for unknown-sample screening and
+can generate off-target calls during benchmarking. This is the architectural
+step needed before comparing KmerSutra fairly with general-purpose classifiers
+such as Kraken2 and Metabuli.
+
+Suggested first Plasmodium/outgroup build:
+
+```bash
+cd /home/pthorpe001/data/databases/kmersutra_db
+
+kmersutra-build-panel \
+  --genome_config ncbi_genomes_plasmodium_outgroups_v3/kmersutra_genome_config_targets_supported_roles.tsv \
+  --out_dir kmersutra_builds/kmersutra_plasmodium_outgroups_v3_all_candidate_k71 \
+  --k_values 71 \
+  --taxonomy_dir ncbi_taxonomy \
+  --download_taxonomy_if_missing \
+  --evidence_ranks species genus family order class phylum superkingdom \
+  --all_candidate_evidence \
+  --max_per_species_per_k 50000 \
+  --sqlite_batch_size 50000 \
+  --ram_log_interval_seconds 30 \
+  --profile \
+  --verbose
+```
+
+Run k=71 and k=101 as separate jobs first. If runtime and disk use are acceptable,
+they can later be merged at the final `species_kmer_panel.tsv.gz` level.
+
+Development safeguards in v0.13.0:
+
+- all previous tests are retained;
+- new all-candidate unit tests exercise candidate selection, multi-species
+  evidence retention, global evidence caps, and CLI output creation;
+- the full test suite contains 143 tests and passes with `python -m unittest`;
+- all new functions include PEP 8-style docstrings;
+- build logging and RAM tracking are retained.

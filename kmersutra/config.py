@@ -89,13 +89,16 @@ class GenomeConfig:
         return self.role in TARGET_ROLES
 
 
-def load_genome_config(*, config_path: str | Path) -> list[GenomeConfig]:
+def load_genome_config(*, config_path: str | Path, require_target: bool = True) -> list[GenomeConfig]:
     """Load genome configuration records from a TSV file.
 
     Parameters
     ----------
     config_path : str or pathlib.Path
         Path to genome configuration TSV.
+    require_target : bool, optional
+        Require at least one record with a target role. Set to False for
+        query-agnostic all-candidate panel builds.
 
     Returns
     -------
@@ -133,6 +136,6 @@ def load_genome_config(*, config_path: str | Path) -> list[GenomeConfig]:
                 source=record.get("source", ""),
             )
         )
-    if not any(config.is_target for config in configs):
+    if require_target and not any(config.is_target for config in configs):
         raise ValueError("At least one target species is required")
     return configs

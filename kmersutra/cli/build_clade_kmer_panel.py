@@ -12,6 +12,10 @@ from kmersutra.logging_utils import configure_logging
 from kmersutra.profiling import WorkflowProfiler
 from kmersutra.reporting import write_html_report
 from kmersutra.resource_monitor import ResourceMonitor
+from kmersutra.all_candidate_evidence import (
+    build_all_candidate_evidence_sqlite,
+    iter_retained_all_candidate_diagnostics,
+)
 from kmersutra.target_evidence import (
     build_target_evidence_sqlite,
     iter_target_evidence_diagnostics,
@@ -94,6 +98,55 @@ def parse_args() -> argparse.Namespace:
             "and outgroup panels when the aim is to test named targets."
         ),
     )
+
+    parser.add_argument(
+        "--all_candidate_evidence",
+        action="store_true",
+        help=(
+            "Use the SQLite-backed all-candidate evidence builder. This "
+            "query-agnostic mode iterates over each eligible candidate "
+            "species, validates it against all other genomes, and retains "
+            "evidence for many reportable taxa rather than requiring known "
+            "target species in advance."
+        ),
+    )
+    parser.add_argument(
+        "--candidate_roles",
+        nargs="+",
+        default=None,
+        help=(
+            "Optional role whitelist for --all_candidate_evidence. If omitted, "
+            "all non-host/non-background/non-excluded genomes become reportable "
+            "candidate taxa."
+        ),
+    )
+    parser.add_argument(
+        "--excluded_candidate_roles",
+        nargs="+",
+        default=None,
+        help=(
+            "Optional role blacklist for --all_candidate_evidence when "
+            "--candidate_roles is not supplied."
+        ),
+    )
+    parser.add_argument(
+        "--all_candidate_sqlite_path",
+        default="",
+        help=(
+            "Optional retained-evidence SQLite path for --all_candidate_evidence. "
+            "Defaults to all_candidate_evidence.sqlite inside --out_dir."
+        ),
+    )
+    parser.add_argument(
+        "--all_candidate_work_sqlite_path",
+        default="",
+        help=(
+            "Optional temporary SQLite path reused for each candidate species "
+            "during --all_candidate_evidence. Defaults to "
+            "all_candidate_work.sqlite inside --out_dir."
+        ),
+    )
+
     parser.add_argument(
         "--sqlite_path",
         default="",
@@ -255,6 +308,7 @@ def main() -> None:
     logger.info("Worker processes: %d", args.threads)
     logger.info("Compact build: %s", args.compact_build)
     logger.info("Target-evidence-only build: %s", args.target_evidence_only)
+    logger.info("All-candidate evidence build: %s", args.all_candidate_evidence)
     logger.info("Build profiling: %s", args.profile)
     profiler = WorkflowProfiler()
 
@@ -281,7 +335,10 @@ def main() -> None:
             logger.info("Taxonomic evidence ranks: %s", ", ".join(args.evidence_ranks))
 
         with profiler.time_stage(stage="load_genome_config", detail=str(args.genome_config)):
-            genome_configs = load_genome_config(config_path=args.genome_config)
+            genome_configs = load_genome_config(
+                config_path=args.genome_config,
+                require_target=not args.all_candidate_evidence,
+            )
         logger.info("Loaded %d genome records", len(genome_configs))
 
         panel_path = out_dir / "species_kmer_panel.tsv.gz"
@@ -291,7 +348,67 @@ def main() -> None:
         html_path = out_dir / "species_detection_report.html"
         target_evidence_summary_path = out_dir / "target_evidence_build_summary.tsv"
 
-        if args.target_evidence_only:
+        if args.target_evidence_only and args.all_candidate_evidence:
+            raise ValueError(
+                "Use either --target_evidence_only or --all_candidate_evidence, not both"
+            )
+
+        if args.all_candidate_evidence:
+            if args.target_taxid:
+                logger.warning(
+                    "--target_taxid is set during --all_candidate_evidence. "
+                    "This restricts retained evidence to that subtree. Leave it "
+                    "empty for a fully query-agnostic broad panel including outgroups."
+                )
+            retained_sqlite_path = (
+                Path(args.all_candidate_sqlite_path)
+                if args.all_candidate_sqlite_path
+                else out_dir / "all_candidate_evidence.sqlite"
+            )
+            work_sqlite_path = (
+                Path(args.all_candidate_work_sqlite_path)
+                if args.all_candidate_work_sqlite_path
+                else out_dir / "all_candidate_work.sqlite"
+            )
+            with profiler.time_stage(
+                stage="build_all_candidate_evidence_sqlite",
+                detail=(
+                    f"retained_sqlite_path={retained_sqlite_path};"
+                    f"work_sqlite_path={work_sqlite_path};"
+                    f"k_values={','.join(map(str, args.k_values))}"
+                ),
+            ):
+                all_candidate_result = build_all_candidate_evidence_sqlite(
+                    genome_configs=genome_configs,
+                    k_values=args.k_values,
+                    retained_sqlite_path=retained_sqlite_path,
+                    work_sqlite_path=work_sqlite_path,
+                    taxonomy_db=taxonomy_db,
+                    target_taxid=args.target_taxid,
+                    preferred_ranks=args.evidence_ranks,
+                    candidate_roles=args.candidate_roles,
+                    excluded_candidate_roles=args.excluded_candidate_roles,
+                    batch_size=args.sqlite_batch_size,
+                    max_per_evidence_per_k=args.max_per_species_per_k,
+                    logger=logger,
+                )
+            with profiler.time_stage(stage="write_panel", detail=str(panel_path)):
+                diagnostic_iter = iter_retained_all_candidate_diagnostics(
+                    sqlite_path=all_candidate_result.retained_sqlite_path,
+                )
+                n_diagnostic_kmers, summary = _write_panel_streaming(
+                    diagnostic_kmers=diagnostic_iter,
+                    panel_path=panel_path,
+                    max_per_species_per_k=None,
+                    logger=logger,
+                )
+            collection_summary = all_candidate_result.collection_summary
+            write_tsv(
+                records=all_candidate_result.build_summary,
+                output_path=target_evidence_summary_path,
+                fieldnames=["summary_name", "summary_value"],
+            )
+        elif args.target_evidence_only:
             sqlite_path = (
                 Path(args.sqlite_path)
                 if args.sqlite_path
@@ -391,6 +508,11 @@ def main() -> None:
                 "threads": args.threads,
                 "compact_build": args.compact_build,
                 "target_evidence_only": args.target_evidence_only,
+                "all_candidate_evidence": args.all_candidate_evidence,
+                "candidate_roles": args.candidate_roles or [],
+                "excluded_candidate_roles": args.excluded_candidate_roles or [],
+                "all_candidate_sqlite_path": args.all_candidate_sqlite_path,
+                "all_candidate_work_sqlite_path": args.all_candidate_work_sqlite_path,
                 "sqlite_path": args.sqlite_path,
                 "sqlite_batch_size": args.sqlite_batch_size,
                 "profile": args.profile,
