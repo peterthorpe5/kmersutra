@@ -906,3 +906,96 @@ Development safeguards in v0.13.0:
 - the full test suite contains 143 tests and passes with `python -m unittest`;
 - all new functions include PEP 8-style docstrings;
 - build logging and RAM tracking are retained.
+
+## Version 0.14.0: scalable global all-candidate evidence builds
+
+Version 0.14.0 adds a new global, query-agnostic evidence builder designed to
+replace the repeated all-versus-all candidate loop introduced in v0.13.0. The
+v0.13 all-candidate mode was biologically correct, because each candidate
+species was validated against all other genomes, but it rescanned the same
+reference genomes for every candidate species. That is not scalable for larger
+panels.
+
+The new mode is:
+
+```bash
+--global_candidate_evidence
+```
+
+This build path changes the algorithm:
+
+1. Each genome is indexed once for each requested k value.
+2. Source metadata for each distinct `(k, kmer)` key is stored in SQLite.
+3. The complete set of source taxids for each k-mer is used to assign the most
+   specific supported taxonomic evidence level.
+4. Evidence is retained for all reportable candidate taxa, including target
+   species, near-neighbour species and outgroup species, unless role filters are
+   supplied.
+5. Optional caps such as `--max_per_species_per_k` are applied after evidence
+   assignment.
+
+This is the preferred build mode for unknown-sample panels, where the true
+species is not known in advance. It is designed to answer questions such as:
+
+- Which known species has species-level support?
+- Is the evidence only genus-level or clade-level?
+- Is a non-target or outgroup species supported?
+- Does a sample contain conflicting or mixed evidence?
+
+Example broad-panel build:
+
+```bash
+kmersutra-build-panel \
+  --genome_config kmersutra_genome_config.tsv \
+  --out_dir kmersutra_global_candidate_panel_k77_101 \
+  --k_values 77 101 \
+  --taxonomy_dir ncbi_taxonomy \
+  --download_taxonomy_if_missing \
+  --evidence_ranks species genus family order class phylum superkingdom \
+  --threads 24 \
+  --global_candidate_evidence \
+  --sqlite_batch_size 50000 \
+  --max_per_species_per_k 50000 \
+  --ram_log_path ram_usage.tsv \
+  --ram_log_interval_seconds 30 \
+  --profile \
+  --verbose
+```
+
+Do not pass `--target_taxid` unless you intentionally want to restrict retained
+evidence to one taxonomic subtree. For a fully query-agnostic broad panel,
+leave `--target_taxid` unset.
+
+The global candidate build writes the same main screening panel as other build
+modes:
+
+```text
+species_kmer_panel.tsv.gz
+```
+
+It also writes the SQLite global evidence database:
+
+```text
+global_candidate_evidence.sqlite
+```
+
+For very large production builds, this SQLite database may be treated as a
+build intermediate. The final `species_kmer_panel.tsv.gz`, summary files,
+profile file and RAM log are the key outputs needed for screening and reporting.
+
+Important distinction between v0.13 and v0.14:
+
+| Mode | Behaviour | Intended use |
+| ---- | --------- | ------------ |
+| `--all_candidate_evidence` | Validates one candidate species at a time by rescanning all other genomes. | Correct but slow; retained for regression and small panels. |
+| `--global_candidate_evidence` | Indexes each genome once, then assigns evidence from the global k-mer source index. | Preferred scalable mode for larger query-agnostic panels. |
+
+Development safeguards in v0.14.0:
+
+- full unit-test suite retained;
+- new tests for global candidate indexing, evidence retention, evidence caps and
+  CLI output;
+- PEP 8-style docstrings on new functions;
+- verbose logging for one-pass genome indexing and evidence assignment;
+- RAM logging remains available through `--ram_log_path` and
+  `--ram_log_interval_seconds`.

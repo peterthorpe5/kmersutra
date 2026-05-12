@@ -16,6 +16,10 @@ from kmersutra.all_candidate_evidence import (
     build_all_candidate_evidence_sqlite,
     iter_retained_all_candidate_diagnostics,
 )
+from kmersutra.global_candidate_evidence import (
+    build_global_candidate_evidence_sqlite,
+    iter_retained_global_candidate_diagnostics,
+)
 from kmersutra.target_evidence import (
     build_target_evidence_sqlite,
     iter_target_evidence_diagnostics,
@@ -111,6 +115,17 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--global_candidate_evidence",
+        action="store_true",
+        help=(
+            "Use the scalable global all-candidate evidence builder. This "
+            "query-agnostic mode indexes every genome once, assigns each "
+            "observed k-mer to its supported taxonomic evidence level, and "
+            "avoids the repeated candidate-versus-all-genomes passes used by "
+            "the v0.13 all-candidate implementation."
+        ),
+    )
+    parser.add_argument(
         "--candidate_roles",
         nargs="+",
         default=None,
@@ -144,6 +159,15 @@ def parse_args() -> argparse.Namespace:
             "Optional temporary SQLite path reused for each candidate species "
             "during --all_candidate_evidence. Defaults to "
             "all_candidate_work.sqlite inside --out_dir."
+        ),
+    )
+
+    parser.add_argument(
+        "--global_candidate_sqlite_path",
+        default="",
+        help=(
+            "Optional SQLite path for --global_candidate_evidence. Defaults "
+            "to global_candidate_evidence.sqlite inside --out_dir."
         ),
     )
 
@@ -309,6 +333,7 @@ def main() -> None:
     logger.info("Compact build: %s", args.compact_build)
     logger.info("Target-evidence-only build: %s", args.target_evidence_only)
     logger.info("All-candidate evidence build: %s", args.all_candidate_evidence)
+    logger.info("Global candidate evidence build: %s", args.global_candidate_evidence)
     logger.info("Build profiling: %s", args.profile)
     profiler = WorkflowProfiler()
 
@@ -348,12 +373,73 @@ def main() -> None:
         html_path = out_dir / "species_detection_report.html"
         target_evidence_summary_path = out_dir / "target_evidence_build_summary.tsv"
 
-        if args.target_evidence_only and args.all_candidate_evidence:
+        selected_sqlite_builds = sum(
+            [
+                bool(args.target_evidence_only),
+                bool(args.all_candidate_evidence),
+                bool(args.global_candidate_evidence),
+            ]
+        )
+        if selected_sqlite_builds > 1:
             raise ValueError(
-                "Use either --target_evidence_only or --all_candidate_evidence, not both"
+                "Use only one of --target_evidence_only, "
+                "--all_candidate_evidence, or --global_candidate_evidence"
             )
 
-        if args.all_candidate_evidence:
+        if args.global_candidate_evidence:
+            if taxonomy_db is None:
+                raise ValueError(
+                    "--global_candidate_evidence requires --taxonomy_dir so "
+                    "taxonomic evidence levels can be assigned"
+                )
+            if args.target_taxid:
+                logger.warning(
+                    "--target_taxid is set during --global_candidate_evidence. "
+                    "This restricts retained evidence to that subtree. Leave it "
+                    "empty for a fully query-agnostic broad panel including outgroups."
+                )
+            global_sqlite_path = (
+                Path(args.global_candidate_sqlite_path)
+                if args.global_candidate_sqlite_path
+                else out_dir / "global_candidate_evidence.sqlite"
+            )
+            with profiler.time_stage(
+                stage="build_global_candidate_evidence_sqlite",
+                detail=(
+                    f"sqlite_path={global_sqlite_path};"
+                    f"k_values={','.join(map(str, args.k_values))}"
+                ),
+            ):
+                global_candidate_result = build_global_candidate_evidence_sqlite(
+                    genome_configs=genome_configs,
+                    k_values=args.k_values,
+                    sqlite_path=global_sqlite_path,
+                    taxonomy_db=taxonomy_db,
+                    target_taxid=args.target_taxid,
+                    preferred_ranks=args.evidence_ranks,
+                    candidate_roles=args.candidate_roles,
+                    excluded_candidate_roles=args.excluded_candidate_roles,
+                    batch_size=args.sqlite_batch_size,
+                    max_per_evidence_per_k=args.max_per_species_per_k,
+                    logger=logger,
+                )
+            with profiler.time_stage(stage="write_panel", detail=str(panel_path)):
+                diagnostic_iter = iter_retained_global_candidate_diagnostics(
+                    sqlite_path=global_candidate_result.sqlite_path,
+                )
+                n_diagnostic_kmers, summary = _write_panel_streaming(
+                    diagnostic_kmers=diagnostic_iter,
+                    panel_path=panel_path,
+                    max_per_species_per_k=None,
+                    logger=logger,
+                )
+            collection_summary = global_candidate_result.collection_summary
+            write_tsv(
+                records=global_candidate_result.build_summary,
+                output_path=target_evidence_summary_path,
+                fieldnames=["summary_name", "summary_value"],
+            )
+        elif args.all_candidate_evidence:
             if args.target_taxid:
                 logger.warning(
                     "--target_taxid is set during --all_candidate_evidence. "
@@ -509,10 +595,12 @@ def main() -> None:
                 "compact_build": args.compact_build,
                 "target_evidence_only": args.target_evidence_only,
                 "all_candidate_evidence": args.all_candidate_evidence,
+                "global_candidate_evidence": args.global_candidate_evidence,
                 "candidate_roles": args.candidate_roles or [],
                 "excluded_candidate_roles": args.excluded_candidate_roles or [],
                 "all_candidate_sqlite_path": args.all_candidate_sqlite_path,
                 "all_candidate_work_sqlite_path": args.all_candidate_work_sqlite_path,
+                "global_candidate_sqlite_path": args.global_candidate_sqlite_path,
                 "sqlite_path": args.sqlite_path,
                 "sqlite_batch_size": args.sqlite_batch_size,
                 "profile": args.profile,
