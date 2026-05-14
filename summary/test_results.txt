@@ -1,0 +1,241 @@
+test_excel_and_html_outputs_are_written (test_summarise_kmersutra_comparable_benchmark.TestKmerSutraComparableSummary.test_excel_and_html_outputs_are_written)
+The summary workflow should write Excel and HTML reports. ... 2026-05-14 15:21:29 INFO [kmersutra_summary] Starting KmerSutra comparable summary
+2026-05-14 15:21:29 INFO [kmersutra_summary] Output root: /tmp/tmp437u91y2/runs_kmersutra_v014_global_comparable_test
+2026-05-14 15:21:29 INFO [kmersutra_summary] Manifest: /tmp/tmp437u91y2/runs_kmersutra_v014_global_comparable_test/kmersutra_v014_comparable_manifest.tsv
+2026-05-14 15:21:29 INFO [kmersutra_summary] Summary output directory: /tmp/tmp437u91y2/runs_kmersutra_v014_global_comparable_test/summary
+2026-05-14 15:21:29 INFO [kmersutra_summary] Loaded manifest: /tmp/tmp437u91y2/runs_kmersutra_v014_global_comparable_test/kmersutra_v014_comparable_manifest.tsv (5 rows)
+2026-05-14 15:21:29 INFO [kmersutra_summary] Loaded 2 target labels from /tmp/tmp437u91y2/pathogen_panel_2.tsv
+2026-05-14 15:21:29 INFO [kmersutra_summary] Loaded 3 target labels from /tmp/tmp437u91y2/pathogen_panel_3.tsv
+2026-05-14 15:21:29 INFO [kmersutra_summary] Expected panel1 targets: Plasmodium vivax
+2026-05-14 15:21:29 INFO [kmersutra_summary] Expected panel2 targets: Plasmodium falciparum; Plasmodium vivax
+2026-05-14 15:21:29 INFO [kmersutra_summary] Expected panel3 targets: Plasmodium falciparum; Plasmodium vivax; Plasmodium knowlesi
+2026-05-14 15:21:29 INFO [kmersutra_summary] Read 5 sample status rows
+2026-05-14 15:21:29 INFO [kmersutra_summary] Read 6 detection call rows
+2026-05-14 15:21:29 INFO [kmersutra_summary] Read 6 evidence rows
+/opt/pyvenv/lib/python3.13/site-packages/numpy/lib/_nanfunctions_impl.py:1214: RuntimeWarning: Mean of empty slice
+  return np.nanmean(a, axis, out=out, keepdims=keepdims)
+2026-05-14 15:21:29 INFO [kmersutra_summary] Wrote /tmp/tmp437u91y2/runs_kmersutra_v014_global_comparable_test/summary/sample_status.tsv (5 rows)
+2026-05-14 15:21:29 INFO [kmersutra_summary] Wrote /tmp/tmp437u91y2/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_detection_calls_long.tsv (6 rows)
+2026-05-14 15:21:29 INFO [kmersutra_summary] Wrote /tmp/tmp437u91y2/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_evidence_long.tsv (6 rows)
+2026-05-14 15:21:29 INFO [kmersutra_summary] Wrote /tmp/tmp437u91y2/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_sample_summary.tsv (5 rows)
+2026-05-14 15:21:29 INFO [kmersutra_summary] Wrote /tmp/tmp437u91y2/runs_kmersutra_v014_global_comparable_test/summary/progress_by_family.tsv (4 rows)
+2026-05-14 15:21:29 INFO [kmersutra_summary] Wrote /tmp/tmp437u91y2/runs_kmersutra_v014_global_comparable_test/summary/qc_by_family_spike.tsv (5 rows)
+2026-05-14 15:21:29 INFO [kmersutra_summary] Wrote /tmp/tmp437u91y2/runs_kmersutra_v014_global_comparable_test/summary/tracked_target_performance.tsv (7 rows)
+2026-05-14 15:21:29 INFO [kmersutra_summary] Wrote /tmp/tmp437u91y2/runs_kmersutra_v014_global_comparable_test/summary/real_world_by_sample.tsv (5 rows)
+2026-05-14 15:21:29 INFO [kmersutra_summary] Wrote /tmp/tmp437u91y2/runs_kmersutra_v014_global_comparable_test/summary/real_world_summary.tsv (4 rows)
+2026-05-14 15:21:29 INFO [kmersutra_summary] Wrote /tmp/tmp437u91y2/runs_kmersutra_v014_global_comparable_test/summary/off_target_summary.tsv (1 rows)
+2026-05-14 15:21:29 INFO [kmersutra_summary] Wrote /tmp/tmp437u91y2/runs_kmersutra_v014_global_comparable_test/summary/runtime_summary.tsv (4 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote Excel workbook: /tmp/tmp437u91y2/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_comparable_summary.xlsx
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote HTML report: /tmp/tmp437u91y2/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_comparable_summary.html
+2026-05-14 15:21:30 INFO [kmersutra_summary] Partial summary allowed: 1 sample(s) are incomplete or failed.
+2026-05-14 15:21:30 INFO [kmersutra_summary] Finished KmerSutra comparable summary
+ok
+test_load_manifest_requires_expected_columns (test_summarise_kmersutra_comparable_benchmark.TestKmerSutraComparableSummary.test_load_manifest_requires_expected_columns)
+Manifest loading should keep all required columns. ... 2026-05-14 15:21:30 INFO [kmersutra_summary] Loaded manifest: /tmp/tmpzd9actsx/runs_kmersutra_v014_global_comparable_test/kmersutra_v014_comparable_manifest.tsv (5 rows)
+ok
+test_missing_samples_are_retained_in_status_table (test_summarise_kmersutra_comparable_benchmark.TestKmerSutraComparableSummary.test_missing_samples_are_retained_in_status_table)
+Partial summaries should retain missing samples as missing_calls. ... 2026-05-14 15:21:30 INFO [kmersutra_summary] Starting KmerSutra comparable summary
+2026-05-14 15:21:30 INFO [kmersutra_summary] Output root: /tmp/tmpeol4kf7m/runs_kmersutra_v014_global_comparable_test
+2026-05-14 15:21:30 INFO [kmersutra_summary] Manifest: /tmp/tmpeol4kf7m/runs_kmersutra_v014_global_comparable_test/kmersutra_v014_comparable_manifest.tsv
+2026-05-14 15:21:30 INFO [kmersutra_summary] Summary output directory: /tmp/tmpeol4kf7m/runs_kmersutra_v014_global_comparable_test/summary
+2026-05-14 15:21:30 INFO [kmersutra_summary] Loaded manifest: /tmp/tmpeol4kf7m/runs_kmersutra_v014_global_comparable_test/kmersutra_v014_comparable_manifest.tsv (5 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Loaded 2 target labels from /tmp/tmpeol4kf7m/pathogen_panel_2.tsv
+2026-05-14 15:21:30 INFO [kmersutra_summary] Loaded 3 target labels from /tmp/tmpeol4kf7m/pathogen_panel_3.tsv
+2026-05-14 15:21:30 INFO [kmersutra_summary] Expected panel1 targets: Plasmodium vivax
+2026-05-14 15:21:30 INFO [kmersutra_summary] Expected panel2 targets: Plasmodium falciparum; Plasmodium vivax
+2026-05-14 15:21:30 INFO [kmersutra_summary] Expected panel3 targets: Plasmodium falciparum; Plasmodium vivax; Plasmodium knowlesi
+2026-05-14 15:21:30 INFO [kmersutra_summary] Read 5 sample status rows
+2026-05-14 15:21:30 INFO [kmersutra_summary] Read 6 detection call rows
+2026-05-14 15:21:30 INFO [kmersutra_summary] Read 6 evidence rows
+/opt/pyvenv/lib/python3.13/site-packages/numpy/lib/_nanfunctions_impl.py:1214: RuntimeWarning: Mean of empty slice
+  return np.nanmean(a, axis, out=out, keepdims=keepdims)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmpeol4kf7m/runs_kmersutra_v014_global_comparable_test/summary/sample_status.tsv (5 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmpeol4kf7m/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_detection_calls_long.tsv (6 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmpeol4kf7m/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_evidence_long.tsv (6 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmpeol4kf7m/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_sample_summary.tsv (5 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmpeol4kf7m/runs_kmersutra_v014_global_comparable_test/summary/progress_by_family.tsv (4 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmpeol4kf7m/runs_kmersutra_v014_global_comparable_test/summary/qc_by_family_spike.tsv (5 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmpeol4kf7m/runs_kmersutra_v014_global_comparable_test/summary/tracked_target_performance.tsv (7 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmpeol4kf7m/runs_kmersutra_v014_global_comparable_test/summary/real_world_by_sample.tsv (5 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmpeol4kf7m/runs_kmersutra_v014_global_comparable_test/summary/real_world_summary.tsv (4 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmpeol4kf7m/runs_kmersutra_v014_global_comparable_test/summary/off_target_summary.tsv (1 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmpeol4kf7m/runs_kmersutra_v014_global_comparable_test/summary/runtime_summary.tsv (4 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote Excel workbook: /tmp/tmpeol4kf7m/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_comparable_summary.xlsx
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote HTML report: /tmp/tmpeol4kf7m/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_comparable_summary.html
+2026-05-14 15:21:30 INFO [kmersutra_summary] Partial summary allowed: 1 sample(s) are incomplete or failed.
+2026-05-14 15:21:30 INFO [kmersutra_summary] Finished KmerSutra comparable summary
+ok
+test_off_target_summary_includes_non_expected_species (test_summarise_kmersutra_comparable_benchmark.TestKmerSutraComparableSummary.test_off_target_summary_includes_non_expected_species)
+Off-target summary should include the synthetic falciparum off-target. ... 2026-05-14 15:21:30 INFO [kmersutra_summary] Starting KmerSutra comparable summary
+2026-05-14 15:21:30 INFO [kmersutra_summary] Output root: /tmp/tmp93e1obu5/runs_kmersutra_v014_global_comparable_test
+2026-05-14 15:21:30 INFO [kmersutra_summary] Manifest: /tmp/tmp93e1obu5/runs_kmersutra_v014_global_comparable_test/kmersutra_v014_comparable_manifest.tsv
+2026-05-14 15:21:30 INFO [kmersutra_summary] Summary output directory: /tmp/tmp93e1obu5/runs_kmersutra_v014_global_comparable_test/summary
+2026-05-14 15:21:30 INFO [kmersutra_summary] Loaded manifest: /tmp/tmp93e1obu5/runs_kmersutra_v014_global_comparable_test/kmersutra_v014_comparable_manifest.tsv (5 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Loaded 2 target labels from /tmp/tmp93e1obu5/pathogen_panel_2.tsv
+2026-05-14 15:21:30 INFO [kmersutra_summary] Loaded 3 target labels from /tmp/tmp93e1obu5/pathogen_panel_3.tsv
+2026-05-14 15:21:30 INFO [kmersutra_summary] Expected panel1 targets: Plasmodium vivax
+2026-05-14 15:21:30 INFO [kmersutra_summary] Expected panel2 targets: Plasmodium falciparum; Plasmodium vivax
+2026-05-14 15:21:30 INFO [kmersutra_summary] Expected panel3 targets: Plasmodium falciparum; Plasmodium vivax; Plasmodium knowlesi
+2026-05-14 15:21:30 INFO [kmersutra_summary] Read 5 sample status rows
+2026-05-14 15:21:30 INFO [kmersutra_summary] Read 6 detection call rows
+2026-05-14 15:21:30 INFO [kmersutra_summary] Read 6 evidence rows
+/opt/pyvenv/lib/python3.13/site-packages/numpy/lib/_nanfunctions_impl.py:1214: RuntimeWarning: Mean of empty slice
+  return np.nanmean(a, axis, out=out, keepdims=keepdims)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmp93e1obu5/runs_kmersutra_v014_global_comparable_test/summary/sample_status.tsv (5 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmp93e1obu5/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_detection_calls_long.tsv (6 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmp93e1obu5/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_evidence_long.tsv (6 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmp93e1obu5/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_sample_summary.tsv (5 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmp93e1obu5/runs_kmersutra_v014_global_comparable_test/summary/progress_by_family.tsv (4 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmp93e1obu5/runs_kmersutra_v014_global_comparable_test/summary/qc_by_family_spike.tsv (5 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmp93e1obu5/runs_kmersutra_v014_global_comparable_test/summary/tracked_target_performance.tsv (7 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmp93e1obu5/runs_kmersutra_v014_global_comparable_test/summary/real_world_by_sample.tsv (5 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmp93e1obu5/runs_kmersutra_v014_global_comparable_test/summary/real_world_summary.tsv (4 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmp93e1obu5/runs_kmersutra_v014_global_comparable_test/summary/off_target_summary.tsv (1 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote /tmp/tmp93e1obu5/runs_kmersutra_v014_global_comparable_test/summary/runtime_summary.tsv (4 rows)
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote Excel workbook: /tmp/tmp93e1obu5/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_comparable_summary.xlsx
+2026-05-14 15:21:30 INFO [kmersutra_summary] Wrote HTML report: /tmp/tmp93e1obu5/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_comparable_summary.html
+2026-05-14 15:21:30 INFO [kmersutra_summary] Partial summary allowed: 1 sample(s) are incomplete or failed.
+2026-05-14 15:21:30 INFO [kmersutra_summary] Finished KmerSutra comparable summary
+ok
+test_read_panel_targets_uses_named_label_column (test_summarise_kmersutra_comparable_benchmark.TestKmerSutraComparableSummary.test_read_panel_targets_uses_named_label_column)
+Panel target loading should use the target_label column. ... 2026-05-14 15:21:31 INFO [kmersutra_summary] Loaded 2 target labels from /tmp/tmpegfn2omj/pathogen_panel_2.tsv
+ok
+test_real_world_summary_reports_off_target_rate (test_summarise_kmersutra_comparable_benchmark.TestKmerSutraComparableSummary.test_real_world_summary_reports_off_target_rate)
+Real-world summary should include positive off-target rates. ... 2026-05-14 15:21:31 INFO [kmersutra_summary] Starting KmerSutra comparable summary
+2026-05-14 15:21:31 INFO [kmersutra_summary] Output root: /tmp/tmpltn_kadj/runs_kmersutra_v014_global_comparable_test
+2026-05-14 15:21:31 INFO [kmersutra_summary] Manifest: /tmp/tmpltn_kadj/runs_kmersutra_v014_global_comparable_test/kmersutra_v014_comparable_manifest.tsv
+2026-05-14 15:21:31 INFO [kmersutra_summary] Summary output directory: /tmp/tmpltn_kadj/runs_kmersutra_v014_global_comparable_test/summary
+2026-05-14 15:21:31 INFO [kmersutra_summary] Loaded manifest: /tmp/tmpltn_kadj/runs_kmersutra_v014_global_comparable_test/kmersutra_v014_comparable_manifest.tsv (5 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Loaded 2 target labels from /tmp/tmpltn_kadj/pathogen_panel_2.tsv
+2026-05-14 15:21:31 INFO [kmersutra_summary] Loaded 3 target labels from /tmp/tmpltn_kadj/pathogen_panel_3.tsv
+2026-05-14 15:21:31 INFO [kmersutra_summary] Expected panel1 targets: Plasmodium vivax
+2026-05-14 15:21:31 INFO [kmersutra_summary] Expected panel2 targets: Plasmodium falciparum; Plasmodium vivax
+2026-05-14 15:21:31 INFO [kmersutra_summary] Expected panel3 targets: Plasmodium falciparum; Plasmodium vivax; Plasmodium knowlesi
+2026-05-14 15:21:31 INFO [kmersutra_summary] Read 5 sample status rows
+2026-05-14 15:21:31 INFO [kmersutra_summary] Read 6 detection call rows
+2026-05-14 15:21:31 INFO [kmersutra_summary] Read 6 evidence rows
+/opt/pyvenv/lib/python3.13/site-packages/numpy/lib/_nanfunctions_impl.py:1214: RuntimeWarning: Mean of empty slice
+  return np.nanmean(a, axis, out=out, keepdims=keepdims)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmpltn_kadj/runs_kmersutra_v014_global_comparable_test/summary/sample_status.tsv (5 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmpltn_kadj/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_detection_calls_long.tsv (6 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmpltn_kadj/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_evidence_long.tsv (6 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmpltn_kadj/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_sample_summary.tsv (5 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmpltn_kadj/runs_kmersutra_v014_global_comparable_test/summary/progress_by_family.tsv (4 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmpltn_kadj/runs_kmersutra_v014_global_comparable_test/summary/qc_by_family_spike.tsv (5 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmpltn_kadj/runs_kmersutra_v014_global_comparable_test/summary/tracked_target_performance.tsv (7 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmpltn_kadj/runs_kmersutra_v014_global_comparable_test/summary/real_world_by_sample.tsv (5 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmpltn_kadj/runs_kmersutra_v014_global_comparable_test/summary/real_world_summary.tsv (4 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmpltn_kadj/runs_kmersutra_v014_global_comparable_test/summary/off_target_summary.tsv (1 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmpltn_kadj/runs_kmersutra_v014_global_comparable_test/summary/runtime_summary.tsv (4 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote Excel workbook: /tmp/tmpltn_kadj/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_comparable_summary.xlsx
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote HTML report: /tmp/tmpltn_kadj/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_comparable_summary.html
+2026-05-14 15:21:31 INFO [kmersutra_summary] Partial summary allowed: 1 sample(s) are incomplete or failed.
+2026-05-14 15:21:31 INFO [kmersutra_summary] Finished KmerSutra comparable summary
+ok
+test_sample_summary_counts_expected_and_off_target_calls (test_summarise_kmersutra_comparable_benchmark.TestKmerSutraComparableSummary.test_sample_summary_counts_expected_and_off_target_calls)
+Sample summary should count expected and off-target positive species. ... 2026-05-14 15:21:31 INFO [kmersutra_summary] Starting KmerSutra comparable summary
+2026-05-14 15:21:31 INFO [kmersutra_summary] Output root: /tmp/tmphnvzdbjv/runs_kmersutra_v014_global_comparable_test
+2026-05-14 15:21:31 INFO [kmersutra_summary] Manifest: /tmp/tmphnvzdbjv/runs_kmersutra_v014_global_comparable_test/kmersutra_v014_comparable_manifest.tsv
+2026-05-14 15:21:31 INFO [kmersutra_summary] Summary output directory: /tmp/tmphnvzdbjv/runs_kmersutra_v014_global_comparable_test/summary
+2026-05-14 15:21:31 INFO [kmersutra_summary] Loaded manifest: /tmp/tmphnvzdbjv/runs_kmersutra_v014_global_comparable_test/kmersutra_v014_comparable_manifest.tsv (5 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Loaded 2 target labels from /tmp/tmphnvzdbjv/pathogen_panel_2.tsv
+2026-05-14 15:21:31 INFO [kmersutra_summary] Loaded 3 target labels from /tmp/tmphnvzdbjv/pathogen_panel_3.tsv
+2026-05-14 15:21:31 INFO [kmersutra_summary] Expected panel1 targets: Plasmodium vivax
+2026-05-14 15:21:31 INFO [kmersutra_summary] Expected panel2 targets: Plasmodium falciparum; Plasmodium vivax
+2026-05-14 15:21:31 INFO [kmersutra_summary] Expected panel3 targets: Plasmodium falciparum; Plasmodium vivax; Plasmodium knowlesi
+2026-05-14 15:21:31 INFO [kmersutra_summary] Read 5 sample status rows
+2026-05-14 15:21:31 INFO [kmersutra_summary] Read 6 detection call rows
+2026-05-14 15:21:31 INFO [kmersutra_summary] Read 6 evidence rows
+/opt/pyvenv/lib/python3.13/site-packages/numpy/lib/_nanfunctions_impl.py:1214: RuntimeWarning: Mean of empty slice
+  return np.nanmean(a, axis, out=out, keepdims=keepdims)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmphnvzdbjv/runs_kmersutra_v014_global_comparable_test/summary/sample_status.tsv (5 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmphnvzdbjv/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_detection_calls_long.tsv (6 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmphnvzdbjv/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_evidence_long.tsv (6 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmphnvzdbjv/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_sample_summary.tsv (5 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmphnvzdbjv/runs_kmersutra_v014_global_comparable_test/summary/progress_by_family.tsv (4 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmphnvzdbjv/runs_kmersutra_v014_global_comparable_test/summary/qc_by_family_spike.tsv (5 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmphnvzdbjv/runs_kmersutra_v014_global_comparable_test/summary/tracked_target_performance.tsv (7 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmphnvzdbjv/runs_kmersutra_v014_global_comparable_test/summary/real_world_by_sample.tsv (5 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmphnvzdbjv/runs_kmersutra_v014_global_comparable_test/summary/real_world_summary.tsv (4 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmphnvzdbjv/runs_kmersutra_v014_global_comparable_test/summary/off_target_summary.tsv (1 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote /tmp/tmphnvzdbjv/runs_kmersutra_v014_global_comparable_test/summary/runtime_summary.tsv (4 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote Excel workbook: /tmp/tmphnvzdbjv/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_comparable_summary.xlsx
+2026-05-14 15:21:31 INFO [kmersutra_summary] Wrote HTML report: /tmp/tmphnvzdbjv/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_comparable_summary.html
+2026-05-14 15:21:31 INFO [kmersutra_summary] Partial summary allowed: 1 sample(s) are incomplete or failed.
+2026-05-14 15:21:31 INFO [kmersutra_summary] Finished KmerSutra comparable summary
+ok
+test_shuffled_rows_are_negative_controls (test_summarise_kmersutra_comparable_benchmark.TestKmerSutraComparableSummary.test_shuffled_rows_are_negative_controls)
+Shuffled rows should be negative even when spike_n is greater than zero. ... 2026-05-14 15:21:31 INFO [kmersutra_summary] Loaded manifest: /tmp/tmp7aqku4or/runs_kmersutra_v014_global_comparable_test/kmersutra_v014_comparable_manifest.tsv (5 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Loaded 2 target labels from /tmp/tmp7aqku4or/pathogen_panel_2.tsv
+2026-05-14 15:21:31 INFO [kmersutra_summary] Loaded 3 target labels from /tmp/tmp7aqku4or/pathogen_panel_3.tsv
+2026-05-14 15:21:31 INFO [kmersutra_summary] Expected panel1 targets: Plasmodium vivax
+2026-05-14 15:21:31 INFO [kmersutra_summary] Expected panel2 targets: Plasmodium falciparum; Plasmodium vivax
+2026-05-14 15:21:31 INFO [kmersutra_summary] Expected panel3 targets: Plasmodium falciparum; Plasmodium vivax; Plasmodium knowlesi
+ok
+test_strict_mode_fails_with_missing_calls (test_summarise_kmersutra_comparable_benchmark.TestKmerSutraComparableSummary.test_strict_mode_fails_with_missing_calls)
+Strict mode should fail when a manifest sample has no call table. ... 2026-05-14 15:21:31 INFO [kmersutra_summary] Starting KmerSutra comparable summary
+2026-05-14 15:21:31 INFO [kmersutra_summary] Output root: /tmp/tmp9fbqlbyk/runs_kmersutra_v014_global_comparable_test
+2026-05-14 15:21:31 INFO [kmersutra_summary] Manifest: /tmp/tmp9fbqlbyk/runs_kmersutra_v014_global_comparable_test/kmersutra_v014_comparable_manifest.tsv
+2026-05-14 15:21:31 INFO [kmersutra_summary] Summary output directory: /tmp/tmp9fbqlbyk/runs_kmersutra_v014_global_comparable_test/summary
+2026-05-14 15:21:31 INFO [kmersutra_summary] Loaded manifest: /tmp/tmp9fbqlbyk/runs_kmersutra_v014_global_comparable_test/kmersutra_v014_comparable_manifest.tsv (5 rows)
+2026-05-14 15:21:31 INFO [kmersutra_summary] Loaded 2 target labels from /tmp/tmp9fbqlbyk/pathogen_panel_2.tsv
+2026-05-14 15:21:31 INFO [kmersutra_summary] Loaded 3 target labels from /tmp/tmp9fbqlbyk/pathogen_panel_3.tsv
+2026-05-14 15:21:31 INFO [kmersutra_summary] Expected panel1 targets: Plasmodium vivax
+2026-05-14 15:21:31 INFO [kmersutra_summary] Expected panel2 targets: Plasmodium falciparum; Plasmodium vivax
+2026-05-14 15:21:31 INFO [kmersutra_summary] Expected panel3 targets: Plasmodium falciparum; Plasmodium vivax; Plasmodium knowlesi
+2026-05-14 15:21:32 INFO [kmersutra_summary] Read 5 sample status rows
+2026-05-14 15:21:32 INFO [kmersutra_summary] Read 6 detection call rows
+2026-05-14 15:21:32 INFO [kmersutra_summary] Read 6 evidence rows
+/opt/pyvenv/lib/python3.13/site-packages/numpy/lib/_nanfunctions_impl.py:1214: RuntimeWarning: Mean of empty slice
+  return np.nanmean(a, axis, out=out, keepdims=keepdims)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmp9fbqlbyk/runs_kmersutra_v014_global_comparable_test/summary/sample_status.tsv (5 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmp9fbqlbyk/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_detection_calls_long.tsv (6 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmp9fbqlbyk/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_evidence_long.tsv (6 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmp9fbqlbyk/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_sample_summary.tsv (5 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmp9fbqlbyk/runs_kmersutra_v014_global_comparable_test/summary/progress_by_family.tsv (4 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmp9fbqlbyk/runs_kmersutra_v014_global_comparable_test/summary/qc_by_family_spike.tsv (5 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmp9fbqlbyk/runs_kmersutra_v014_global_comparable_test/summary/tracked_target_performance.tsv (7 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmp9fbqlbyk/runs_kmersutra_v014_global_comparable_test/summary/real_world_by_sample.tsv (5 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmp9fbqlbyk/runs_kmersutra_v014_global_comparable_test/summary/real_world_summary.tsv (4 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmp9fbqlbyk/runs_kmersutra_v014_global_comparable_test/summary/off_target_summary.tsv (1 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmp9fbqlbyk/runs_kmersutra_v014_global_comparable_test/summary/runtime_summary.tsv (4 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote Excel workbook: /tmp/tmp9fbqlbyk/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_comparable_summary.xlsx
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote HTML report: /tmp/tmp9fbqlbyk/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_comparable_summary.html
+ok
+test_target_performance_has_lod_and_counts (test_summarise_kmersutra_comparable_benchmark.TestKmerSutraComparableSummary.test_target_performance_has_lod_and_counts)
+Tracked-target performance should include counts and LOD columns. ... 2026-05-14 15:21:32 INFO [kmersutra_summary] Starting KmerSutra comparable summary
+2026-05-14 15:21:32 INFO [kmersutra_summary] Output root: /tmp/tmphs_pvrul/runs_kmersutra_v014_global_comparable_test
+2026-05-14 15:21:32 INFO [kmersutra_summary] Manifest: /tmp/tmphs_pvrul/runs_kmersutra_v014_global_comparable_test/kmersutra_v014_comparable_manifest.tsv
+2026-05-14 15:21:32 INFO [kmersutra_summary] Summary output directory: /tmp/tmphs_pvrul/runs_kmersutra_v014_global_comparable_test/summary
+2026-05-14 15:21:32 INFO [kmersutra_summary] Loaded manifest: /tmp/tmphs_pvrul/runs_kmersutra_v014_global_comparable_test/kmersutra_v014_comparable_manifest.tsv (5 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Loaded 2 target labels from /tmp/tmphs_pvrul/pathogen_panel_2.tsv
+2026-05-14 15:21:32 INFO [kmersutra_summary] Loaded 3 target labels from /tmp/tmphs_pvrul/pathogen_panel_3.tsv
+2026-05-14 15:21:32 INFO [kmersutra_summary] Expected panel1 targets: Plasmodium vivax
+2026-05-14 15:21:32 INFO [kmersutra_summary] Expected panel2 targets: Plasmodium falciparum; Plasmodium vivax
+2026-05-14 15:21:32 INFO [kmersutra_summary] Expected panel3 targets: Plasmodium falciparum; Plasmodium vivax; Plasmodium knowlesi
+2026-05-14 15:21:32 INFO [kmersutra_summary] Read 5 sample status rows
+2026-05-14 15:21:32 INFO [kmersutra_summary] Read 6 detection call rows
+2026-05-14 15:21:32 INFO [kmersutra_summary] Read 6 evidence rows
+/opt/pyvenv/lib/python3.13/site-packages/numpy/lib/_nanfunctions_impl.py:1214: RuntimeWarning: Mean of empty slice
+  return np.nanmean(a, axis, out=out, keepdims=keepdims)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmphs_pvrul/runs_kmersutra_v014_global_comparable_test/summary/sample_status.tsv (5 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmphs_pvrul/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_detection_calls_long.tsv (6 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmphs_pvrul/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_evidence_long.tsv (6 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmphs_pvrul/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_sample_summary.tsv (5 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmphs_pvrul/runs_kmersutra_v014_global_comparable_test/summary/progress_by_family.tsv (4 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmphs_pvrul/runs_kmersutra_v014_global_comparable_test/summary/qc_by_family_spike.tsv (5 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmphs_pvrul/runs_kmersutra_v014_global_comparable_test/summary/tracked_target_performance.tsv (7 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmphs_pvrul/runs_kmersutra_v014_global_comparable_test/summary/real_world_by_sample.tsv (5 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmphs_pvrul/runs_kmersutra_v014_global_comparable_test/summary/real_world_summary.tsv (4 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmphs_pvrul/runs_kmersutra_v014_global_comparable_test/summary/off_target_summary.tsv (1 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote /tmp/tmphs_pvrul/runs_kmersutra_v014_global_comparable_test/summary/runtime_summary.tsv (4 rows)
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote Excel workbook: /tmp/tmphs_pvrul/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_comparable_summary.xlsx
+2026-05-14 15:21:32 INFO [kmersutra_summary] Wrote HTML report: /tmp/tmphs_pvrul/runs_kmersutra_v014_global_comparable_test/summary/kmersutra_comparable_summary.html
+2026-05-14 15:21:32 INFO [kmersutra_summary] Partial summary allowed: 1 sample(s) are incomplete or failed.
+2026-05-14 15:21:32 INFO [kmersutra_summary] Finished KmerSutra comparable summary
+ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 3.051s
+
+OK
