@@ -43,7 +43,18 @@ REPO_DIR="${REPO_DIR:-${PROJECT_DIR}/PT_nanopore_spike_in_pathogen_detection}"
 # This script now lives in kmersutra/summary, beside this shell wrapper.
 SUMMARY_SCRIPT="${SUMMARY_SCRIPT:-${SCRIPT_DIR}/summarise_kmersutra_comparable_benchmark.py}"
 
-OUT_ROOT="${OUT_ROOT:?OUT_ROOT is required}"
+
+if [[ -z "${OUT_ROOT:-}" && $# -gt 0 ]]; then
+    OUT_ROOT="$1"
+fi
+
+if [[ -z "${OUT_ROOT:-}" ]]; then
+    echo "[ERROR] OUT_ROOT is required." >&2
+    echo "[ERROR] Usage:" >&2
+    echo "[ERROR]   OUT_ROOT=/path/to/run ${0}" >&2
+    echo "[ERROR]   ${0} /path/to/run" >&2
+    exit 1
+fi
 
 OUT_DIR="${OUT_DIR:-${OUT_ROOT}/summary}"
 PANEL2_TSV="${PANEL2_TSV:-${REPO_DIR}/configs/pathogen_panel_2.tsv}"
