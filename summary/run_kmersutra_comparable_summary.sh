@@ -29,10 +29,22 @@ require_dir() {
     [[ -d "$1" ]] || fail "Required directory missing: $1"
 }
 
+SCRIPT_DIR="$(
+    cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1
+    pwd
+)"
+
 PROJECT_DIR="${PROJECT_DIR:-/home/pthorpe001/data/2026_plasmodium_kraken_sensitivity}"
+
+# This is the original spike-in benchmark repository.
+# It is still used for pathogen_panel_2.tsv and pathogen_panel_3.tsv.
 REPO_DIR="${REPO_DIR:-${PROJECT_DIR}/PT_nanopore_spike_in_pathogen_detection}"
-SUMMARY_SCRIPT="${SUMMARY_SCRIPT:-${PROJECT_DIR}/summarise_kmersutra_comparable_benchmark.py}"
+
+# This script now lives in kmersutra/summary, beside this shell wrapper.
+SUMMARY_SCRIPT="${SUMMARY_SCRIPT:-${SCRIPT_DIR}/summarise_kmersutra_comparable_benchmark.py}"
+
 OUT_ROOT="${OUT_ROOT:?OUT_ROOT is required}"
+
 OUT_DIR="${OUT_DIR:-${OUT_ROOT}/summary}"
 PANEL2_TSV="${PANEL2_TSV:-${REPO_DIR}/configs/pathogen_panel_2.tsv}"
 PANEL3_TSV="${PANEL3_TSV:-${REPO_DIR}/configs/pathogen_panel_3.tsv}"
