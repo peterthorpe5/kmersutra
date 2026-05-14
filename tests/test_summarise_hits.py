@@ -88,3 +88,79 @@ class TestSummariseHits(unittest.TestCase):
         beta = [row for row in completed if row["species_name"] == "Beta"][0]
         self.assertEqual(beta["n_unique_kmers"], 0)
         self.assertEqual(beta["best_k"], 0)
+
+
+class TestTaxonomicEvidenceSummaries(unittest.TestCase):
+    """Tests for v0.15 taxonomic evidence retention."""
+
+    def test_summarise_taxonomic_hits_keeps_genus_evidence(self) -> None:
+        """Genus-level hits should be summarised without forcing species."""
+        from kmersutra.screen_reads import KmerHit
+        from kmersutra.summarise_hits import summarise_taxonomic_hits
+
+        hits = [
+            KmerHit(
+                sample_id="s1",
+                sequence_id="read1",
+                sequence_type="read",
+                k=101,
+                query_position=0,
+                matched_kmer="A" * 101,
+                query_kmer="A" * 101,
+                mismatches=0,
+                panel_type="genus_core",
+                species_name="",
+                clade="Plasmodium",
+                evidence_taxid="5820",
+                evidence_name="Plasmodium",
+                evidence_rank="genus",
+            )
+        ]
+        summary = summarise_taxonomic_hits(hits=hits)
+        self.assertEqual(len(summary), 1)
+        self.assertEqual(summary[0]["evidence_rank"], "genus")
+        self.assertEqual(summary[0]["evidence_name"], "Plasmodium")
+        self.assertEqual(summary[0]["n_unique_kmers"], 1)
+
+    def test_summarise_sample_taxonomic_evidence_collapses_k_values(self) -> None:
+        """Taxonomic evidence should collapse across k values."""
+        from kmersutra.summarise_hits import summarise_sample_taxonomic_evidence
+
+        taxonomic_summary = [
+            {
+                "sample_id": "s1",
+                "evidence_rank": "genus",
+                "evidence_name": "Plasmodium",
+                "evidence_taxid": "5820",
+                "panel_type": "genus_core",
+                "clade": "Plasmodium",
+                "k": 77,
+                "n_hits": 5,
+                "n_unique_kmers": 4,
+                "n_positive_sequences": 2,
+                "n_exact_hits": 5,
+                "n_fuzzy_hits": 0,
+            },
+            {
+                "sample_id": "s1",
+                "evidence_rank": "genus",
+                "evidence_name": "Plasmodium",
+                "evidence_taxid": "5820",
+                "panel_type": "genus_core",
+                "clade": "Plasmodium",
+                "k": 101,
+                "n_hits": 7,
+                "n_unique_kmers": 6,
+                "n_positive_sequences": 3,
+                "n_exact_hits": 7,
+                "n_fuzzy_hits": 0,
+            },
+        ]
+        evidence = summarise_sample_taxonomic_evidence(
+            taxonomic_summary=taxonomic_summary,
+        )
+        self.assertEqual(len(evidence), 1)
+        self.assertEqual(evidence[0]["n_hits"], 12)
+        self.assertEqual(evidence[0]["n_unique_kmers"], 10)
+        self.assertEqual(evidence[0]["n_k_values_positive"], 2)
+        self.assertEqual(evidence[0]["best_k"], 101)

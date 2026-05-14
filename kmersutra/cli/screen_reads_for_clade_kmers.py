@@ -14,12 +14,15 @@ from kmersutra.reporting import write_html_report
 from kmersutra.screen_reads import screen_file_for_species_kmers
 from kmersutra.summarise_hits import (
     SPECIES_EVIDENCE_FIELDNAMES,
+    TAXONOMIC_EVIDENCE_FIELDNAMES,
     complete_sample_species_evidence,
     load_panel_species_metadata,
     summarise_sample_species_evidence,
+    summarise_sample_taxonomic_evidence,
     summarise_species_hits,
+    summarise_taxonomic_hits,
 )
-from kmersutra.thresholds import call_species_presence
+from kmersutra.thresholds import apply_species_call_preset, call_species_presence
 
 
 def parse_args() -> argparse.Namespace:
@@ -73,10 +76,56 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Write profile_timing.tsv with wall-clock timings for major stages.",
     )
-    parser.add_argument("--min_unique_kmers", type=int, default=3)
-    parser.add_argument("--min_positive_sequences", type=int, default=2)
-    parser.add_argument("--min_k_values_positive", type=int, default=1)
-    parser.add_argument("--max_conflict_ratio", type=float, default=0.10)
+    parser.add_argument(
+        "--call_preset",
+        choices=["legacy", "conservative", "strict"],
+        default="legacy",
+        help=(
+            "Species-call threshold preset. The legacy preset preserves older "
+            "behaviour. Conservative and strict presets make species calls "
+            "harder to earn and label weak evidence as observed_below_threshold."
+        ),
+    )
+    parser.add_argument("--min_unique_kmers", type=int, default=None)
+    parser.add_argument("--min_positive_sequences", type=int, default=None)
+    parser.add_argument("--min_k_values_positive", type=int, default=None)
+    parser.add_argument("--max_conflict_ratio", type=float, default=None)
+    parser.add_argument(
+        "--min_best_k",
+        type=int,
+        default=None,
+        help="Minimum longest k-mer length required for a reportable species call.",
+    )
+    parser.add_argument(
+        "--min_exact_hits",
+        type=int,
+        default=None,
+        help="Minimum exact-hit count required for a reportable species call.",
+    )
+    parser.add_argument(
+        "--min_confidence_score",
+        type=float,
+        default=None,
+        help="Minimum heuristic confidence score for a reportable species call.",
+    )
+    parser.add_argument(
+        "--min_unique_kmer_margin",
+        type=int,
+        default=0,
+        help="Optional unique-k-mer margin over the second-best species.",
+    )
+    parser.add_argument(
+        "--min_unique_kmer_ratio",
+        type=float,
+        default=0.0,
+        help="Optional focal-to-second-best unique-k-mer ratio requirement.",
+    )
+    parser.add_argument(
+        "--low_evidence_call",
+        choices=["present_low_confidence", "observed_below_threshold"],
+        default=None,
+        help="Call label for species evidence observed below reportable thresholds.",
+    )
     parser.add_argument(
         "--disallow_mixed_species",
         action="store_true",
@@ -109,6 +158,22 @@ def main() -> None:
     logger.info("Maximum mismatches: %d", args.max_mismatches)
     logger.info("Fuzzy minimum k: %d", args.fuzzy_min_k)
     logger.info("Mixed-species calls allowed: %s", not args.disallow_mixed_species)
+    call_settings = apply_species_call_preset(
+        preset_name=args.call_preset,
+        min_unique_kmers=args.min_unique_kmers,
+        min_positive_sequences=args.min_positive_sequences,
+        min_k_values_positive=args.min_k_values_positive,
+        max_conflict_ratio=args.max_conflict_ratio,
+        min_best_k=args.min_best_k,
+        min_exact_hits=args.min_exact_hits,
+        min_confidence_score=args.min_confidence_score,
+        low_evidence_call=args.low_evidence_call,
+    )
+    logger.info("Species-call preset: %s", args.call_preset)
+    for setting_name, setting_value in sorted(call_settings.items()):
+        logger.info("Species-call setting %s: %s", setting_name, setting_value)
+    logger.info("Minimum unique-kmer margin: %d", args.min_unique_kmer_margin)
+    logger.info("Minimum unique-kmer ratio: %.4f", args.min_unique_kmer_ratio)
 
     profiler = WorkflowProfiler() if args.profile else None
     screen_profile_records: list[dict[str, object]] = []
@@ -145,15 +210,26 @@ def main() -> None:
             expected_species=expected_species,
             sample_id=args.sample_id,
         )
+        taxonomic_hit_summary = summarise_taxonomic_hits(hits=hits)
+        taxonomic_evidence = summarise_sample_taxonomic_evidence(
+            taxonomic_summary=taxonomic_hit_summary,
+        )
     logger.info("Built %d completed species evidence rows", len(evidence))
+    logger.info("Built %d taxonomic evidence rows", len(taxonomic_evidence))
     with (profiler.time_stage(stage="call_species_presence", detail="thresholds") if profiler else nullcontext()):
         detection_calls = call_species_presence(
             evidence_records=evidence,
-            min_unique_kmers=args.min_unique_kmers,
-            min_positive_sequences=args.min_positive_sequences,
-            min_k_values_positive=args.min_k_values_positive,
-            max_conflict_ratio=args.max_conflict_ratio,
+            min_unique_kmers=int(call_settings["min_unique_kmers"]),
+            min_positive_sequences=int(call_settings["min_positive_sequences"]),
+            min_k_values_positive=int(call_settings["min_k_values_positive"]),
+            max_conflict_ratio=float(call_settings["max_conflict_ratio"]),
             allow_mixed_species=not args.disallow_mixed_species,
+            min_best_k=int(call_settings["min_best_k"]),
+            min_exact_hits=int(call_settings["min_exact_hits"]),
+            min_confidence_score=float(call_settings["min_confidence_score"]),
+            min_unique_kmer_margin=args.min_unique_kmer_margin,
+            min_unique_kmer_ratio=args.min_unique_kmer_ratio,
+            low_evidence_call=str(call_settings["low_evidence_call"]),
         )
     logger.info("Built %d species detection-call rows", len(detection_calls))
 
@@ -169,6 +245,9 @@ def main() -> None:
         "panel_type",
         "species_name",
         "clade",
+        "evidence_taxid",
+        "evidence_name",
+        "evidence_rank",
     ]
     if args.no_read_level_hits:
         logger.info("Skipping read-level hit output by user request")
@@ -214,6 +293,11 @@ def main() -> None:
         records=evidence,
         output_path=out_dir / "sample_species_kmer_evidence.tsv",
         fieldnames=SPECIES_EVIDENCE_FIELDNAMES,
+    )
+    write_tsv(
+        records=taxonomic_evidence,
+        output_path=out_dir / "sample_taxonomic_kmer_evidence.tsv",
+        fieldnames=TAXONOMIC_EVIDENCE_FIELDNAMES,
     )
     write_tsv(
         records=detection_calls,

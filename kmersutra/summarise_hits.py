@@ -180,3 +180,156 @@ def complete_sample_species_evidence(
 
     completed.sort(key=lambda row: (str(row.get("sample_id", "")), str(row.get("species_name", ""))))
     return completed
+
+TAXONOMIC_EVIDENCE_FIELDNAMES = [
+    "sample_id",
+    "evidence_rank",
+    "evidence_name",
+    "evidence_taxid",
+    "panel_type",
+    "clade",
+    "n_hits",
+    "n_unique_kmers",
+    "n_positive_sequences",
+    "n_k_values_positive",
+    "best_k",
+    "n_exact_hits",
+    "n_fuzzy_hits",
+]
+
+
+def _taxonomic_label_from_hit(*, hit: KmerHit) -> tuple[str, str, str]:
+    """Return evidence-rank, evidence-name and taxid labels for one hit.
+
+    Parameters
+    ----------
+    hit : KmerHit
+        Diagnostic k-mer hit.
+
+    Returns
+    -------
+    tuple[str, str, str]
+        Evidence rank, evidence name and evidence taxid.
+    """
+    rank = hit.evidence_rank or ("species" if hit.species_name else "clade")
+    name = hit.evidence_name or hit.species_name or hit.clade
+    taxid = hit.evidence_taxid
+    return rank, name, taxid
+
+
+def summarise_taxonomic_hits(*, hits: Iterable[KmerHit]) -> list[dict[str, object]]:
+    """Summarise hits by sample, evidence rank/name and k value.
+
+    This retains genus, family or broader evidence that is intentionally not
+    forced into a species-level call.
+
+    Parameters
+    ----------
+    hits : iterable of KmerHit
+        Diagnostic k-mer hits.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        K-specific taxonomic evidence records.
+    """
+    grouped: dict[tuple[str, str, str, str, str, str, int], list[KmerHit]] = defaultdict(list)
+    for hit in hits:
+        evidence_rank, evidence_name, evidence_taxid = _taxonomic_label_from_hit(hit=hit)
+        if not evidence_name:
+            continue
+        key = (
+            hit.sample_id,
+            evidence_rank,
+            evidence_name,
+            evidence_taxid,
+            hit.panel_type,
+            hit.clade,
+            hit.k,
+        )
+        grouped[key].append(hit)
+
+    records: list[dict[str, object]] = []
+    for (
+        sample_id,
+        evidence_rank,
+        evidence_name,
+        evidence_taxid,
+        panel_type,
+        clade,
+        k,
+    ), group in sorted(grouped.items()):
+        records.append(
+            {
+                "sample_id": sample_id,
+                "evidence_rank": evidence_rank,
+                "evidence_name": evidence_name,
+                "evidence_taxid": evidence_taxid,
+                "panel_type": panel_type,
+                "clade": clade,
+                "k": k,
+                "n_hits": len(group),
+                "n_unique_kmers": len({hit.matched_kmer for hit in group}),
+                "n_positive_sequences": len({hit.sequence_id for hit in group}),
+                "n_exact_hits": sum(hit.mismatches == 0 for hit in group),
+                "n_fuzzy_hits": sum(hit.mismatches > 0 for hit in group),
+            }
+        )
+    return records
+
+
+def summarise_sample_taxonomic_evidence(
+    *,
+    taxonomic_summary: Iterable[dict[str, object]],
+) -> list[dict[str, object]]:
+    """Collapse k-specific taxonomic records into evidence-level records.
+
+    Parameters
+    ----------
+    taxonomic_summary : iterable of dict[str, object]
+        K-specific records from :func:`summarise_taxonomic_hits`.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        Collapsed taxonomic evidence table.
+    """
+    grouped: dict[tuple[str, str, str, str, str, str], list[dict[str, object]]] = defaultdict(list)
+    for row in taxonomic_summary:
+        key = (
+            str(row.get("sample_id", "")),
+            str(row.get("evidence_rank", "")),
+            str(row.get("evidence_name", "")),
+            str(row.get("evidence_taxid", "")),
+            str(row.get("panel_type", "")),
+            str(row.get("clade", "")),
+        )
+        grouped[key].append(row)
+
+    records: list[dict[str, object]] = []
+    for (
+        sample_id,
+        evidence_rank,
+        evidence_name,
+        evidence_taxid,
+        panel_type,
+        clade,
+    ), rows in sorted(grouped.items()):
+        records.append(
+            {
+                "sample_id": sample_id,
+                "evidence_rank": evidence_rank,
+                "evidence_name": evidence_name,
+                "evidence_taxid": evidence_taxid,
+                "panel_type": panel_type,
+                "clade": clade,
+                "n_hits": sum(int(row["n_hits"]) for row in rows),
+                "n_unique_kmers": sum(int(row["n_unique_kmers"]) for row in rows),
+                "n_positive_sequences": max(int(row["n_positive_sequences"]) for row in rows),
+                "n_k_values_positive": len({int(row["k"]) for row in rows}),
+                "best_k": max(int(row["k"]) for row in rows),
+                "n_exact_hits": sum(int(row["n_exact_hits"]) for row in rows),
+                "n_fuzzy_hits": sum(int(row["n_fuzzy_hits"]) for row in rows),
+            }
+        )
+    return records

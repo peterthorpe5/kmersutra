@@ -172,3 +172,114 @@ class TestThresholds(unittest.TestCase):
     def test_call_species_presence_handles_empty_evidence(self) -> None:
         """Empty evidence should produce no calls."""
         self.assertEqual(call_species_presence(evidence_records=[]), [])
+
+
+class TestConservativeThresholds(unittest.TestCase):
+    """Tests for conservative v0.15 species-call behaviour."""
+
+    def test_call_preset_returns_conservative_settings(self) -> None:
+        """Conservative preset should require multi-k and long-k evidence."""
+        from kmersutra.thresholds import apply_species_call_preset
+
+        settings = apply_species_call_preset(preset_name="conservative")
+        self.assertEqual(settings["min_k_values_positive"], 2)
+        self.assertEqual(settings["min_best_k"], 101)
+        self.assertEqual(settings["low_evidence_call"], "observed_below_threshold")
+
+    def test_conservative_threshold_labels_weak_signal_below_threshold(self) -> None:
+        """Weak off-target-like evidence should not become low-confidence presence."""
+        evidence = [
+            {
+                "sample_id": "s1",
+                "species_name": "Weak off-target",
+                "clade": "Demo",
+                "n_hits": 4,
+                "n_unique_kmers": 4,
+                "n_positive_sequences": 2,
+                "n_k_values_positive": 1,
+                "best_k": 77,
+                "n_exact_hits": 4,
+                "n_fuzzy_hits": 0,
+            }
+        ]
+        calls = call_species_presence(
+            evidence_records=evidence,
+            min_unique_kmers=20,
+            min_positive_sequences=5,
+            min_k_values_positive=2,
+            min_best_k=101,
+            min_exact_hits=20,
+            min_confidence_score=0.5,
+            low_evidence_call="observed_below_threshold",
+        )
+        self.assertEqual(calls[0]["call"], "observed_below_threshold")
+
+    def test_conservative_threshold_accepts_strong_multi_k_signal(self) -> None:
+        """Strong exact evidence across long k values should pass."""
+        evidence = [
+            {
+                "sample_id": "s1",
+                "species_name": "Alpha",
+                "clade": "Demo",
+                "n_hits": 120,
+                "n_unique_kmers": 60,
+                "n_positive_sequences": 15,
+                "n_k_values_positive": 2,
+                "best_k": 101,
+                "n_exact_hits": 120,
+                "n_fuzzy_hits": 0,
+            }
+        ]
+        calls = call_species_presence(
+            evidence_records=evidence,
+            min_unique_kmers=20,
+            min_positive_sequences=5,
+            min_k_values_positive=2,
+            min_best_k=101,
+            min_exact_hits=20,
+            min_confidence_score=0.5,
+            low_evidence_call="observed_below_threshold",
+        )
+        self.assertEqual(calls[0]["call"], "present_high_confidence")
+
+    def test_relative_margin_can_filter_second_best_neighbour(self) -> None:
+        """A required margin should prevent near-tied neighbour calls."""
+        evidence = [
+            {
+                "sample_id": "s1",
+                "species_name": "Alpha",
+                "clade": "Demo",
+                "n_hits": 100,
+                "n_unique_kmers": 60,
+                "n_positive_sequences": 20,
+                "n_k_values_positive": 2,
+                "best_k": 101,
+                "n_exact_hits": 100,
+                "n_fuzzy_hits": 0,
+            },
+            {
+                "sample_id": "s1",
+                "species_name": "Close neighbour",
+                "clade": "Demo",
+                "n_hits": 95,
+                "n_unique_kmers": 55,
+                "n_positive_sequences": 18,
+                "n_k_values_positive": 2,
+                "best_k": 101,
+                "n_exact_hits": 95,
+                "n_fuzzy_hits": 0,
+            },
+        ]
+        calls = call_species_presence(
+            evidence_records=evidence,
+            min_unique_kmers=20,
+            min_positive_sequences=5,
+            min_k_values_positive=2,
+            min_best_k=101,
+            min_exact_hits=20,
+            low_evidence_call="observed_below_threshold",
+            min_unique_kmer_margin=10,
+        )
+        call_map = {call["species_name"]: call["call"] for call in calls}
+        self.assertEqual(call_map["Alpha"], "observed_below_threshold")
+        self.assertEqual(call_map["Close neighbour"], "observed_below_threshold")

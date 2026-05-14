@@ -999,3 +999,52 @@ Development safeguards in v0.14.0:
 - verbose logging for one-pass genome indexing and evidence assignment;
 - RAM logging remains available through `--ram_log_path` and
   `--ram_log_interval_seconds`.
+
+## Version 0.15.0: conservative species-call interpretation
+
+Version 0.15.0 adds a stricter interpretation layer for long-read pathogen
+screening. The aim is not to maximise ultra-low-abundance read-level
+sensitivity. Instead, the new options make species-level calls harder to earn
+while keeping weaker or broader taxonomic evidence visible for interpretation.
+
+New screening options include:
+
+- `--call_preset legacy|conservative|strict`
+- `--min_best_k`
+- `--min_exact_hits`
+- `--min_confidence_score`
+- `--min_unique_kmer_margin`
+- `--min_unique_kmer_ratio`
+- `--low_evidence_call present_low_confidence|observed_below_threshold`
+
+The default `legacy` preset preserves previous behaviour for backwards
+compatibility. For publication-facing Plasmodium screening with the global
+candidate panel, start with:
+
+```bash
+kmersutra-screen \
+  --input sample.fastq.gz \
+  --input_format fastq \
+  --sample_id sample1 \
+  --panel species_kmer_panel.tsv.gz \
+  --out_dir sample1_kmersutra_v015 \
+  --threads 4 \
+  --chunk_size 10000 \
+  --call_preset conservative \
+  --no_read_level_hits \
+  --profile \
+  --verbose
+```
+
+The conservative preset requires multi-k support, long-k support, exact-hit
+support and a minimum confidence score before a species-level call is reported.
+Weak evidence is labelled as `observed_below_threshold` rather than
+`present_low_confidence`, so downstream summaries can keep it visible without
+counting it as a positive species call.
+
+Version 0.15.0 also writes `sample_taxonomic_kmer_evidence.tsv`, which retains
+broader genus, family or phylum evidence from the panel. This is intended to
+support calls such as Plasmodium-like signal detected but species unresolved.
+
+All existing tests plus new v0.15 conservative-call and taxonomic-evidence tests
+passed with Python `unittest` during packaging.

@@ -49,6 +49,12 @@ class KmerHit:
         Species label.
     clade : str
         Clade label.
+    evidence_taxid : str
+        Taxid represented by this evidence level, when available.
+    evidence_name : str
+        Taxonomic name represented by this evidence level, when available.
+    evidence_rank : str
+        Taxonomic rank represented by this evidence level, when available.
     """
 
     sample_id: str
@@ -62,6 +68,9 @@ class KmerHit:
     panel_type: str
     species_name: str
     clade: str
+    evidence_taxid: str = ""
+    evidence_name: str = ""
+    evidence_rank: str = ""
 
     def to_record(self) -> dict[str, object]:
         """Convert the hit to a serialisable record.
@@ -83,6 +92,9 @@ class KmerHit:
             "panel_type": self.panel_type,
             "species_name": self.species_name,
             "clade": self.clade,
+            "evidence_taxid": self.evidence_taxid,
+            "evidence_name": self.evidence_name,
+            "evidence_rank": self.evidence_rank,
         }
 
 
@@ -238,6 +250,9 @@ def screen_sequence_for_kmers(
                         panel_type=diagnostic.panel_type,
                         species_name=diagnostic.species_name,
                         clade=diagnostic.clade,
+                        evidence_taxid=diagnostic.evidence_taxid,
+                        evidence_name=diagnostic.evidence_name,
+                        evidence_rank=diagnostic.evidence_rank,
                     )
                 )
     return hits

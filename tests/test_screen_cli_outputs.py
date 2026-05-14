@@ -89,6 +89,7 @@ class TestScreenCliOutputs(unittest.TestCase):
             self.assertFalse((out_dir / "read_level_species_kmer_hits.tsv.gz").exists())
             self.assertTrue((out_dir / "read_level_species_kmer_hits.disabled.tsv").exists())
             self.assertTrue((out_dir / "species_detection_calls.tsv").exists())
+            self.assertTrue((out_dir / "sample_taxonomic_kmer_evidence.tsv").exists())
 
     def test_screen_cli_writes_profile_and_cache(self) -> None:
         """CLI should write profile timings and a reusable panel cache."""
