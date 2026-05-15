@@ -144,3 +144,38 @@ Was the expected species detected without additional non-expected species calls?
 ```
 
 This distinction is important. KmerSutra may recover the expected target but still report additional candidate taxa. Those additional calls are captured in `off_target_summary.tsv` and in the clean-sensitivity/off-target-rate metrics.
+
+## v0.15/v0.16 manifest compatibility update
+
+This version auto-detects comparable benchmark manifest files in the output root. It prefers:
+
+1. `kmersutra_comparable_manifest.tsv`
+2. `kmersutra_v016_conservative_manifest.tsv`
+3. `kmersutra_v015_conservative_manifest.tsv`
+4. `kmersutra_v014_comparable_manifest.tsv`
+
+It also normalises version-specific manifest column names. In particular, v0.15-style `spike_reads` is treated as the canonical `spike_n` column used by the summary workflow.
+
+The wrapper can now be called either with `OUT_ROOT`:
+
+```bash
+OUT_ROOT="/path/to/runs_kmersutra_v015_conservative_comparable_<STAMP>" \
+./run_kmersutra_comparable_summary.sh
+```
+
+or with the output root as the first positional argument:
+
+```bash
+./run_kmersutra_comparable_summary.sh \
+  /path/to/runs_kmersutra_v015_conservative_comparable_<STAMP>
+```
+
+If auto-detection is ambiguous, provide an explicit manifest:
+
+```bash
+OUT_ROOT="/path/to/run" \
+MANIFEST_TSV="/path/to/run/kmersutra_v015_conservative_manifest.tsv" \
+./run_kmersutra_comparable_summary.sh
+```
+
+This version also supports the v0.16 taxonomic evidence filename `sample_taxonomic_kmer_evidence.tsv` as a fallback when `sample_species_kmer_evidence.tsv` is not present.

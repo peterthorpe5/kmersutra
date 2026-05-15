@@ -257,6 +257,69 @@ class TestKmerSutraComparableSummary(unittest.TestCase):
         self.assertEqual(len(manifest), 5)
         self.assertIn("sample_id", manifest.columns)
 
+
+    def test_resolve_manifest_path_prefers_generic_manifest(self) -> None:
+        """Manifest resolution should prefer the generic manifest name."""
+        generic_manifest = self.out_root / "kmersutra_comparable_manifest.tsv"
+        generic_manifest.write_text(self.manifest.read_text(encoding="utf-8"), encoding="utf-8")
+        resolved = kmersutra_summary.resolve_manifest_path(
+            out_root=self.out_root,
+            manifest_path=None,
+        )
+        self.assertEqual(resolved, generic_manifest)
+
+    def test_resolve_manifest_path_uses_explicit_manifest(self) -> None:
+        """Explicit manifest paths should override auto-detection."""
+        explicit_manifest = self.out_root / "explicit_manifest.tsv"
+        explicit_manifest.write_text(self.manifest.read_text(encoding="utf-8"), encoding="utf-8")
+        resolved = kmersutra_summary.resolve_manifest_path(
+            out_root=self.out_root,
+            manifest_path=explicit_manifest,
+        )
+        self.assertEqual(resolved, explicit_manifest)
+
+    def test_load_manifest_accepts_spike_reads_alias(self) -> None:
+        """v0.15 manifests using spike_reads should be normalised to spike_n."""
+        alias_manifest = self.out_root / "kmersutra_v015_conservative_manifest.tsv"
+        dataframe = pd.read_csv(self.manifest, sep="\t", dtype=str)
+        dataframe = dataframe.rename(columns={"spike_n": "spike_reads"})
+        dataframe.to_csv(alias_manifest, sep="\t", index=False)
+
+        manifest = kmersutra_summary.load_manifest(path=alias_manifest)
+
+        self.assertIn("spike_n", manifest.columns)
+        self.assertNotIn("spike_reads", manifest.columns)
+        self.assertEqual(list(manifest["spike_n"]), ["0", "10", "10", "10", "10"])
+
+    def test_load_manifest_infers_missing_source_relative_dir(self) -> None:
+        """Manifests without source_relative_dir should have it inferred."""
+        alias_manifest = self.out_root / "manifest_without_source_relative_dir.tsv"
+        dataframe = pd.read_csv(self.manifest, sep="\t", dtype=str)
+        dataframe = dataframe.drop(columns=["source_relative_dir"])
+        dataframe.to_csv(alias_manifest, sep="\t", index=False)
+
+        manifest = kmersutra_summary.load_manifest(path=alias_manifest)
+
+        self.assertIn("source_relative_dir", manifest.columns)
+        self.assertEqual(manifest.loc[0, "source_relative_dir"], "mix_rep1_n0")
+
+    def test_resolve_sample_file_accepts_taxonomic_evidence_name(self) -> None:
+        """Evidence file resolution should support v0.16 taxonomic names."""
+        sample_dir = self.out_root / "sample_file_test"
+        sample_dir.mkdir()
+        taxonomic_path = sample_dir / "sample_taxonomic_kmer_evidence.tsv"
+        taxonomic_path.write_text("species_name\tn_hits\nPlasmodium vivax\t1\n", encoding="utf-8")
+
+        resolved = kmersutra_summary.resolve_sample_file(
+            sample_dir=sample_dir,
+            candidate_names=(
+                "sample_species_kmer_evidence.tsv",
+                "sample_taxonomic_kmer_evidence.tsv",
+            ),
+        )
+
+        self.assertEqual(resolved, taxonomic_path)
+
     def test_read_panel_targets_uses_named_label_column(self) -> None:
         """Panel target loading should use the target_label column."""
         labels = kmersutra_summary.read_panel_targets(path=self.panel2_tsv)

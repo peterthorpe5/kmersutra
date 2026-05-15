@@ -156,10 +156,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--manifest",
+        "--manifest_tsv",
+        dest="manifest",
         default=None,
         help=(
-            "Optional manifest TSV. Defaults to "
-            "<out_root>/kmersutra_v014_comparable_manifest.tsv."
+            "Optional comparable benchmark manifest TSV. If omitted, the "
+            "script auto-detects a non-empty manifest in --out_root."
         ),
     )
     parser.add_argument(
@@ -375,6 +377,122 @@ def safe_identifier(*, value: str) -> str:
     return value.strip("_") or "unknown"
 
 
+def resolve_manifest_path(*, out_root: Path, manifest_path: Path | None = None) -> Path:
+    """Resolve a comparable benchmark manifest path robustly.
+
+    Parameters
+    ----------
+    out_root : Path
+        KmerSutra comparable benchmark output root.
+    manifest_path : Path | None
+        Explicit manifest path supplied by the user. If provided, this path is
+        validated and returned.
+
+    Returns
+    -------
+    Path
+        Resolved non-empty manifest TSV path.
+
+    Raises
+    ------
+    FileNotFoundError
+        If no suitable manifest file can be found.
+    ValueError
+        If multiple ambiguous manifest files are found.
+    """
+    if manifest_path is not None:
+        if not manifest_path.exists() or manifest_path.stat().st_size == 0:
+            raise FileNotFoundError(f"Manifest missing or empty: {manifest_path}")
+        return manifest_path
+
+    preferred_names = (
+        "kmersutra_comparable_manifest.tsv",
+        "kmersutra_v016_conservative_manifest.tsv",
+        "kmersutra_v015_conservative_manifest.tsv",
+        "kmersutra_v014_comparable_manifest.tsv",
+    )
+    for name in preferred_names:
+        candidate = out_root / name
+        if candidate.exists() and candidate.stat().st_size > 0:
+            return candidate
+
+    glob_candidates = sorted(
+        candidate
+        for candidate in out_root.glob("*manifest*.tsv")
+        if candidate.is_file() and candidate.stat().st_size > 0
+    )
+    if len(glob_candidates) == 1:
+        return glob_candidates[0]
+    if len(glob_candidates) > 1:
+        candidates = ", ".join(str(candidate) for candidate in glob_candidates)
+        raise ValueError(
+            "Multiple manifest-like files found. Please provide --manifest "
+            f"explicitly. Candidates: {candidates}"
+        )
+    raise FileNotFoundError(f"No non-empty manifest TSV found in {out_root}")
+
+
+def normalise_manifest_columns(*, manifest: pd.DataFrame) -> pd.DataFrame:
+    """Normalise manifest column names across KmerSutra run versions.
+
+    Parameters
+    ----------
+    manifest : pd.DataFrame
+        Comparable benchmark manifest table loaded from TSV.
+
+    Returns
+    -------
+    pd.DataFrame
+        Manifest with version-specific aliases normalised to the canonical
+        column names used by the summary workflow.
+    """
+    manifest = manifest.copy()
+    column_aliases = {
+        "spike_reads": "spike_n",
+        "spike_reads_per_genome": "spike_n",
+        "total_spiked_reads": "spike_n",
+        "rep": "replicate",
+        "family": "benchmark_family",
+        "sample": "sample_id",
+        "fastq": "input_fastq",
+    }
+    rename_map = {}
+    for old_name, new_name in column_aliases.items():
+        if old_name in manifest.columns and new_name not in manifest.columns:
+            rename_map[old_name] = new_name
+    if rename_map:
+        LOGGER.info("Normalising manifest column aliases: %s", rename_map)
+        manifest = manifest.rename(columns=rename_map)
+
+    if "source_relative_dir" not in manifest.columns:
+        if "input_fastq" in manifest.columns:
+            manifest["source_relative_dir"] = manifest["input_fastq"].map(
+                infer_source_relative_dir
+            )
+        else:
+            manifest["source_relative_dir"] = ""
+
+    return manifest
+
+
+def infer_source_relative_dir(input_fastq: str) -> str:
+    """Infer a source-relative sample directory from an input FASTQ path.
+
+    Parameters
+    ----------
+    input_fastq : str
+        Input FASTQ path from the comparable benchmark manifest.
+
+    Returns
+    -------
+    str
+        Parent directory name for the FASTQ, or an empty string if unavailable.
+    """
+    if not input_fastq:
+        return ""
+    return Path(str(input_fastq)).parent.name
+
+
 def load_manifest(*, path: Path) -> pd.DataFrame:
     """Load and validate the comparable-run manifest.
 
@@ -398,10 +516,12 @@ def load_manifest(*, path: Path) -> pd.DataFrame:
     if not path.exists() or path.stat().st_size == 0:
         raise FileNotFoundError(f"Manifest missing or empty: {path}")
     manifest = pd.read_csv(path, sep="\t", dtype=str).fillna("")
+    manifest = normalise_manifest_columns(manifest=manifest)
     missing = [column for column in REQUIRED_MANIFEST_COLUMNS if column not in manifest]
     if missing:
         raise ValueError(
-            "Manifest is missing required columns: " + ", ".join(missing)
+            "Manifest is missing required columns after alias normalisation: "
+            + ", ".join(missing)
         )
     LOGGER.info("Loaded manifest: %s (%s rows)", path, len(manifest))
     return manifest
@@ -764,6 +884,30 @@ def metadata_from_manifest_row(
     }
 
 
+def resolve_sample_file(*, sample_dir: Path, candidate_names: Sequence[str]) -> Path:
+    """Resolve a sample-level output file from version-specific names.
+
+    Parameters
+    ----------
+    sample_dir : Path
+        Directory containing one KmerSutra sample output.
+    candidate_names : Sequence[str]
+        Candidate file names in preference order.
+
+    Returns
+    -------
+    Path
+        First existing non-empty candidate, or the first candidate path if no
+        candidate exists. Returning the first path preserves status reporting
+        for missing outputs.
+    """
+    candidates = [sample_dir / candidate_name for candidate_name in candidate_names]
+    for candidate in candidates:
+        if candidate.exists() and candidate.stat().st_size > 0:
+            return candidate
+    return candidates[0]
+
+
 def read_sample_outputs(
     *,
     out_root: Path,
@@ -807,7 +951,13 @@ def read_sample_outputs(
         )
         sample_dir = Path(metadata["kmersutra_sample_out"])
         calls_path = sample_dir / "species_detection_calls.tsv"
-        evidence_path = sample_dir / "sample_species_kmer_evidence.tsv"
+        evidence_path = resolve_sample_file(
+            sample_dir=sample_dir,
+            candidate_names=(
+                "sample_species_kmer_evidence.tsv",
+                "sample_taxonomic_kmer_evidence.tsv",
+            ),
+        )
         timing_path = sample_dir / "screen_timing.tsv"
 
         calls_df = safe_read_tsv(path=calls_path)
@@ -1715,10 +1865,14 @@ def main() -> None:
     """Run the command-line entry point."""
     args = parse_args()
     out_root = Path(args.out_root).expanduser().resolve()
-    manifest_path = (
+    user_manifest_path = (
         Path(args.manifest).expanduser().resolve()
         if args.manifest is not None
-        else out_root / "kmersutra_v014_comparable_manifest.tsv"
+        else None
+    )
+    manifest_path = resolve_manifest_path(
+        out_root=out_root,
+        manifest_path=user_manifest_path,
     )
     out_dir = (
         Path(args.out_dir).expanduser().resolve()
