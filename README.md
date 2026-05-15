@@ -1048,3 +1048,111 @@ support calls such as Plasmodium-like signal detected but species unresolved.
 
 All existing tests plus new v0.15 conservative-call and taxonomic-evidence tests
 passed with Python `unittest` during packaging.
+
+## v0.16.0 unresolved and possible-novel lineage reporting
+
+Version 0.16.0 adds a sample-level lineage interpretation layer for cases where
+species-level evidence is present but does not justify a confident species call.
+The intent is to retain weak neighbouring-species evidence without over-reporting
+it as a true species detection.
+
+`kmersutra-screen` now writes:
+
+```text
+sample_lineage_interpretation.tsv
+```
+
+This file separates:
+
+- `species_detected`: one conservative species-level call is supported.
+- `mixed_species_detected`: more than one conservative species-level call is
+  supported.
+- `unresolved_taxonomic_signal`: genus-level or broader evidence is strong, but
+  no species-level call is justified.
+- `possible_novel_or_unsampled_lineage`: genus-level or broader evidence is
+  strong and the sample also has weak evidence spread across multiple related
+  neighbouring species. This is intended to flag potentially novel or unsampled
+  lineages without forcing a known-species diagnosis.
+- `weak_unresolved_neighbour_signal`: weak neighbouring-species evidence is
+  present, but the broader taxonomic evidence does not yet pass reporting
+  thresholds.
+- `no_supported_signal`: no species or taxonomic evidence is supported.
+
+The output also reports the best and second-best species, the absolute and
+relative support margin, the best supported taxonomic rank/name, and a heuristic
+lineage confidence score. These scores are not calibrated probabilities. They
+are intended for conservative ranking and reporting.
+
+Important principle: weak neighbouring-species evidence is evidence, not a final
+species diagnosis. v0.16.0 keeps that evidence visible so potentially novel or
+unsampled Plasmodium-like signals can be identified without inflating false
+species calls.
+
+
+## Version 0.17.0: lineage-aware mixed-species reporting
+
+KmerSutra v0.17.0 adds a lineage-aware mixed-sample interpretation policy.
+The goal is to keep neighbouring-species evidence visible while avoiding the
+over-reporting of weak biological neighbours as confident species diagnoses.
+
+The new call preset is:
+
+```bash
+--call_preset lineage_aware
+```
+
+This preset keeps the conservative v0.15 requirements for multi-k, long-k and
+independent-read support, but adds a mixed-species co-dominance check. When
+several species pass the basic evidence thresholds, only species with enough
+support relative to the strongest species are promoted to reportable mixed
+species calls. Weaker passing species are retained as:
+
+```text
+neighbour_lineage_evidence
+```
+
+This call means that the evidence is not discarded. It can still contribute to
+genus-level, unresolved, or possible novel/unsampled lineage reporting, but it
+is not promoted to a species-level diagnosis. This is intended for situations
+where a real sample contains strong Plasmodium-like evidence plus weak evidence
+spread across biologically plausible neighbouring species.
+
+Useful options are:
+
+```bash
+--call_preset lineage_aware \
+--min_mixed_species_fraction 0.25 \
+--low_evidence_call observed_below_threshold
+```
+
+The main species-call output now includes additional columns:
+
+```text
+reportable_conflicting_unique_kmers
+reportable_conflict_ratio
+mixed_species_support_fraction
+signal_confidence_score
+```
+
+The sample-level lineage output remains:
+
+```text
+sample_lineage_interpretation.tsv
+```
+
+This file should be used for reporting unresolved lineage evidence, including:
+
+```text
+species_detected
+mixed_species_detected
+unresolved_taxonomic_signal
+possible_novel_or_unsampled_lineage
+weak_unresolved_neighbour_signal
+no_supported_signal
+```
+
+Recommended test command:
+
+```bash
+python -m unittest discover -s tests -v
+```

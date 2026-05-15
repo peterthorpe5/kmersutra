@@ -8,6 +8,7 @@ from typing import Literal
 
 
 WEAK_SIGNAL_CALLS = {"present_low_confidence", "observed_below_threshold"}
+NON_REPORTABLE_LINEAGE_CALLS = {"neighbour_lineage_evidence"}
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,11 @@ class SpeciesCallPreset:
         Minimum heuristic confidence score required.
     low_evidence_call : str
         Call label used when evidence exists but does not pass thresholds.
+    min_mixed_species_fraction : float
+        Minimum fraction of the strongest species-level support required for a
+        passing species to be promoted to a reportable mixed-species call.
+        Species below this fraction are retained as neighbouring-lineage
+        evidence rather than over-reported as present species.
     """
 
     min_unique_kmers: int
@@ -42,6 +48,7 @@ class SpeciesCallPreset:
     min_exact_hits: int
     min_confidence_score: float
     low_evidence_call: str
+    min_mixed_species_fraction: float
 
 
 CALL_PRESETS: dict[str, SpeciesCallPreset] = {
@@ -54,6 +61,7 @@ CALL_PRESETS: dict[str, SpeciesCallPreset] = {
         min_exact_hits=0,
         min_confidence_score=0.0,
         low_evidence_call="present_low_confidence",
+        min_mixed_species_fraction=0.0,
     ),
     "conservative": SpeciesCallPreset(
         min_unique_kmers=20,
@@ -64,6 +72,18 @@ CALL_PRESETS: dict[str, SpeciesCallPreset] = {
         min_exact_hits=20,
         min_confidence_score=0.50,
         low_evidence_call="observed_below_threshold",
+        min_mixed_species_fraction=0.0,
+    ),
+    "lineage_aware": SpeciesCallPreset(
+        min_unique_kmers=20,
+        min_positive_sequences=5,
+        min_k_values_positive=2,
+        max_conflict_ratio=0.10,
+        min_best_k=101,
+        min_exact_hits=20,
+        min_confidence_score=0.50,
+        low_evidence_call="observed_below_threshold",
+        min_mixed_species_fraction=0.25,
     ),
     "strict": SpeciesCallPreset(
         min_unique_kmers=50,
@@ -74,6 +94,7 @@ CALL_PRESETS: dict[str, SpeciesCallPreset] = {
         min_exact_hits=50,
         min_confidence_score=0.70,
         low_evidence_call="observed_below_threshold",
+        min_mixed_species_fraction=0.50,
     ),
 }
 
@@ -84,8 +105,8 @@ def get_species_call_preset(*, preset_name: str) -> SpeciesCallPreset:
     Parameters
     ----------
     preset_name : str
-        Preset name. Supported values are ``legacy``, ``conservative`` and
-        ``strict``.
+        Preset name. Supported values are ``legacy``, ``conservative``,
+        ``lineage_aware`` and ``strict``.
 
     Returns
     -------
@@ -280,6 +301,7 @@ def call_species_presence(
     min_unique_kmer_margin: int = 0,
     min_unique_kmer_ratio: float = 0.0,
     low_evidence_call: str = "present_low_confidence",
+    min_mixed_species_fraction: float = 0.0,
 ) -> list[dict[str, object]]:
     """Call species presence from summarised evidence.
 
@@ -312,6 +334,11 @@ def call_species_presence(
         Minimum focal-to-next-best unique-k-mer ratio. Values <= 0 disable this.
     low_evidence_call : str, optional
         Call label for observed evidence below reportable thresholds.
+    min_mixed_species_fraction : float, optional
+        Minimum fraction of the strongest passing species support required for
+        promotion to a reportable mixed-species call. Values <= 0 preserve the
+        legacy behaviour where all passing species are reported in mixed
+        samples.
 
     Returns
     -------
@@ -369,6 +396,13 @@ def call_species_presence(
                 min_unique_kmer_ratio=min_unique_kmer_ratio,
             )
 
+            signal_confidence_score = calculate_confidence_score(
+                n_unique_kmers=target_unique,
+                n_positive_sequences=_integer_from_row(row=row, key="n_positive_sequences"),
+                n_k_values_positive=_integer_from_row(row=row, key="n_k_values_positive"),
+                best_k=_integer_from_row(row=row, key="best_k"),
+                conflict_ratio=0.0,
+            )
             confidence_score = calculate_confidence_score(
                 n_unique_kmers=target_unique,
                 n_positive_sequences=_integer_from_row(row=row, key="n_positive_sequences"),
@@ -379,7 +413,7 @@ def call_species_presence(
             passes_evidence = (
                 passes_basic_evidence
                 and passes_relative_support
-                and confidence_score >= min_confidence_score
+                and signal_confidence_score >= min_confidence_score
             )
             if passes_evidence:
                 passing_species.add(species_name)
@@ -391,11 +425,35 @@ def call_species_presence(
                     "conflict_unique": conflict_unique,
                     "conflict_ratio": conflict_ratio,
                     "confidence_score": confidence_score,
+                    "signal_confidence_score": signal_confidence_score,
                     "passes_evidence": passes_evidence,
                 }
             )
 
-        sample_is_mixed = allow_mixed_species and len(passing_species) > 1
+        passing_items = [
+            item for item in intermediate_rows if bool(item["passes_evidence"])
+        ]
+        strongest_unique = max(
+            (int(item["target_unique"]) for item in passing_items),
+            default=0,
+        )
+        reportable_species: set[str] = set(passing_species)
+        lineage_neighbour_species: set[str] = set()
+        if (
+            allow_mixed_species
+            and len(passing_species) > 1
+            and min_mixed_species_fraction > 0
+            and strongest_unique > 0
+        ):
+            reportable_species = {
+                str(item["species_name"])
+                for item in passing_items
+                if int(item["target_unique"])
+                >= strongest_unique * min_mixed_species_fraction
+            }
+            lineage_neighbour_species = passing_species - reportable_species
+
+        sample_is_mixed = allow_mixed_species and len(reportable_species) > 1
         for item in intermediate_rows:
             row = item["row"]
             species_name = str(item["species_name"])
@@ -403,8 +461,27 @@ def call_species_presence(
             conflict_ratio = float(item["conflict_ratio"])
             passes_evidence = bool(item["passes_evidence"])
             confidence_score = float(item["confidence_score"])
+            signal_confidence_score = float(item["signal_confidence_score"])
+            reportable_fraction = 0.0
+            if strongest_unique > 0 and passes_evidence:
+                reportable_fraction = target_unique / strongest_unique
 
-            if passes_evidence and sample_is_mixed:
+            is_reportable_species = species_name in reportable_species
+            is_neighbour_lineage = species_name in lineage_neighbour_species
+            reportable_conflict_unique = sum(
+                int(other["target_unique"])
+                for other in passing_items
+                if str(other["species_name"]) != species_name
+                and str(other["species_name"]) in reportable_species
+            )
+            reportable_conflict_ratio = calculate_conflict_ratio(
+                target_unique_kmers=target_unique,
+                conflicting_unique_kmers=reportable_conflict_unique,
+            )
+
+            if passes_evidence and is_neighbour_lineage:
+                call = "neighbour_lineage_evidence"
+            elif passes_evidence and sample_is_mixed and is_reportable_species:
                 confidence_score = calculate_confidence_score(
                     n_unique_kmers=target_unique,
                     n_positive_sequences=_integer_from_row(
@@ -419,10 +496,13 @@ def call_species_presence(
                     conflict_ratio=0.0,
                 )
                 call = "present_in_mixed_sample"
-            elif passes_evidence and conflict_ratio <= max_conflict_ratio:
-                call = "present_high_confidence"
-            elif passes_evidence and conflict_ratio > max_conflict_ratio:
-                call = "ambiguous_conflicting_signal"
+            elif passes_evidence and is_reportable_species:
+                if reportable_conflict_ratio <= max_conflict_ratio:
+                    call = "present_high_confidence"
+                else:
+                    call = "ambiguous_conflicting_signal"
+            elif passes_evidence:
+                call = "neighbour_lineage_evidence"
             elif target_unique > 0:
                 call = low_evidence_call
             else:
@@ -433,7 +513,11 @@ def call_species_presence(
                     **row,
                     "conflicting_unique_kmers": int(item["conflict_unique"]),
                     "conflict_ratio": round(conflict_ratio, 4),
+                    "reportable_conflicting_unique_kmers": int(reportable_conflict_unique),
+                    "reportable_conflict_ratio": round(reportable_conflict_ratio, 4),
+                    "mixed_species_support_fraction": round(reportable_fraction, 4),
                     "confidence_score": round(confidence_score, 4),
+                    "signal_confidence_score": round(signal_confidence_score, 4),
                     "call": call,
                 }
             )
@@ -453,6 +537,7 @@ def apply_species_call_preset(
     low_evidence_call: Literal[
         "present_low_confidence", "observed_below_threshold"
     ] | None = None,
+    min_mixed_species_fraction: float | None = None,
 ) -> dict[str, object]:
     """Resolve species-call thresholds from a preset and optional overrides.
 
@@ -476,6 +561,8 @@ def apply_species_call_preset(
         Optional confidence-score override.
     low_evidence_call : str or None, optional
         Optional low-evidence call label override.
+    min_mixed_species_fraction : float or None, optional
+        Optional mixed-species co-dominance fraction override.
 
     Returns
     -------
@@ -507,5 +594,10 @@ def apply_species_call_preset(
         ),
         "low_evidence_call": (
             preset.low_evidence_call if low_evidence_call is None else low_evidence_call
+        ),
+        "min_mixed_species_fraction": (
+            preset.min_mixed_species_fraction
+            if min_mixed_species_fraction is None
+            else min_mixed_species_fraction
         ),
     }

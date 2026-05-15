@@ -8,6 +8,10 @@ from pathlib import Path
 
 from kmersutra.features import FEATURE_FIELDNAMES, summarise_sequence_features
 from kmersutra.io import write_tsv
+from kmersutra.lineage_interpretation import (
+    LINEAGE_INTERPRETATION_FIELDNAMES,
+    interpret_lineage_evidence,
+)
 from kmersutra.profiling import WorkflowProfiler
 from kmersutra.logging_utils import configure_logging
 from kmersutra.reporting import write_html_report
@@ -78,12 +82,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--call_preset",
-        choices=["legacy", "conservative", "strict"],
+        choices=["legacy", "conservative", "lineage_aware", "strict"],
         default="legacy",
         help=(
             "Species-call threshold preset. The legacy preset preserves older "
             "behaviour. Conservative and strict presets make species calls "
-            "harder to earn and label weak evidence as observed_below_threshold."
+            "harder to earn. The lineage_aware preset keeps weak neighbouring "
+            "species evidence visible but demotes it from reportable species calls."
         ),
     )
     parser.add_argument("--min_unique_kmers", type=int, default=None)
@@ -121,10 +126,60 @@ def parse_args() -> argparse.Namespace:
         help="Optional focal-to-second-best unique-k-mer ratio requirement.",
     )
     parser.add_argument(
+        "--min_mixed_species_fraction",
+        type=float,
+        default=None,
+        help=(
+            "Minimum fraction of strongest species-level support required for "
+            "a passing species to be promoted to a reportable mixed-species "
+            "call. Lower-support passing species are retained as "
+            "neighbour_lineage_evidence."
+        ),
+    )
+    parser.add_argument(
         "--low_evidence_call",
         choices=["present_low_confidence", "observed_below_threshold"],
         default=None,
         help="Call label for species evidence observed below reportable thresholds.",
+    )
+    parser.add_argument(
+        "--min_taxonomic_unique_kmers",
+        type=int,
+        default=20,
+        help="Minimum unique k-mers for unresolved lineage evidence.",
+    )
+    parser.add_argument(
+        "--min_taxonomic_positive_sequences",
+        type=int,
+        default=5,
+        help="Minimum independent sequences for unresolved lineage evidence.",
+    )
+    parser.add_argument(
+        "--min_taxonomic_k_values",
+        type=int,
+        default=1,
+        help="Minimum positive k values for unresolved lineage evidence.",
+    )
+    parser.add_argument(
+        "--min_taxonomic_best_k",
+        type=int,
+        default=77,
+        help="Minimum longest k value for unresolved lineage evidence.",
+    )
+    parser.add_argument(
+        "--min_taxonomic_confidence_score",
+        type=float,
+        default=0.40,
+        help="Minimum heuristic confidence score for unresolved lineage evidence.",
+    )
+    parser.add_argument(
+        "--min_neighbour_species_for_novelty",
+        type=int,
+        default=2,
+        help=(
+            "Minimum number of weak neighbouring species supporting a possible "
+            "novel or unsampled lineage interpretation."
+        ),
     )
     parser.add_argument(
         "--disallow_mixed_species",
@@ -168,12 +223,33 @@ def main() -> None:
         min_exact_hits=args.min_exact_hits,
         min_confidence_score=args.min_confidence_score,
         low_evidence_call=args.low_evidence_call,
+        min_mixed_species_fraction=args.min_mixed_species_fraction,
     )
     logger.info("Species-call preset: %s", args.call_preset)
     for setting_name, setting_value in sorted(call_settings.items()):
         logger.info("Species-call setting %s: %s", setting_name, setting_value)
     logger.info("Minimum unique-kmer margin: %d", args.min_unique_kmer_margin)
     logger.info("Minimum unique-kmer ratio: %.4f", args.min_unique_kmer_ratio)
+    logger.info(
+        "Minimum mixed-species support fraction: %.4f",
+        float(call_settings["min_mixed_species_fraction"]),
+    )
+
+    logger.info("Minimum taxonomic unique k-mers: %d", args.min_taxonomic_unique_kmers)
+    logger.info(
+        "Minimum taxonomic positive sequences: %d",
+        args.min_taxonomic_positive_sequences,
+    )
+    logger.info("Minimum taxonomic k values: %d", args.min_taxonomic_k_values)
+    logger.info("Minimum taxonomic best k: %d", args.min_taxonomic_best_k)
+    logger.info(
+        "Minimum taxonomic confidence score: %.4f",
+        args.min_taxonomic_confidence_score,
+    )
+    logger.info(
+        "Minimum weak neighbour species for possible novelty: %d",
+        args.min_neighbour_species_for_novelty,
+    )
 
     profiler = WorkflowProfiler() if args.profile else None
     screen_profile_records: list[dict[str, object]] = []
@@ -230,8 +306,27 @@ def main() -> None:
             min_unique_kmer_margin=args.min_unique_kmer_margin,
             min_unique_kmer_ratio=args.min_unique_kmer_ratio,
             low_evidence_call=str(call_settings["low_evidence_call"]),
+            min_mixed_species_fraction=float(
+                call_settings["min_mixed_species_fraction"]
+            ),
         )
     logger.info("Built %d species detection-call rows", len(detection_calls))
+
+    with (profiler.time_stage(stage="interpret_lineage_evidence", detail="unresolved_novelty") if profiler else nullcontext()):
+        lineage_interpretation = interpret_lineage_evidence(
+            species_calls=detection_calls,
+            taxonomic_evidence=taxonomic_evidence,
+            min_taxonomic_unique_kmers=args.min_taxonomic_unique_kmers,
+            min_taxonomic_positive_sequences=args.min_taxonomic_positive_sequences,
+            min_taxonomic_k_values=args.min_taxonomic_k_values,
+            min_taxonomic_best_k=args.min_taxonomic_best_k,
+            min_taxonomic_confidence_score=args.min_taxonomic_confidence_score,
+            min_neighbour_species_for_novelty=args.min_neighbour_species_for_novelty,
+        )
+    logger.info(
+        "Built %d sample lineage-interpretation rows",
+        len(lineage_interpretation),
+    )
 
     read_level_fieldnames = [
         "sample_id",
@@ -315,9 +410,18 @@ def main() -> None:
             "n_fuzzy_hits",
             "conflicting_unique_kmers",
             "conflict_ratio",
+            "reportable_conflicting_unique_kmers",
+            "reportable_conflict_ratio",
+            "mixed_species_support_fraction",
             "confidence_score",
+            "signal_confidence_score",
             "call",
         ],
+    )
+    write_tsv(
+        records=lineage_interpretation,
+        output_path=out_dir / "sample_lineage_interpretation.tsv",
+        fieldnames=LINEAGE_INTERPRETATION_FIELDNAMES,
     )
     with (profiler.time_stage(stage="write_html_report", detail="species_detection_report") if profiler else nullcontext()):
         write_html_report(
