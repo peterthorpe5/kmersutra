@@ -1156,3 +1156,57 @@ Recommended test command:
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+## v0.18.0 genome-spread marker selection
+
+KmerSutra v0.18.0 adds an optional genome-aware marker thinning strategy for
+panel builds. This addresses the risk that a simple per-species/per-k cap can
+retain a dense block of adjacent, highly overlapping k-mers from one early
+scaffold or from one arbitrary lexical region of the k-mer index.
+
+The default remains the legacy behaviour:
+
+```bash
+--marker_selection first_seen
+```
+
+For larger publication panels, the recommended experimental mode is:
+
+```bash
+--marker_selection genome_spread \
+--genome_bin_size 10000 \
+--max_per_genome_bin 10 \
+--max_per_species_per_k 100000
+```
+
+In `genome_spread` mode, KmerSutra first assigns taxonomic evidence, then
+selects a deterministic subset of reportable markers across source
+`genome/contig/bin` groups. This means that a species-level call is supported by
+markers distributed across more of the reference genome rather than by many
+adjacent sliding-window k-mers from a small region.
+
+For `--global_candidate_evidence` and `--all_candidate_evidence`, the package
+avoids applying the per-evidence cap during evidence assignment when
+`--marker_selection genome_spread` is used. Instead, the cap is applied during
+panel writing, after all retained evidence has been assigned. This avoids
+throwing away valid markers before the genome-spread selector can choose a
+representative subset.
+
+### Parquet and module-aware databases
+
+The current release still writes the main screening panel as TSV/TSV.GZ for
+compatibility with existing KmerSutra screening and summary workflows. For very
+large multi-module databases, the recommended next storage layer is an optional
+Parquet/Arrow representation of intermediate source-index and retained-evidence
+tables. A future module-aware build workflow should support:
+
+1. building local taxonomic modules independently;
+2. storing module evidence tables in Parquet or SQLite;
+3. merging module evidence tables into a master source index;
+4. re-validating every retained marker globally;
+5. downgrading or removing markers when cross-module evidence shows they are not
+   specific at the originally assigned taxonomic level.
+
+This is important because a marker that is species-specific within a local
+Plasmodium panel may become genus-level, clade-level or non-diagnostic after
+host, vector, bacterial, fungal, viral or broader eukaryotic modules are merged.

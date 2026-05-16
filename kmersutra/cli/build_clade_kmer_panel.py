@@ -8,6 +8,7 @@ from pathlib import Path
 from kmersutra.build_panel import DiagnosticKmer, build_panel
 from kmersutra.config import load_genome_config
 from kmersutra.io import write_json, write_tsv
+from kmersutra.marker_selection import MarkerSelectionConfig, select_genome_spread_markers
 from kmersutra.logging_utils import configure_logging
 from kmersutra.profiling import WorkflowProfiler
 from kmersutra.reporting import write_html_report
@@ -72,6 +73,32 @@ def parse_args() -> argparse.Namespace:
         help="Taxonomic ranks retained as evidence levels when taxonomy is used.",
     )
     parser.add_argument("--max_per_species_per_k", type=int, default=None)
+    parser.add_argument(
+        "--marker_selection",
+        choices=["first_seen", "genome_spread"],
+        default="first_seen",
+        help=(
+            "Strategy used when --max_per_species_per_k limits retained "
+            "diagnostic k-mers. first_seen preserves legacy behaviour. "
+            "genome_spread thins retained markers across source contig bins "
+            "to avoid dense adjacent k-mers from one genomic region."
+        ),
+    )
+    parser.add_argument(
+        "--genome_bin_size",
+        type=int,
+        default=10000,
+        help="Reference bases per positional bin for --marker_selection genome_spread.",
+    )
+    parser.add_argument(
+        "--max_per_genome_bin",
+        type=int,
+        default=10,
+        help=(
+            "Maximum retained markers from one source genome/contig/bin within "
+            "an evidence bucket for --marker_selection genome_spread."
+        ),
+    )
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument(
         "--compact_build",
@@ -256,6 +283,9 @@ def _write_panel_streaming(
     panel_path: Path,
     max_per_species_per_k: int | None,
     logger,
+    marker_selection: str = "first_seen",
+    genome_bin_size: int = 10000,
+    max_per_genome_bin: int = 10,
 ) -> tuple[int, list[dict[str, object]]]:
     """Write diagnostic k-mers to a panel file while summarising counts.
 
@@ -269,6 +299,14 @@ def _write_panel_streaming(
         Optional maximum number of retained records per evidence bucket and k.
     logger : logging.Logger
         Logger for progress messages.
+    marker_selection : str, optional
+        Retention strategy. Use ``genome_spread`` to thin capped panels across
+        source genome bins rather than retaining the first passing markers.
+    genome_bin_size : int, optional
+        Reference bases per genome bin for genome-spread selection.
+    max_per_genome_bin : int, optional
+        Maximum retained markers per source genome/contig/bin within an evidence
+        bucket for genome-spread selection.
 
     Returns
     -------
@@ -279,8 +317,27 @@ def _write_panel_streaming(
 
     from kmersutra.io import open_text
 
-    if max_per_species_per_k is not None and max_per_species_per_k <= 0:
-        raise ValueError("max_per_species_per_k must be positive")
+    selection_config = MarkerSelectionConfig(
+        strategy=marker_selection,
+        max_per_bucket=max_per_species_per_k,
+        genome_bin_size=genome_bin_size,
+        max_per_genome_bin=max_per_genome_bin,
+    )
+    selection_config.validate()
+
+    if marker_selection == "genome_spread" and max_per_species_per_k is not None:
+        logger.info(
+            "Selecting genome-spread marker subset: max_per_bucket=%s; "
+            "genome_bin_size=%s; max_per_genome_bin=%s",
+            max_per_species_per_k,
+            genome_bin_size,
+            max_per_genome_bin,
+        )
+        diagnostic_kmers = select_genome_spread_markers(
+            diagnostic_kmers=diagnostic_kmers,
+            config=selection_config,
+        )
+        max_per_species_per_k = None
 
     retained_by_key = defaultdict(int)
     summary_counts = defaultdict(int)
@@ -335,6 +392,9 @@ def main() -> None:
     logger.info("All-candidate evidence build: %s", args.all_candidate_evidence)
     logger.info("Global candidate evidence build: %s", args.global_candidate_evidence)
     logger.info("Build profiling: %s", args.profile)
+    logger.info("Marker selection: %s", args.marker_selection)
+    logger.info("Genome bin size: %d", args.genome_bin_size)
+    logger.info("Max per genome bin: %d", args.max_per_genome_bin)
     profiler = WorkflowProfiler()
 
     ram_log_path = Path(args.ram_log_path) if args.ram_log_path else out_dir / "ram_usage.tsv"
@@ -420,7 +480,11 @@ def main() -> None:
                     candidate_roles=args.candidate_roles,
                     excluded_candidate_roles=args.excluded_candidate_roles,
                     batch_size=args.sqlite_batch_size,
-                    max_per_evidence_per_k=args.max_per_species_per_k,
+                    max_per_evidence_per_k=(
+                        None
+                        if args.marker_selection == "genome_spread"
+                        else args.max_per_species_per_k
+                    ),
                     logger=logger,
                 )
             with profiler.time_stage(stage="write_panel", detail=str(panel_path)):
@@ -430,8 +494,15 @@ def main() -> None:
                 n_diagnostic_kmers, summary = _write_panel_streaming(
                     diagnostic_kmers=diagnostic_iter,
                     panel_path=panel_path,
-                    max_per_species_per_k=None,
+                    max_per_species_per_k=(
+                        args.max_per_species_per_k
+                        if args.marker_selection == "genome_spread"
+                        else None
+                    ),
                     logger=logger,
+                    marker_selection=args.marker_selection,
+                    genome_bin_size=args.genome_bin_size,
+                    max_per_genome_bin=args.max_per_genome_bin,
                 )
             collection_summary = global_candidate_result.collection_summary
             write_tsv(
@@ -475,7 +546,11 @@ def main() -> None:
                     candidate_roles=args.candidate_roles,
                     excluded_candidate_roles=args.excluded_candidate_roles,
                     batch_size=args.sqlite_batch_size,
-                    max_per_evidence_per_k=args.max_per_species_per_k,
+                    max_per_evidence_per_k=(
+                        None
+                        if args.marker_selection == "genome_spread"
+                        else args.max_per_species_per_k
+                    ),
                     logger=logger,
                 )
             with profiler.time_stage(stage="write_panel", detail=str(panel_path)):
@@ -485,8 +560,15 @@ def main() -> None:
                 n_diagnostic_kmers, summary = _write_panel_streaming(
                     diagnostic_kmers=diagnostic_iter,
                     panel_path=panel_path,
-                    max_per_species_per_k=None,
+                    max_per_species_per_k=(
+                        args.max_per_species_per_k
+                        if args.marker_selection == "genome_spread"
+                        else None
+                    ),
                     logger=logger,
+                    marker_selection=args.marker_selection,
+                    genome_bin_size=args.genome_bin_size,
+                    max_per_genome_bin=args.max_per_genome_bin,
                 )
             collection_summary = all_candidate_result.collection_summary
             write_tsv(
@@ -523,6 +605,9 @@ def main() -> None:
                     panel_path=panel_path,
                     max_per_species_per_k=args.max_per_species_per_k,
                     logger=logger,
+                    marker_selection=args.marker_selection,
+                    genome_bin_size=args.genome_bin_size,
+                    max_per_genome_bin=args.max_per_genome_bin,
                 )
             collection_summary = target_result.collection_summary
             write_tsv(
@@ -591,6 +676,9 @@ def main() -> None:
                 "download_taxonomy_if_missing": args.download_taxonomy_if_missing,
                 "evidence_ranks": args.evidence_ranks,
                 "max_per_species_per_k": args.max_per_species_per_k,
+                "marker_selection": args.marker_selection,
+                "genome_bin_size": args.genome_bin_size,
+                "max_per_genome_bin": args.max_per_genome_bin,
                 "threads": args.threads,
                 "compact_build": args.compact_build,
                 "target_evidence_only": args.target_evidence_only,
