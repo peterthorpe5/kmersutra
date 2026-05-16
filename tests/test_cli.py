@@ -65,7 +65,33 @@ class TestCliModules(unittest.TestCase):
         module = importlib.import_module("kmersutra.cli.merge_panels")
         self.assertTrue(callable(module.main))
 
+    def test_merge_modules_cli_imports(self):
+        """Parquet module-merge CLI should expose a main function."""
+        module = importlib.import_module("kmersutra.cli.merge_modules")
+        self.assertTrue(callable(module.main))
+
     def test_validate_panel_cli_imports(self):
         """Panel-validation CLI module should expose a main function."""
         module = importlib.import_module("kmersutra.cli.validate_panel")
         self.assertTrue(callable(module.main))
+
+
+class TestBuildPanelCliDefaults(unittest.TestCase):
+    """Test build-panel CLI defaults that affect publication builds."""
+
+    def test_marker_selection_defaults_to_genome_spread(self) -> None:
+        """Genome-spread marker selection should be the default build behaviour."""
+        from kmersutra.cli.build_clade_kmer_panel import parse_args
+        import sys
+        from unittest.mock import patch
+
+        argv = [
+            "kmersutra-build-panel",
+            "--genome_config",
+            "config.tsv",
+            "--out_dir",
+            "out",
+        ]
+        with patch.object(sys, "argv", argv):
+            args = parse_args()
+        self.assertEqual(args.marker_selection, "genome_spread")

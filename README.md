@@ -1210,3 +1210,86 @@ tables. A future module-aware build workflow should support:
 This is important because a marker that is species-specific within a local
 Plasmodium panel may become genus-level, clade-level or non-diagnostic after
 host, vector, bacterial, fungal, viral or broader eukaryotic modules are merged.
+
+## v0.19.0: genome-spread default and optional Parquet module workflow
+
+KmerSutra v0.19.0 makes `genome_spread` the default marker-selection strategy
+for `kmersutra-build-panel`. This avoids the positional bias introduced by a
+simple first-seen cap, where many retained k-mers can come from adjacent sliding
+windows on the first scaffold encountered. The legacy behaviour remains
+available with:
+
+```bash
+--marker_selection first_seen
+```
+
+For publication-oriented builds, the recommended default is now:
+
+```bash
+--marker_selection genome_spread \
+--genome_bin_size 10000 \
+--max_per_genome_bin 10
+```
+
+### Optional Parquet module export
+
+Large KmerSutra databases are expected to be built as taxonomic modules. A
+module can now export its global source-index tables as Parquet files when
+`pyarrow` is installed:
+
+```bash
+kmersutra-build-panel \
+  --genome_config module_genome_config.tsv \
+  --out_dir plasmodium_module_build \
+  --k_values 77 101 151 \
+  --taxonomy_dir ncbi_taxonomy \
+  --global_candidate_evidence \
+  --max_per_species_per_k 100000 \
+  --marker_selection genome_spread \
+  --write_module_parquet \
+  --module_parquet_dir plasmodium_module_build/module_parquet \
+  --module_name plasmodium_apicomplexa_v4 \
+  --verbose
+```
+
+This writes:
+
+```text
+global_kmers.parquet
+retained_kmers.parquet
+build_events.parquet
+module_metadata.json
+```
+
+The most important table is `global_kmers.parquet`, because it stores source
+metadata before the final reportable evidence assignment. This allows modules
+built on different genome sets to be merged later and globally revalidated.
+
+### Global revalidation across modules
+
+The new command `kmersutra-merge-modules` merges one or more module source
+indexes, assigns evidence levels using the combined source metadata, and writes
+a final screenable panel:
+
+```bash
+kmersutra-merge-modules \
+  --module_dirs plasmodium_module_build/module_parquet host_module/module_parquet \
+  --out_dir merged_master_panel \
+  --taxonomy_dir ncbi_taxonomy \
+  --evidence_ranks species genus family order class phylum superkingdom \
+  --max_per_species_per_k 100000 \
+  --marker_selection genome_spread \
+  --genome_bin_size 10000 \
+  --max_per_genome_bin 10 \
+  --verbose
+```
+
+This workflow is designed for the key KmerSutra use case: a k-mer that appears
+species-specific in one local module may need to be downgraded to genus, family,
+clade or removed after other modules are merged. The final screenable panel is
+therefore based on globally revalidated evidence rather than local-only marker
+specificity.
+
+Parquet support is optional. If `pyarrow` is not installed, normal TSV/SQLite
+builds still work; only the Parquet module export/import commands require the
+optional dependency.

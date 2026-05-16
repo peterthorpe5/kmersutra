@@ -10,6 +10,7 @@ from kmersutra.config import load_genome_config
 from kmersutra.io import write_json, write_tsv
 from kmersutra.marker_selection import MarkerSelectionConfig, select_genome_spread_markers
 from kmersutra.logging_utils import configure_logging
+from kmersutra.parquet_modules import export_global_candidate_module
 from kmersutra.profiling import WorkflowProfiler
 from kmersutra.reporting import write_html_report
 from kmersutra.resource_monitor import ResourceMonitor
@@ -76,12 +77,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--marker_selection",
         choices=["first_seen", "genome_spread"],
-        default="first_seen",
+        default="genome_spread",
         help=(
             "Strategy used when --max_per_species_per_k limits retained "
-            "diagnostic k-mers. first_seen preserves legacy behaviour. "
-            "genome_spread thins retained markers across source contig bins "
-            "to avoid dense adjacent k-mers from one genomic region."
+            "diagnostic k-mers. genome_spread is the default and thins "
+            "retained markers across source contig bins to avoid dense "
+            "adjacent k-mers from one genomic region. first_seen preserves "
+            "legacy behaviour for exact reproducibility checks."
         ),
     )
     parser.add_argument(
@@ -98,6 +100,28 @@ def parse_args() -> argparse.Namespace:
             "Maximum retained markers from one source genome/contig/bin within "
             "an evidence bucket for --marker_selection genome_spread."
         ),
+    )
+    parser.add_argument(
+        "--write_module_parquet",
+        action="store_true",
+        help=(
+            "For --global_candidate_evidence builds, export the global source "
+            "index and retained evidence tables as optional Parquet module "
+            "files for later module merging and global revalidation."
+        ),
+    )
+    parser.add_argument(
+        "--module_parquet_dir",
+        default="",
+        help=(
+            "Output directory for --write_module_parquet. Defaults to "
+            "module_parquet inside --out_dir."
+        ),
+    )
+    parser.add_argument(
+        "--module_name",
+        default="",
+        help="Optional module name recorded in module Parquet metadata.",
     )
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument(
@@ -393,6 +417,7 @@ def main() -> None:
     logger.info("Global candidate evidence build: %s", args.global_candidate_evidence)
     logger.info("Build profiling: %s", args.profile)
     logger.info("Marker selection: %s", args.marker_selection)
+    logger.info("Write module Parquet: %s", args.write_module_parquet)
     logger.info("Genome bin size: %d", args.genome_bin_size)
     logger.info("Max per genome bin: %d", args.max_per_genome_bin)
     profiler = WorkflowProfiler()
@@ -444,6 +469,12 @@ def main() -> None:
             raise ValueError(
                 "Use only one of --target_evidence_only, "
                 "--all_candidate_evidence, or --global_candidate_evidence"
+            )
+
+        if args.write_module_parquet and not args.global_candidate_evidence:
+            raise ValueError(
+                "--write_module_parquet currently requires --global_candidate_evidence "
+                "because module merging revalidates global source-index tables"
             )
 
         if args.global_candidate_evidence:
@@ -505,6 +536,36 @@ def main() -> None:
                     max_per_genome_bin=args.max_per_genome_bin,
                 )
             collection_summary = global_candidate_result.collection_summary
+            if args.write_module_parquet:
+                module_dir = (
+                    Path(args.module_parquet_dir)
+                    if args.module_parquet_dir
+                    else out_dir / "module_parquet"
+                )
+                with profiler.time_stage(
+                    stage="export_module_parquet",
+                    detail=str(module_dir),
+                ):
+                    export_global_candidate_module(
+                        sqlite_path=global_candidate_result.sqlite_path,
+                        module_dir=module_dir,
+                        module_name=args.module_name or out_dir.name,
+                        metadata={
+                            "genome_config": str(args.genome_config),
+                            "k_values": ";".join(map(str, args.k_values)),
+                            "marker_selection": args.marker_selection,
+                            "genome_bin_size": args.genome_bin_size,
+                            "max_per_genome_bin": args.max_per_genome_bin,
+                "write_module_parquet": args.write_module_parquet,
+                "module_parquet_dir": args.module_parquet_dir,
+                "module_name": args.module_name,
+                            "max_per_species_per_k": args.max_per_species_per_k,
+                            "evidence_ranks": ";".join(args.evidence_ranks),
+                        },
+                        batch_size=args.sqlite_batch_size,
+                        logger=logger,
+                    )
+
             write_tsv(
                 records=global_candidate_result.build_summary,
                 output_path=target_evidence_summary_path,
@@ -679,6 +740,9 @@ def main() -> None:
                 "marker_selection": args.marker_selection,
                 "genome_bin_size": args.genome_bin_size,
                 "max_per_genome_bin": args.max_per_genome_bin,
+                "write_module_parquet": args.write_module_parquet,
+                "module_parquet_dir": args.module_parquet_dir,
+                "module_name": args.module_name,
                 "threads": args.threads,
                 "compact_build": args.compact_build,
                 "target_evidence_only": args.target_evidence_only,
