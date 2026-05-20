@@ -8,6 +8,11 @@ from pathlib import Path
 
 from kmersutra.features import FEATURE_FIELDNAMES, summarise_sequence_features
 from kmersutra.io import write_tsv
+from kmersutra.hierarchical import (
+    MODULE_ACTIVATION_FIELDNAMES,
+    load_module_manifest,
+    screen_file_hierarchical,
+)
 from kmersutra.lineage_interpretation import (
     LINEAGE_INTERPRETATION_FIELDNAMES,
     interpret_lineage_evidence,
@@ -41,9 +46,39 @@ def parse_args() -> argparse.Namespace:
         description="Screen FASTQ/FASTA sequences against a KmerSutra k-mer panel."
     )
     parser.add_argument("--input", required=True)
-    parser.add_argument("--panel", required=True)
+    parser.add_argument("--panel", default=None)
     parser.add_argument("--sample_id", required=True)
     parser.add_argument("--input_format", choices=["fastq", "fasta"], required=True)
+    parser.add_argument(
+        "--screen_mode",
+        choices=["hierarchical", "flat"],
+        default="hierarchical",
+        help=(
+            "Screening mode. Hierarchical is the default and activates "
+            "taxonomic modules from broad gate panels when --module_manifest "
+            "is supplied. If no module manifest is supplied, a single --panel "
+            "is screened as a compatibility fallback."
+        ),
+    )
+    parser.add_argument(
+        "--module_manifest",
+        default=None,
+        help=(
+            "Optional hierarchical module manifest TSV. Required for true "
+            "cascade screening; otherwise --panel is used as a single-panel "
+            "compatibility fallback."
+        ),
+    )
+    parser.add_argument(
+        "--hierarchical_fail_open",
+        action="store_true",
+        help=(
+            "In hierarchical mode, activate detailed modules when weak gate "
+            "evidence is observed but no gate passes strict activation "
+            "thresholds. This retains sensitivity for unresolved or unsampled "
+            "lineage signals."
+        ),
+    )
     parser.add_argument("--out_dir", required=True)
     parser.add_argument("--max_mismatches", type=int, default=0)
     parser.add_argument("--fuzzy_min_k", type=int, default=71)
@@ -193,6 +228,66 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _deduplicate_species_metadata(
+    *,
+    records: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    """Deduplicate panel species metadata records.
+
+    Parameters
+    ----------
+    records : list[dict[str, str]]
+        Species metadata records.
+
+    Returns
+    -------
+    list[dict[str, str]]
+        Deduplicated records in first-seen order.
+    """
+    seen: set[tuple[str, str]] = set()
+    output: list[dict[str, str]] = []
+    for record in records:
+        key = (record.get("species_name", ""), record.get("clade", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        output.append(record)
+    return output
+
+
+def load_expected_species_for_screening(
+    *,
+    panel_path: str | None,
+    module_manifest_path: str | None,
+) -> list[dict[str, str]]:
+    """Load expected species metadata from a panel or module manifest.
+
+    Parameters
+    ----------
+    panel_path : str or None
+        Single flat panel path.
+    module_manifest_path : str or None
+        Hierarchical module manifest path.
+
+    Returns
+    -------
+    list[dict[str, str]]
+        Deduplicated species metadata records.
+    """
+    records: list[dict[str, str]] = []
+    if module_manifest_path:
+        modules = load_module_manifest(manifest_path=module_manifest_path)
+        panel_paths = []
+        for module in modules:
+            if module.module_panel_path:
+                panel_paths.append(module.module_panel_path)
+        for module_panel in sorted(set(panel_paths)):
+            records.extend(load_panel_species_metadata(panel_path=module_panel))
+    elif panel_path:
+        records.extend(load_panel_species_metadata(panel_path=panel_path))
+    return _deduplicate_species_metadata(records=records)
+
+
 def main() -> None:
     """Run the sequence screening workflow."""
     args = parse_args()
@@ -201,7 +296,9 @@ def main() -> None:
     logger = configure_logging(log_file=out_dir / "screen_reads.log", verbose=args.verbose)
     logger.info("Starting KmerSutra screening")
     logger.info("Input: %s", args.input)
-    logger.info("Panel: %s", args.panel)
+    logger.info("Screen mode: %s", args.screen_mode)
+    logger.info("Panel: %s", args.panel or "not supplied")
+    logger.info("Module manifest: %s", args.module_manifest or "not supplied")
     logger.info("Worker processes: %d", args.threads)
     logger.info("Chunk size: %d", args.chunk_size)
     logger.info("Maximum pending chunks: %s", args.max_pending_chunks or "auto")
@@ -213,6 +310,12 @@ def main() -> None:
     logger.info("Maximum mismatches: %d", args.max_mismatches)
     logger.info("Fuzzy minimum k: %d", args.fuzzy_min_k)
     logger.info("Mixed-species calls allowed: %s", not args.disallow_mixed_species)
+    if args.screen_mode == "flat" and not args.panel:
+        raise ValueError("--panel is required when --screen_mode flat is used")
+    if args.screen_mode == "hierarchical" and not args.module_manifest and not args.panel:
+        raise ValueError(
+            "--module_manifest or --panel is required for hierarchical screening"
+        )
     call_settings = apply_species_call_preset(
         preset_name=args.call_preset,
         min_unique_kmers=args.min_unique_kmers,
@@ -255,25 +358,55 @@ def main() -> None:
     screen_profile_records: list[dict[str, object]] = []
 
     with (profiler.time_stage(stage="load_expected_species", detail="panel_metadata") if profiler else nullcontext()):
-        expected_species = load_panel_species_metadata(panel_path=args.panel)
-    logger.info("Loaded %d expected species labels from panel", len(expected_species))
+        expected_species = load_expected_species_for_screening(
+            panel_path=args.panel,
+            module_manifest_path=args.module_manifest,
+        )
+    logger.info("Loaded %d expected species labels from panel metadata", len(expected_species))
 
-    hits = screen_file_for_species_kmers(
-        input_path=args.input,
-        panel_path=args.panel,
-        sample_id=args.sample_id,
-        input_format=args.input_format,
-        max_mismatches=args.max_mismatches,
-        fuzzy_min_k=args.fuzzy_min_k,
-        threads=args.threads,
-        chunk_size=args.chunk_size,
-        max_pending_chunks=args.max_pending_chunks,
-        panel_cache_path=args.panel_cache,
-        use_panel_cache=args.use_panel_cache,
-        write_panel_cache=args.write_panel_cache,
-        profile_records=screen_profile_records if profiler else None,
-        logger=logger,
-    )
+    module_activation_records = []
+    if args.screen_mode == "hierarchical" and args.module_manifest:
+        logger.info("Running hierarchical cascade screening")
+        hierarchical_result = screen_file_hierarchical(
+            input_path=args.input,
+            module_manifest_path=args.module_manifest,
+            sample_id=args.sample_id,
+            input_format=args.input_format,
+            max_mismatches=args.max_mismatches,
+            fuzzy_min_k=args.fuzzy_min_k,
+            threads=args.threads,
+            chunk_size=args.chunk_size,
+            max_pending_chunks=args.max_pending_chunks,
+            panel_cache_path=args.panel_cache,
+            use_panel_cache=args.use_panel_cache,
+            write_panel_cache=args.write_panel_cache,
+            hierarchical_fail_open=args.hierarchical_fail_open,
+            profile_records=screen_profile_records if profiler else None,
+            logger=logger,
+        )
+        hits = hierarchical_result.hits
+        module_activation_records = hierarchical_result.activation_records
+    else:
+        if args.screen_mode == "hierarchical":
+            logger.info(
+                "No module manifest supplied; using single-panel compatibility fallback"
+            )
+        hits = screen_file_for_species_kmers(
+            input_path=args.input,
+            panel_path=args.panel,
+            sample_id=args.sample_id,
+            input_format=args.input_format,
+            max_mismatches=args.max_mismatches,
+            fuzzy_min_k=args.fuzzy_min_k,
+            threads=args.threads,
+            chunk_size=args.chunk_size,
+            max_pending_chunks=args.max_pending_chunks,
+            panel_cache_path=args.panel_cache,
+            use_panel_cache=args.use_panel_cache,
+            write_panel_cache=args.write_panel_cache,
+            profile_records=screen_profile_records if profiler else None,
+            logger=logger,
+        )
     logger.info("Detected %d diagnostic k-mer hits", len(hits))
 
     with (profiler.time_stage(stage="summarise_sequence_features", detail="ml_features") if profiler else nullcontext()):
@@ -422,6 +555,11 @@ def main() -> None:
         records=lineage_interpretation,
         output_path=out_dir / "sample_lineage_interpretation.tsv",
         fieldnames=LINEAGE_INTERPRETATION_FIELDNAMES,
+    )
+    write_tsv(
+        records=module_activation_records,
+        output_path=out_dir / "module_activation.tsv",
+        fieldnames=MODULE_ACTIVATION_FIELDNAMES,
     )
     with (profiler.time_stage(stage="write_html_report", detail="species_detection_report") if profiler else nullcontext()):
         write_html_report(

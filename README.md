@@ -1293,3 +1293,97 @@ specificity.
 Parquet support is optional. If `pyarrow` is not installed, normal TSV/SQLite
 builds still work; only the Parquet module export/import commands require the
 optional dependency.
+
+## v0.20 hierarchical cascade screening
+
+KmerSutra v0.20 introduces hierarchical cascade screening as the default
+screening mode. The aim is to make large metagenomic datasets more scalable by
+screening first with small broad-rank gate panels, then activating only the
+relevant detailed modules.
+
+The default command-line mode is now:
+
+```bash
+--screen_mode hierarchical
+```
+
+For compatibility, if `--module_manifest` is not supplied, `kmersutra-screen`
+falls back to screening the single `--panel` path exactly as previous versions
+did. To force previous flat behaviour explicitly, use:
+
+```bash
+--screen_mode flat
+```
+
+### Module manifest
+
+A hierarchical module manifest is a tab-separated file with these columns:
+
+```text
+module_id	module_name	rank	parent_module_id	gate_panel_path	module_panel_path	min_gate_unique_kmers	min_gate_positive_sequences	min_gate_k_values	min_gate_best_k
+```
+
+Example:
+
+```text
+module_id	module_name	rank	parent_module_id	gate_panel_path	module_panel_path	min_gate_unique_kmers	min_gate_positive_sequences	min_gate_k_values	min_gate_best_k
+apicomplexa	Apicomplexa	phylum		modules/apicomplexa/gate_panel.tsv.gz	modules/apicomplexa/module_panel.tsv.gz	5	2	1	51
+plasmodium	Plasmodium	genus	apicomplexa	modules/plasmodium/gate_panel.tsv.gz	modules/plasmodium/module_panel.tsv.gz	5	2	1	77
+```
+
+The broad gate panels should be sensitive and permissive. The downstream
+species reporting layer remains conservative. This means KmerSutra can retain
+unresolved lineage evidence without promoting weak neighbour evidence into a
+species diagnosis.
+
+### Hierarchical screening
+
+```bash
+kmersutra-screen \
+  --input sample.fastq.gz \
+  --input_format fastq \
+  --module_manifest kmersutra_module_manifest.tsv \
+  --sample_id sample_001 \
+  --out_dir sample_001_kmersutra \
+  --call_preset lineage_aware \
+  --threads 12 \
+  --chunk_size 10000 \
+  --use_panel_cache \
+  --no_read_level_hits \
+  --profile \
+  --verbose
+```
+
+When broad gate evidence is weak but present, fail-open mode can activate
+modules for follow-up rather than silently discarding unresolved signal:
+
+```bash
+--hierarchical_fail_open
+```
+
+The screen writes a new report:
+
+```text
+module_activation.tsv
+```
+
+This records which modules were activated, gate hit counts, unique gate k-mers,
+positive sequences, positive k values, the best k value, and the activation
+reason.
+
+### Relation to modular Parquet databases
+
+The hierarchical screen is designed to work with the v0.19 module/Parquet
+architecture. Independent modules, for example viral, apicomplexan, nematode,
+bacterial, fungal or host/background modules, can be built separately, exported
+as module source tables, merged later, and globally revalidated. The final
+hierarchical database can then retain separate gate and detailed module panels.
+
+### AI/ML extension
+
+The deterministic hierarchy is not intended to replace the planned AI/ML layer.
+It provides cleaner, structured evidence features for that layer, including
+which modules were activated, how strong the broad-rank signal was, the number
+of neighbouring taxa with weak evidence, and whether the sample is best
+interpreted as a known species, unresolved lineage, possible unsampled lineage
+or background.
