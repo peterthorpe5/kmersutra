@@ -309,3 +309,65 @@ class TestGlobalCandidateEvidenceSourceRows(unittest.TestCase):
                     taxonomy_db=taxonomy,
                     source_index_mode="not_a_mode",
                 )
+
+class TestGlobalCandidateEvidenceAssignmentOptimisation(unittest.TestCase):
+    """Tests for cached, batched global evidence assignment."""
+
+    def test_assignment_reuses_taxonomy_result_for_repeated_taxid_sets(self) -> None:
+        """Repeated taxid sets should use the cached evidence assignment."""
+        from kmersutra.global_candidate_evidence import (
+            assign_global_candidate_evidence_sqlite,
+            initialise_global_candidate_database,
+        )
+
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            taxdump = root / "taxdump"
+            write_test_taxdump(taxdump)
+            taxonomy = TaxonomyDatabase.from_taxdump(taxonomy_dir=taxdump)
+            sqlite_path = root / "global.sqlite"
+            initialise_global_candidate_database(sqlite_path=sqlite_path)
+            connection = sqlite3.connect(sqlite_path)
+            try:
+                connection.executemany(
+                    """
+                    INSERT INTO global_kmers(
+                        k, kmer, species_names, genome_ids, contig_ids,
+                        taxids, clades, roles, example_position
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        (5, "AAAAA", "Alpha target", "G1", "c1", "11", "AlphaGenus", "target_species", 1),
+                        (5, "AAAAC", "Alpha target", "G1", "c1", "11", "AlphaGenus", "target_species", 2),
+                        (5, "AAACC", "Alpha target", "G1", "c1", "11", "AlphaGenus", "target_species", 3),
+                    ],
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            original = taxonomy.best_named_ancestor
+            call_count = {"n": 0}
+
+            def counted_best_named_ancestor(*, taxids, preferred_ranks=None):
+                call_count["n"] += 1
+                return original(taxids=taxids, preferred_ranks=preferred_ranks)
+
+            taxonomy.best_named_ancestor = counted_best_named_ancestor  # type: ignore[method-assign]
+            summary = assign_global_candidate_evidence_sqlite(
+                sqlite_path=sqlite_path,
+                taxonomy_db=taxonomy,
+                preferred_ranks=["species", "genus"],
+                batch_size=2,
+                max_per_evidence_per_k=10,
+            )
+            retained = {
+                row["metric"]: row["value"]
+                for row in summary
+                if row["stage"] == "assign_global_evidence"
+            }
+
+        self.assertEqual(call_count["n"], 1)
+        self.assertEqual(retained["diagnostics_retained"], 3)
+

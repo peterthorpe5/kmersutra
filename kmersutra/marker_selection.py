@@ -9,6 +9,7 @@ sliding-window k-mers from one small genomic region.
 from __future__ import annotations
 
 import hashlib
+import heapq
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Iterable, Iterator
@@ -293,6 +294,83 @@ def _add_or_replace_genome_spread_marker(
         _replace_marker(state=state, index=replace_index, candidate=candidate)
 
 
+def _marker_sort_key(item: DiagnosticKmer) -> tuple[object, ...]:
+    """Return a deterministic output sort key for a marker.
+
+    Parameters
+    ----------
+    item : DiagnosticKmer
+        Marker to sort.
+
+    Returns
+    -------
+    tuple[object, ...]
+        Stable sort key.
+    """
+    bin_key = genome_bin_key(item=item, genome_bin_size=1)
+    return (
+        item.k,
+        item.evidence_rank,
+        item.evidence_name,
+        bin_key[0],
+        item.source_contigs,
+        int(item.example_position),
+        item.kmer,
+    )
+
+
+def _choose_bucket_markers(
+    *,
+    bin_markers: dict[tuple[str, str, int], list[DiagnosticKmer]],
+    config: MarkerSelectionConfig,
+) -> list[DiagnosticKmer]:
+    """Choose final markers for one evidence bucket.
+
+    Parameters
+    ----------
+    bin_markers : dict[tuple[str, str, int], list[DiagnosticKmer]]
+        Candidate markers retained within each source genome bin.
+    config : MarkerSelectionConfig
+        Marker-selection settings.
+
+    Returns
+    -------
+    list[DiagnosticKmer]
+        Selected markers for the evidence bucket.
+    """
+    candidates: list[DiagnosticKmer] = []
+    for markers in bin_markers.values():
+        candidates.extend(markers)
+    if config.max_per_bucket is None or len(candidates) <= config.max_per_bucket:
+        return sorted(candidates, key=_marker_sort_key)
+
+    # Prefer broad bin coverage by taking the best marker from as many bins as
+    # possible before filling remaining capacity with the next-best markers.
+    best_per_bin: list[tuple[int, tuple[str, str, int], DiagnosticKmer]] = []
+    remaining: list[tuple[int, tuple[str, str, int], DiagnosticKmer]] = []
+    for bin_key, markers in bin_markers.items():
+        ordered = sorted(markers, key=lambda item: (marker_score(item), _marker_sort_key(item)))
+        if ordered:
+            best_per_bin.append((marker_score(ordered[0]), bin_key, ordered[0]))
+            for item in ordered[1:]:
+                remaining.append((marker_score(item), bin_key, item))
+
+    selected_entries = sorted(best_per_bin, key=lambda value: (value[0], value[1]))[
+        : config.max_per_bucket
+    ]
+    selected = [entry[2] for entry in selected_entries]
+    if len(selected) < config.max_per_bucket:
+        selected_ids = {id(item) for item in selected}
+        for _, _, item in sorted(remaining, key=lambda value: (value[0], value[1])):
+            if id(item) in selected_ids:
+                continue
+            selected.append(item)
+            selected_ids.add(id(item))
+            if len(selected) >= config.max_per_bucket:
+                break
+    return sorted(selected, key=_marker_sort_key)
+
+
 def select_genome_spread_markers(
     *,
     diagnostic_kmers: Iterable[DiagnosticKmer],
@@ -311,42 +389,42 @@ def select_genome_spread_markers(
     ------
     DiagnosticKmer
         Selected diagnostic k-mer records.
+
+    Notes
+    -----
+    The implementation keeps a small bounded heap for each evidence-bucket and
+    genome-bin pair. This avoids the earlier O(N * max_per_bucket) replacement
+    scan when a bucket contained millions of candidate markers.
     """
     config.validate()
     if config.strategy != "genome_spread":
         raise ValueError("select_genome_spread_markers requires genome_spread strategy")
 
-    states: dict[tuple[str, str, str, str, int], _BucketState] = defaultdict(_BucketState)
+    # bucket -> bin -> heap of (-score, stable_order, item). The negative score
+    # makes heap[0] the current worst marker in the bin, so better candidates can
+    # replace it cheaply.
+    states: dict[
+        tuple[str, str, str, str, int],
+        dict[tuple[str, str, int], list[tuple[int, int, DiagnosticKmer]]],
+    ] = defaultdict(lambda: defaultdict(list))
+
+    stable_order = 0
     for item in diagnostic_kmers:
         key = diagnostic_retention_key(item)
-        candidate = _SelectedMarker(
-            item=item,
-            score=marker_score(item),
-            bin_key=genome_bin_key(item=item, genome_bin_size=config.genome_bin_size),
-        )
-        _add_or_replace_genome_spread_marker(
-            state=states[key],
-            candidate=candidate,
-            config=config,
-        )
+        bin_key = genome_bin_key(item=item, genome_bin_size=config.genome_bin_size)
+        score = marker_score(item)
+        heap = states[key][bin_key]
+        entry = (-score, stable_order, item)
+        stable_order += 1
+        if len(heap) < config.max_per_genome_bin:
+            heapq.heappush(heap, entry)
+            continue
+        if score < -heap[0][0]:
+            heapq.heapreplace(heap, entry)
 
-    selected_markers: list[DiagnosticKmer] = []
     for key in sorted(states):
-        state = states[key]
-        selected = sorted(
-            state.selected,
-            key=lambda marker: (
-                marker.item.k,
-                marker.item.evidence_rank,
-                marker.item.evidence_name,
-                marker.bin_key[0],
-                marker.bin_key[1],
-                marker.bin_key[2],
-                int(marker.item.example_position),
-                marker.item.kmer,
-            ),
-        )
-        selected_markers.extend(marker.item for marker in selected)
-
-    for item in selected_markers:
-        yield item
+        bin_markers: dict[tuple[str, str, int], list[DiagnosticKmer]] = {}
+        for bin_key, heap in states[key].items():
+            bin_markers[bin_key] = [entry[2] for entry in heap]
+        for item in _choose_bucket_markers(bin_markers=bin_markers, config=config):
+            yield item

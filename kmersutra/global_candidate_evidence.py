@@ -492,7 +492,27 @@ def materialise_global_kmers_from_sources(
                 "Materialising aggregated global_kmers from %d source row(s)",
                 source_rows,
             )
-        connection.execute("DELETE FROM global_kmers")
+        # Rebuild the materialised table from scratch. This is faster than
+        # inserting into the primary-keyed table created for the legacy
+        # aggregated mode because SQLite does not have to maintain the global
+        # k-mer key index during the large grouped INSERT. The assignment phase
+        # only reads this table, so a normal post-build index is sufficient.
+        connection.execute("DROP TABLE IF EXISTS global_kmers")
+        connection.execute(
+            """
+            CREATE TABLE global_kmers (
+                k INTEGER NOT NULL,
+                kmer TEXT NOT NULL,
+                species_names TEXT NOT NULL DEFAULT '',
+                genome_ids TEXT NOT NULL DEFAULT '',
+                contig_ids TEXT NOT NULL DEFAULT '',
+                taxids TEXT NOT NULL DEFAULT '',
+                clades TEXT NOT NULL DEFAULT '',
+                roles TEXT NOT NULL DEFAULT '',
+                example_position INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
         connection.execute(
             """
             INSERT INTO global_kmers(
@@ -511,6 +531,12 @@ def materialise_global_kmers_from_sources(
                 min(example_position)
             FROM global_kmer_sources
             GROUP BY k, kmer
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS global_kmers_assignment_idx
+            ON global_kmers(k, kmer)
             """
         )
         global_rows = int(
@@ -893,6 +919,261 @@ def _diagnostic_from_global_row(
     )
 
 
+def _single_semicolon_value(value: str | None) -> str:
+    """Return a value only when a semicolon field has exactly one item.
+
+    Parameters
+    ----------
+    value : str or None
+        Semicolon-separated field.
+
+    Returns
+    -------
+    str
+        The only non-empty value, or an empty string if zero or multiple values
+        are present.
+    """
+    if not value:
+        return ""
+    text = str(value)
+    if ";" not in text:
+        return text if text else ""
+    first = ""
+    for item in text.split(";"):
+        if not item:
+            continue
+        if first:
+            return ""
+        first = item
+    return first
+
+
+def _diagnostic_tuple_from_global_row(
+    *,
+    row: sqlite3.Row,
+    evidence_taxid: str,
+    evidence_name: str,
+    evidence_rank: str,
+    lineage_taxids: str,
+) -> tuple[object, ...]:
+    """Create a retained-kmer SQLite tuple from one global source row.
+
+    Parameters
+    ----------
+    row : sqlite3.Row
+        Row from ``global_kmers``.
+    evidence_taxid : str
+        Taxid represented by the diagnostic k-mer.
+    evidence_name : str
+        Taxonomic name represented by the diagnostic k-mer.
+    evidence_rank : str
+        Evidence rank.
+    lineage_taxids : str
+        Semicolon-separated lineage taxids for evidence_taxid.
+
+    Returns
+    -------
+    tuple[object, ...]
+        SQLite parameter tuple for ``retained_kmers`` insertion.
+
+    Notes
+    -----
+    This helper intentionally avoids constructing a ``DiagnosticKmer`` for the
+    evidence-assignment hot path. Large builds may evaluate millions of rows,
+    so avoiding repeated dataclass construction and repeated set parsing gives
+    a meaningful speed-up without changing the retained evidence semantics.
+    """
+    species_name = ""
+    if evidence_rank == "species":
+        species_name = _single_semicolon_value(row["species_names"])
+    clade = _single_semicolon_value(row["clades"]) or evidence_name
+    panel_type = "species_unique" if evidence_rank == "species" else f"{evidence_rank}_core"
+    return (
+        int(row["k"]),
+        row["kmer"],
+        panel_type,
+        species_name,
+        clade,
+        row["genome_ids"],
+        row["contig_ids"],
+        int(row["example_position"]),
+        evidence_taxid,
+        evidence_name,
+        evidence_rank,
+        lineage_taxids,
+        row["taxids"],
+    )
+
+
+RETAINED_KMER_INSERT_SQL = """
+    INSERT OR IGNORE INTO retained_kmers(
+        k, kmer, panel_type, species_name, clade, source_genomes,
+        source_contigs, example_position, evidence_taxid, evidence_name,
+        evidence_rank, lineage_taxids, source_taxids
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+
+
+def _flush_retained_rows(
+    *,
+    connection: sqlite3.Connection,
+    rows: list[tuple[object, ...]],
+) -> int:
+    """Flush buffered retained-kmer rows to SQLite.
+
+    Parameters
+    ----------
+    connection : sqlite3.Connection
+        Open SQLite connection.
+    rows : list[tuple[object, ...]]
+        Buffered retained-kmer rows.
+
+    Returns
+    -------
+    int
+        Number of newly inserted rows.
+    """
+    if not rows:
+        return 0
+    before = connection.total_changes
+    connection.executemany(RETAINED_KMER_INSERT_SQL, rows)
+    inserted = int(connection.total_changes - before)
+    rows.clear()
+    return inserted
+
+
+def _cached_taxid_tuple(
+    *,
+    taxid_text: str,
+    taxonomy_db: TaxonomyDatabase,
+    cache: dict[str, tuple[str, ...]],
+) -> tuple[str, ...]:
+    """Return a cached normalised taxid tuple from a semicolon field.
+
+    Parameters
+    ----------
+    taxid_text : str
+        Semicolon-separated source taxids.
+    taxonomy_db : TaxonomyDatabase
+        Taxonomy database used for taxid normalisation.
+    cache : dict[str, tuple[str, ...]]
+        Cache keyed by the raw semicolon field.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Sorted non-empty normalised taxids.
+    """
+    cached = cache.get(taxid_text)
+    if cached is not None:
+        return cached
+    values = {
+        taxonomy_db.normalise_taxid(item)
+        for item in str(taxid_text or "").split(";")
+        if item
+    }
+    result = tuple(sorted(taxid for taxid in values if taxid))
+    cache[taxid_text] = result
+    return result
+
+
+def _cached_reportable_roles(
+    *,
+    role_text: str,
+    role_filter: set[str],
+    excluded_roles: set[str],
+    cache: dict[str, bool],
+) -> bool:
+    """Return whether a semicolon role field has reportable evidence.
+
+    Parameters
+    ----------
+    role_text : str
+        Semicolon-separated roles.
+    role_filter : set[str]
+        Optional whitelist of candidate/reportable roles.
+    excluded_roles : set[str]
+        Roles that should not be reportable candidates.
+    cache : dict[str, bool]
+        Cache keyed by the raw role field.
+
+    Returns
+    -------
+    bool
+        True when the role field has at least one reportable source.
+    """
+    cached = cache.get(role_text)
+    if cached is not None:
+        return cached
+    roles = {item for item in str(role_text or "").split(";") if item}
+    result = _has_reportable_source(
+        roles=roles,
+        role_filter=role_filter,
+        excluded_roles=excluded_roles,
+    )
+    cache[role_text] = result
+    return result
+
+
+def _cached_evidence_assignment(
+    *,
+    source_taxids: tuple[str, ...],
+    taxonomy_db: TaxonomyDatabase,
+    ranks: list[str],
+    target_taxid: str,
+    cache: dict[tuple[str, ...], tuple[str, str, str, str, str]],
+) -> tuple[str, str, str, str, str]:
+    """Return cached taxonomic evidence assignment for a source-taxid tuple.
+
+    Parameters
+    ----------
+    source_taxids : tuple[str, ...]
+        Sorted normalised source taxids.
+    taxonomy_db : TaxonomyDatabase
+        Taxonomy database.
+    ranks : list[str]
+        Preferred evidence ranks.
+    target_taxid : str
+        Optional subtree restriction.
+    cache : dict[tuple[str, ...], tuple[str, str, str, str, str]]
+        Cache keyed by source taxid tuple. The first returned field is a status
+        label: ``ok``, ``unranked`` or ``outside_target``.
+
+    Returns
+    -------
+    tuple[str, str, str, str, str]
+        Status, evidence taxid, evidence name, evidence rank and semicolon
+        lineage. Non-``ok`` statuses return empty evidence fields.
+    """
+    cached = cache.get(source_taxids)
+    if cached is not None:
+        return cached
+    evidence_node = taxonomy_db.best_named_ancestor(
+        taxids=source_taxids,
+        preferred_ranks=ranks,
+    )
+    if evidence_node is None or evidence_node.rank not in ranks:
+        result = ("unranked", "", "", "", "")
+        cache[source_taxids] = result
+        return result
+    if target_taxid and not taxonomy_db.is_descendant(
+        taxid=evidence_node.taxid,
+        ancestor_taxid=target_taxid,
+    ):
+        result = ("outside_target", "", "", "", "")
+        cache[source_taxids] = result
+        return result
+    result = (
+        "ok",
+        evidence_node.taxid,
+        evidence_node.name,
+        evidence_node.rank,
+        ";".join(taxonomy_db.get_lineage(evidence_node.taxid)),
+    )
+    cache[source_taxids] = result
+    return result
+
 def assign_global_candidate_evidence_sqlite(
     *,
     sqlite_path: str | Path,
@@ -953,9 +1234,15 @@ def assign_global_candidate_evidence_sqlite(
     skipped_by_limit = 0
     duplicates = 0
 
+    taxid_tuple_cache: dict[str, tuple[str, ...]] = {}
+    role_reportable_cache: dict[str, bool] = {}
+    evidence_cache: dict[tuple[str, ...], tuple[str, str, str, str, str]] = {}
+
     connection = _connect(sqlite_path=sqlite_path)
     connection.row_factory = sqlite3.Row
+    retained_buffer: list[tuple[object, ...]] = []
     try:
+        configure_fast_global_sqlite(connection=connection)
         cursor = connection.execute(
             """
             SELECT
@@ -971,67 +1258,98 @@ def assign_global_candidate_evidence_sqlite(
                 break
             for row in rows:
                 considered += 1
-                source_taxids = {
-                    taxonomy_db.normalise_taxid(item)
-                    for item in _normalise_semicolon_set(row["taxids"])
-                }
-                source_taxids = {taxid for taxid in source_taxids if taxid}
+                source_taxids = _cached_taxid_tuple(
+                    taxid_text=row["taxids"],
+                    taxonomy_db=taxonomy_db,
+                    cache=taxid_tuple_cache,
+                )
                 if not source_taxids:
                     skipped_no_taxid += 1
                     continue
-                roles = _normalise_semicolon_set(row["roles"])
-                if not _has_reportable_source(
-                    roles=roles,
+                if not _cached_reportable_roles(
+                    role_text=row["roles"],
                     role_filter=role_filter,
                     excluded_roles=excluded_roles,
+                    cache=role_reportable_cache,
                 ):
                     skipped_non_reportable += 1
                     continue
-                evidence_node = taxonomy_db.best_named_ancestor(
-                    taxids=source_taxids,
-                    preferred_ranks=ranks,
+                (
+                    evidence_status,
+                    evidence_taxid,
+                    evidence_name,
+                    evidence_rank,
+                    lineage_taxids,
+                ) = _cached_evidence_assignment(
+                    source_taxids=source_taxids,
+                    taxonomy_db=taxonomy_db,
+                    ranks=ranks,
+                    target_taxid=target_taxid,
+                    cache=evidence_cache,
                 )
-                if evidence_node is None or evidence_node.rank not in ranks:
+                if evidence_status == "unranked":
                     skipped_unranked += 1
                     continue
-                if target_taxid and not taxonomy_db.is_descendant(
-                    taxid=evidence_node.taxid,
-                    ancestor_taxid=target_taxid,
-                ):
+                if evidence_status == "outside_target":
                     skipped_outside_target += 1
                     continue
 
-                diagnostic = _diagnostic_from_global_row(
+                diagnostic_tuple = _diagnostic_tuple_from_global_row(
                     row=row,
-                    evidence_taxid=evidence_node.taxid,
-                    evidence_name=evidence_node.name,
-                    evidence_rank=evidence_node.rank,
-                    lineage_taxids=";".join(taxonomy_db.get_lineage(evidence_node.taxid)),
+                    evidence_taxid=evidence_taxid,
+                    evidence_name=evidence_name,
+                    evidence_rank=evidence_rank,
+                    lineage_taxids=lineage_taxids,
                 )
                 retention_key = (
-                    diagnostic.panel_type,
-                    diagnostic.evidence_taxid,
-                    diagnostic.species_name,
-                    diagnostic.clade,
-                    diagnostic.k,
+                    diagnostic_tuple[2],
+                    diagnostic_tuple[8],
+                    diagnostic_tuple[3],
+                    diagnostic_tuple[4],
+                    diagnostic_tuple[0],
                 )
                 if max_per_evidence_per_k is not None:
                     if retained_counts[retention_key] >= max_per_evidence_per_k:
                         skipped_by_limit += 1
                         continue
-                if _insert_retained_diagnostic(connection=connection, diagnostic=diagnostic):
-                    retained_counts[retention_key] += 1
-                    retained += 1
-                else:
-                    duplicates += 1
+                retained_counts[retention_key] += 1
+                retained_buffer.append(diagnostic_tuple)
+                if len(retained_buffer) >= batch_size:
+                    n_buffered = len(retained_buffer)
+                    inserted = _flush_retained_rows(
+                        connection=connection,
+                        rows=retained_buffer,
+                    )
+                    retained += inserted
+                    duplicates += n_buffered - inserted
+            if retained_buffer:
+                n_buffered = len(retained_buffer)
+                inserted = _flush_retained_rows(
+                    connection=connection,
+                    rows=retained_buffer,
+                )
+                retained += inserted
+                duplicates += n_buffered - inserted
             connection.commit()
             if logger and (considered <= batch_size or considered % (batch_size * 20) == 0):
                 logger.info(
-                    "Assigned evidence for %d global k-mer keys; retained=%d; skipped_by_limit=%d",
+                    "Assigned evidence for %d global k-mer keys; retained=%d; "
+                    "skipped_by_limit=%d; taxid_cache=%d; evidence_cache=%d",
                     considered,
                     retained,
                     skipped_by_limit,
+                    len(taxid_tuple_cache),
+                    len(evidence_cache),
                 )
+        if retained_buffer:
+            n_buffered = len(retained_buffer)
+            inserted = _flush_retained_rows(
+                connection=connection,
+                rows=retained_buffer,
+            )
+            retained += inserted
+            duplicates += n_buffered - inserted
+            connection.commit()
         _record_event(
             connection=connection,
             stage="assign_global_evidence",

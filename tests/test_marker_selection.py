@@ -210,3 +210,34 @@ class TestMarkerSelection(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TestMarkerSelectionScalability(unittest.TestCase):
+    """Tests for scalable genome-spread selection behaviour."""
+
+    def test_large_bucket_respects_bucket_and_bin_limits(self) -> None:
+        """Large buckets should be thinned without violating caps."""
+        markers = [
+            make_marker(kmer=f"A{i:05d}", position=i * 10)
+            for i in range(1000)
+        ]
+        config = MarkerSelectionConfig(
+            strategy="genome_spread",
+            max_per_bucket=50,
+            genome_bin_size=100,
+            max_per_genome_bin=2,
+        )
+        selected = list(
+            select_genome_spread_markers(
+                diagnostic_kmers=markers,
+                config=config,
+            )
+        )
+        bin_counts = {}
+        for item in selected:
+            key = genome_bin_key(item=item, genome_bin_size=100)
+            bin_counts[key] = bin_counts.get(key, 0) + 1
+
+        self.assertLessEqual(len(selected), 50)
+        self.assertTrue(bin_counts)
+        self.assertLessEqual(max(bin_counts.values()), 2)
+
