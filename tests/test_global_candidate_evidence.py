@@ -168,3 +168,144 @@ class TestGlobalCandidateEvidenceBuild(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TestGlobalCandidateEvidenceSourceRows(unittest.TestCase):
+    """Tests for the faster source-row global index mode."""
+
+    def test_source_row_mode_materialises_global_kmers(self) -> None:
+        """Source-row mode should build source rows and aggregated keys."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            genome = root / "alpha.fna"
+            genome.write_text(">alpha\nAAAAACCCCCAAAAA\n", encoding="utf-8")
+            configs = [
+                GenomeConfig(
+                    genome_fasta=genome,
+                    species_name="Alpha target",
+                    taxid="11",
+                    role="target_species",
+                    clade="AlphaGenus",
+                )
+            ]
+            sqlite_path = root / "global.sqlite"
+            summary = collect_global_kmer_sources_sqlite(
+                genome_configs=configs,
+                k_values=[5],
+                sqlite_path=sqlite_path,
+                batch_size=2,
+                source_index_mode="source_rows",
+                progress_interval=3,
+            )
+            connection = sqlite3.connect(sqlite_path)
+            try:
+                n_source_rows = connection.execute(
+                    "SELECT COUNT(*) FROM global_kmer_sources"
+                ).fetchone()[0]
+                n_global_rows = connection.execute(
+                    "SELECT COUNT(*) FROM global_kmers"
+                ).fetchone()[0]
+                materialise_events = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM build_events
+                    WHERE stage='materialise_global_sources'
+                    """
+                ).fetchone()[0]
+            finally:
+                connection.close()
+
+        self.assertGreater(n_source_rows, 0)
+        self.assertGreater(n_global_rows, 0)
+        self.assertGreaterEqual(n_source_rows, n_global_rows)
+        self.assertEqual(materialise_events, 1)
+        self.assertTrue(
+            any(row["stage"] == "materialise_global_sources" for row in summary)
+        )
+
+    def test_source_row_and_aggregated_modes_retain_same_evidence(self) -> None:
+        """The faster source-row mode should preserve retained evidence calls."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            taxdump = root / "taxdump"
+            write_test_taxdump(taxdump)
+            taxonomy = TaxonomyDatabase.from_taxdump(taxonomy_dir=taxdump)
+            target = root / "target.fna"
+            neighbour = root / "neighbour.fna"
+            target.write_text(">target\nAAAAACCCCCGGGGG\n", encoding="utf-8")
+            neighbour.write_text(">neighbour\nAAAAATTTTTCCCCC\n", encoding="utf-8")
+            configs = [
+                GenomeConfig(
+                    genome_fasta=target,
+                    species_name="Alpha target",
+                    taxid="11",
+                    role="target_species",
+                    clade="AlphaGenus",
+                ),
+                GenomeConfig(
+                    genome_fasta=neighbour,
+                    species_name="Alpha neighbour",
+                    taxid="12",
+                    role="near_neighbour",
+                    clade="AlphaGenus",
+                ),
+            ]
+            source_result = build_global_candidate_evidence_sqlite(
+                genome_configs=configs,
+                k_values=[5],
+                sqlite_path=root / "source.sqlite",
+                taxonomy_db=taxonomy,
+                preferred_ranks=["species", "genus"],
+                batch_size=3,
+                max_per_evidence_per_k=50,
+                source_index_mode="source_rows",
+            )
+            aggregated_result = build_global_candidate_evidence_sqlite(
+                genome_configs=configs,
+                k_values=[5],
+                sqlite_path=root / "aggregated.sqlite",
+                taxonomy_db=taxonomy,
+                preferred_ranks=["species", "genus"],
+                batch_size=3,
+                max_per_evidence_per_k=50,
+                source_index_mode="aggregated",
+            )
+            source_evidence = {
+                (item.kmer, item.k, item.evidence_name, item.evidence_rank)
+                for item in iter_retained_global_candidate_diagnostics(
+                    sqlite_path=source_result.sqlite_path
+                )
+            }
+            aggregated_evidence = {
+                (item.kmer, item.k, item.evidence_name, item.evidence_rank)
+                for item in iter_retained_global_candidate_diagnostics(
+                    sqlite_path=aggregated_result.sqlite_path
+                )
+            }
+
+        self.assertEqual(source_evidence, aggregated_evidence)
+
+    def test_global_builder_rejects_bad_source_index_mode(self) -> None:
+        """Invalid source-index mode values should fail clearly."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            taxdump = root / "taxdump"
+            write_test_taxdump(taxdump)
+            taxonomy = TaxonomyDatabase.from_taxdump(taxonomy_dir=taxdump)
+            genome = root / "target.fna"
+            genome.write_text(">target\nAAAAACCCCC\n", encoding="utf-8")
+            configs = [
+                GenomeConfig(
+                    genome_fasta=genome,
+                    species_name="Alpha target",
+                    taxid="11",
+                    role="target_species",
+                    clade="AlphaGenus",
+                )
+            ]
+            with self.assertRaisesRegex(ValueError, "source_index_mode"):
+                build_global_candidate_evidence_sqlite(
+                    genome_configs=configs,
+                    k_values=[5],
+                    sqlite_path=root / "bad.sqlite",
+                    taxonomy_db=taxonomy,
+                    source_index_mode="not_a_mode",
+                )

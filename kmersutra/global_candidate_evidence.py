@@ -187,6 +187,22 @@ def initialise_global_candidate_database(*, sqlite_path: str | Path) -> None:
         )
         connection.execute(
             """
+            CREATE TABLE IF NOT EXISTS global_kmer_sources (
+                k INTEGER NOT NULL,
+                kmer TEXT NOT NULL,
+                species_name TEXT NOT NULL DEFAULT '',
+                genome_id TEXT NOT NULL DEFAULT '',
+                contig_id TEXT NOT NULL DEFAULT '',
+                taxid TEXT NOT NULL DEFAULT '',
+                clade TEXT NOT NULL DEFAULT '',
+                role TEXT NOT NULL DEFAULT '',
+                example_position INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (k, kmer, genome_id)
+            )
+            """
+        )
+        connection.execute(
+            """
             CREATE TABLE IF NOT EXISTS build_events (
                 event_order INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp_epoch REAL NOT NULL,
@@ -200,6 +216,12 @@ def initialise_global_candidate_database(*, sqlite_path: str | Path) -> None:
             """
             CREATE INDEX IF NOT EXISTS retained_kmers_summary_idx
             ON retained_kmers(evidence_rank, evidence_name, species_name, k)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS global_kmer_sources_key_idx
+            ON global_kmer_sources(k, kmer)
             """
         )
         connection.commit()
@@ -234,6 +256,281 @@ def _record_event(
         """,
         (time.time(), stage, detail, int(n_records)),
     )
+
+
+GLOBAL_KMER_UPSERT_SQL = """
+    INSERT INTO global_kmers(
+        k, kmer, species_names, genome_ids, contig_ids, taxids, clades,
+        roles, example_position
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(k, kmer) DO UPDATE SET
+        species_names = CASE
+            WHEN instr(';' || species_names || ';', ';' || excluded.species_names || ';') > 0
+            THEN species_names
+            WHEN species_names = '' THEN excluded.species_names
+            ELSE species_names || ';' || excluded.species_names
+        END,
+        genome_ids = CASE
+            WHEN instr(';' || genome_ids || ';', ';' || excluded.genome_ids || ';') > 0
+            THEN genome_ids
+            WHEN genome_ids = '' THEN excluded.genome_ids
+            ELSE genome_ids || ';' || excluded.genome_ids
+        END,
+        contig_ids = CASE
+            WHEN instr(';' || contig_ids || ';', ';' || excluded.contig_ids || ';') > 0
+            THEN contig_ids
+            WHEN contig_ids = '' THEN excluded.contig_ids
+            ELSE contig_ids || ';' || excluded.contig_ids
+        END,
+        taxids = CASE
+            WHEN excluded.taxids = '' THEN taxids
+            WHEN instr(';' || taxids || ';', ';' || excluded.taxids || ';') > 0
+            THEN taxids
+            WHEN taxids = '' THEN excluded.taxids
+            ELSE taxids || ';' || excluded.taxids
+        END,
+        clades = CASE
+            WHEN excluded.clades = '' THEN clades
+            WHEN instr(';' || clades || ';', ';' || excluded.clades || ';') > 0
+            THEN clades
+            WHEN clades = '' THEN excluded.clades
+            ELSE clades || ';' || excluded.clades
+        END,
+        roles = CASE
+            WHEN excluded.roles = '' THEN roles
+            WHEN instr(';' || roles || ';', ';' || excluded.roles || ';') > 0
+            THEN roles
+            WHEN roles = '' THEN excluded.roles
+            ELSE roles || ';' || excluded.roles
+        END
+"""
+
+GLOBAL_KMER_SOURCE_INSERT_SQL = """
+    INSERT OR IGNORE INTO global_kmer_sources(
+        k, kmer, species_name, genome_id, contig_id, taxid, clade, role,
+        example_position
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+
+
+def configure_fast_global_sqlite(*, connection: sqlite3.Connection) -> None:
+    """Apply pragmatic SQLite settings for rebuildable TMPDIR builds.
+
+    Parameters
+    ----------
+    connection : sqlite3.Connection
+        Open SQLite connection used during global database construction.
+
+    Notes
+    -----
+    These settings are intended for intermediate build databases that can be
+    regenerated if a job fails. Final KmerSutra outputs are still written after
+    the build completes. The settings reduce fsync and journal overhead, which
+    is usually the dominant cost when inserting millions of k-mer observations.
+    """
+    connection.execute("PRAGMA journal_mode=OFF")
+    connection.execute("PRAGMA synchronous=OFF")
+    connection.execute("PRAGMA temp_store=MEMORY")
+    connection.execute("PRAGMA locking_mode=EXCLUSIVE")
+    connection.execute("PRAGMA cache_size=-1000000")
+
+
+def _global_row_tuple(
+    *,
+    k: int,
+    kmer: str,
+    genome_config: GenomeConfig,
+    contig_id: str,
+    position: int,
+) -> tuple[object, ...]:
+    """Return an aggregated global-kmer upsert tuple.
+
+    Parameters
+    ----------
+    k : int
+        K-mer length.
+    kmer : str
+        Canonical k-mer sequence.
+    genome_config : GenomeConfig
+        Source genome metadata.
+    contig_id : str
+        Source contig identifier.
+    position : int
+        Example source position.
+
+    Returns
+    -------
+    tuple[object, ...]
+        SQLite parameter tuple for ``GLOBAL_KMER_UPSERT_SQL``.
+    """
+    return (
+        int(k),
+        kmer,
+        genome_config.species_name,
+        genome_config.genome_id,
+        contig_id,
+        genome_config.taxid,
+        genome_config.clade,
+        genome_config.role,
+        int(position),
+    )
+
+
+def _source_row_tuple(
+    *,
+    k: int,
+    kmer: str,
+    genome_config: GenomeConfig,
+    contig_id: str,
+    position: int,
+) -> tuple[object, ...]:
+    """Return a normalised source-row tuple for one genome/k-mer pair.
+
+    Parameters
+    ----------
+    k : int
+        K-mer length.
+    kmer : str
+        Canonical k-mer sequence.
+    genome_config : GenomeConfig
+        Source genome metadata.
+    contig_id : str
+        Source contig identifier.
+    position : int
+        Example source position.
+
+    Returns
+    -------
+    tuple[object, ...]
+        SQLite parameter tuple for ``GLOBAL_KMER_SOURCE_INSERT_SQL``.
+    """
+    return (
+        int(k),
+        kmer,
+        genome_config.species_name,
+        genome_config.genome_id,
+        contig_id,
+        genome_config.taxid,
+        genome_config.clade,
+        genome_config.role,
+        int(position),
+    )
+
+
+def _flush_global_rows(
+    *,
+    connection: sqlite3.Connection,
+    rows: list[tuple[object, ...]],
+    source_index_mode: str,
+) -> int:
+    """Flush buffered global source rows to SQLite.
+
+    Parameters
+    ----------
+    connection : sqlite3.Connection
+        Open SQLite connection.
+    rows : list[tuple[object, ...]]
+        Buffered SQLite parameter tuples.
+    source_index_mode : str
+        Either ``source_rows`` or ``aggregated``.
+
+    Returns
+    -------
+    int
+        Number of buffered rows flushed.
+    """
+    if not rows:
+        return 0
+    if source_index_mode == "source_rows":
+        connection.executemany(GLOBAL_KMER_SOURCE_INSERT_SQL, rows)
+    elif source_index_mode == "aggregated":
+        connection.executemany(GLOBAL_KMER_UPSERT_SQL, rows)
+    else:
+        raise ValueError(
+            "source_index_mode must be 'source_rows' or 'aggregated'"
+        )
+    flushed = len(rows)
+    rows.clear()
+    return flushed
+
+
+def materialise_global_kmers_from_sources(
+    *,
+    sqlite_path: str | Path,
+    logger: logging.Logger | None = None,
+) -> dict[str, int]:
+    """Materialise the aggregated ``global_kmers`` table from source rows.
+
+    Parameters
+    ----------
+    sqlite_path : str or pathlib.Path
+        SQLite database containing ``global_kmer_sources``.
+    source_index_mode : str, optional
+        Source-index implementation. ``source_rows`` stores one source row per
+        genome/k-mer and materialises aggregated evidence after collection.
+        ``aggregated`` preserves the legacy direct-upsert behaviour.
+    progress_interval : int, optional
+        Attempted k-mer interval for progress logging during genome indexing.
+    logger : logging.Logger or None, optional
+        Logger for progress messages.
+
+    Returns
+    -------
+    dict[str, int]
+        Counts for source rows and distinct global k-mer keys.
+    """
+    connection = _connect(sqlite_path=sqlite_path)
+    try:
+        configure_fast_global_sqlite(connection=connection)
+        source_rows = int(
+            connection.execute("SELECT COUNT(*) FROM global_kmer_sources").fetchone()[0]
+        )
+        if logger:
+            logger.info(
+                "Materialising aggregated global_kmers from %d source row(s)",
+                source_rows,
+            )
+        connection.execute("DELETE FROM global_kmers")
+        connection.execute(
+            """
+            INSERT INTO global_kmers(
+                k, kmer, species_names, genome_ids, contig_ids, taxids, clades,
+                roles, example_position
+            )
+            SELECT
+                k,
+                kmer,
+                replace(group_concat(DISTINCT species_name), ',', ';'),
+                replace(group_concat(DISTINCT genome_id), ',', ';'),
+                replace(group_concat(DISTINCT contig_id), ',', ';'),
+                replace(group_concat(DISTINCT taxid), ',', ';'),
+                replace(group_concat(DISTINCT clade), ',', ';'),
+                replace(group_concat(DISTINCT role), ',', ';'),
+                min(example_position)
+            FROM global_kmer_sources
+            GROUP BY k, kmer
+            """
+        )
+        global_rows = int(
+            connection.execute("SELECT COUNT(*) FROM global_kmers").fetchone()[0]
+        )
+        _record_event(
+            connection=connection,
+            stage="materialise_global_sources",
+            detail="source_rows_to_global_kmers",
+            n_records=global_rows,
+        )
+        connection.commit()
+        if logger:
+            logger.info(
+                "Materialised %d distinct global k-mer key(s) from source rows",
+                global_rows,
+            )
+    finally:
+        connection.close()
+    return {"source_rows": source_rows, "global_kmers": global_rows}
 
 
 def _upsert_global_kmer(
@@ -330,6 +627,8 @@ def collect_global_kmer_sources_sqlite(
     k_values: list[int],
     sqlite_path: str | Path,
     batch_size: int = 50000,
+    source_index_mode: str = "source_rows",
+    progress_interval: int = 1000000,
     logger: logging.Logger | None = None,
 ) -> list[dict[str, object]]:
     """Collect source metadata for all genomes in one global SQLite index.
@@ -354,12 +653,17 @@ def collect_global_kmer_sources_sqlite(
     """
     if batch_size <= 0:
         raise ValueError("batch_size must be positive")
+    if progress_interval <= 0:
+        raise ValueError("progress_interval must be positive")
+    if source_index_mode not in {"source_rows", "aggregated"}:
+        raise ValueError("source_index_mode must be 'source_rows' or 'aggregated'")
 
     summaries: list[dict[str, object]] = []
     configs = list(genome_configs)
     initialise_global_candidate_database(sqlite_path=sqlite_path)
     connection = _connect(sqlite_path=sqlite_path)
     try:
+        configure_fast_global_sqlite(connection=connection)
         for genome_index, config in enumerate(configs, start=1):
             if logger:
                 logger.info(
@@ -372,21 +676,52 @@ def collect_global_kmer_sources_sqlite(
                 )
             attempted = 0
             committed_at = 0
+            last_logged_at = 0
+            buffer: list[tuple[object, ...]] = []
             for record in read_fasta_records(fasta_path=config.genome_fasta):
                 for k in k_values:
                     for position, kmer in iter_kmers(sequence=record.sequence, k=k):
-                        _upsert_global_kmer(
-                            connection=connection,
-                            k=k,
-                            kmer=kmer,
-                            genome_config=config,
-                            contig_id=record.identifier,
-                            position=position,
-                        )
+                        if source_index_mode == "source_rows":
+                            buffer.append(
+                                _source_row_tuple(
+                                    k=k,
+                                    kmer=kmer,
+                                    genome_config=config,
+                                    contig_id=record.identifier,
+                                    position=position,
+                                )
+                            )
+                        else:
+                            buffer.append(
+                                _global_row_tuple(
+                                    k=k,
+                                    kmer=kmer,
+                                    genome_config=config,
+                                    contig_id=record.identifier,
+                                    position=position,
+                                )
+                            )
                         attempted += 1
-                        if attempted - committed_at >= batch_size:
+                        if len(buffer) >= batch_size:
+                            _flush_global_rows(
+                                connection=connection,
+                                rows=buffer,
+                                source_index_mode=source_index_mode,
+                            )
                             connection.commit()
                             committed_at = attempted
+                        if logger and attempted - last_logged_at >= progress_interval:
+                            logger.info(
+                                "Indexed %d attempted k-mer observations from %s",
+                                attempted,
+                                config.genome_id,
+                            )
+                            last_logged_at = attempted
+            _flush_global_rows(
+                connection=connection,
+                rows=buffer,
+                source_index_mode=source_index_mode,
+            )
             connection.commit()
             _record_event(
                 connection=connection,
@@ -403,11 +738,30 @@ def collect_global_kmer_sources_sqlite(
                     "role": config.role,
                     "taxid": config.taxid,
                     "k_values": ";".join(str(value) for value in k_values),
+                    "source_index_mode": source_index_mode,
                     "attempted_kmers": attempted,
                 }
             )
     finally:
         connection.close()
+    if source_index_mode == "source_rows":
+        materialise_summary = materialise_global_kmers_from_sources(
+            sqlite_path=sqlite_path,
+            logger=logger,
+        )
+        summaries.append(
+            {
+                "stage": "materialise_global_sources",
+                "genome_id": "",
+                "species_name": "",
+                "role": "",
+                "taxid": "",
+                "k_values": ";".join(str(value) for value in k_values),
+                "source_index_mode": source_index_mode,
+                "attempted_kmers": materialise_summary["source_rows"],
+                "distinct_global_kmers": materialise_summary["global_kmers"],
+            }
+        )
     return summaries
 
 
@@ -821,6 +1175,8 @@ def build_global_candidate_evidence_sqlite(
     excluded_candidate_roles: Iterable[str] | None = None,
     batch_size: int = 50000,
     max_per_evidence_per_k: int | None = None,
+    source_index_mode: str = "source_rows",
+    progress_interval: int = 1000000,
     logger: logging.Logger | None = None,
 ) -> GlobalCandidateEvidenceBuildResult:
     """Build a global query-agnostic evidence database.
@@ -847,6 +1203,11 @@ def build_global_candidate_evidence_sqlite(
         SQLite commit and fetch interval.
     max_per_evidence_per_k : int or None, optional
         Optional cap per evidence bucket and k.
+    source_index_mode : str, optional
+        Source-index implementation. ``source_rows`` is the default faster mode.
+        ``aggregated`` preserves the legacy direct-upsert implementation.
+    progress_interval : int, optional
+        Attempted k-mer interval for progress logging while indexing genomes.
     logger : logging.Logger or None, optional
         Logger.
 
@@ -861,6 +1222,10 @@ def build_global_candidate_evidence_sqlite(
         raise ValueError("batch_size must be positive")
     if max_per_evidence_per_k is not None and max_per_evidence_per_k <= 0:
         raise ValueError("max_per_evidence_per_k must be positive")
+    if progress_interval <= 0:
+        raise ValueError("progress_interval must be positive")
+    if source_index_mode not in {"source_rows", "aggregated"}:
+        raise ValueError("source_index_mode must be 'source_rows' or 'aggregated'")
 
     db_path = Path(sqlite_path)
     if db_path.exists():
@@ -876,12 +1241,15 @@ def build_global_candidate_evidence_sqlite(
         logger.info(
             "Each genome will be indexed once before taxonomic evidence assignment"
         )
+        logger.info("Global source-index mode: %s", source_index_mode)
 
     collection_summary = collect_global_kmer_sources_sqlite(
         genome_configs=genome_configs,
         k_values=k_values,
         sqlite_path=db_path,
         batch_size=batch_size,
+        source_index_mode=source_index_mode,
+        progress_interval=progress_interval,
         logger=logger,
     )
     assignment_summary = assign_global_candidate_evidence_sqlite(
@@ -911,6 +1279,7 @@ def build_global_candidate_evidence_sqlite(
     build_summary = [
         {"summary_name": "genome_records", "summary_value": len(genome_configs)},
         {"summary_name": "k_values", "summary_value": ";".join(map(str, k_values))},
+        {"summary_name": "global_source_index_mode", "summary_value": source_index_mode},
         {"summary_name": "global_distinct_kmer_keys", "summary_value": int(global_kmer_count)},
         {"summary_name": "diagnostics_retained", "summary_value": int(retained_count)},
         {"summary_name": "sqlite_path", "summary_value": str(db_path)},

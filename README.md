@@ -1387,3 +1387,32 @@ which modules were activated, how strong the broad-rank signal was, the number
 of neighbouring taxa with weak evidence, and whether the sample is best
 interpreted as a known species, unresolved lineage, possible unsampled lineage
 or background.
+
+
+## v0.21.0 build-speed update
+
+KmerSutra v0.21.0 changes the default global-candidate database build source
+index from the legacy aggregated upsert path to a faster `source_rows` path.
+The new mode stores one source row per genome/k-mer key using batched SQLite
+inserts, then materialises the aggregated `global_kmers` table before evidence
+assignment. This avoids repeated semicolon-string conflict updates for every
+sliding-window k-mer and is intended for large query-agnostic panel builds.
+
+The legacy behaviour remains available for regression checks:
+
+```bash
+kmersutra-build-panel ... \
+  --global_candidate_evidence \
+  --global_source_index_mode aggregated
+```
+
+The default faster mode is:
+
+```bash
+kmersutra-build-panel ... \
+  --global_candidate_evidence \
+  --global_source_index_mode source_rows
+```
+
+Progress logging during genome indexing is controlled by
+`--global_index_progress_interval`.

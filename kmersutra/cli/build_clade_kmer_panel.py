@@ -221,6 +221,26 @@ def parse_args() -> argparse.Namespace:
             "to global_candidate_evidence.sqlite inside --out_dir."
         ),
     )
+    parser.add_argument(
+        "--global_source_index_mode",
+        choices=["source_rows", "aggregated"],
+        default="source_rows",
+        help=(
+            "Source-index implementation for --global_candidate_evidence. "
+            "source_rows is the default faster mode: it stores one row per "
+            "genome/k-mer source and materialises the aggregated table after "
+            "collection. aggregated preserves the older direct upsert mode."
+        ),
+    )
+    parser.add_argument(
+        "--global_index_progress_interval",
+        type=int,
+        default=1000000,
+        help=(
+            "Attempted k-mer interval for progress logging during global "
+            "source indexing."
+        ),
+    )
 
     parser.add_argument(
         "--sqlite_path",
@@ -516,6 +536,8 @@ def main() -> None:
                         if args.marker_selection == "genome_spread"
                         else args.max_per_species_per_k
                     ),
+                    source_index_mode=args.global_source_index_mode,
+                    progress_interval=args.global_index_progress_interval,
                     logger=logger,
                 )
             with profiler.time_stage(stage="write_panel", detail=str(panel_path)):
@@ -554,6 +576,8 @@ def main() -> None:
                             "genome_config": str(args.genome_config),
                             "k_values": ";".join(map(str, args.k_values)),
                             "marker_selection": args.marker_selection,
+                            "global_source_index_mode": args.global_source_index_mode,
+                            "global_index_progress_interval": args.global_index_progress_interval,
                             "genome_bin_size": args.genome_bin_size,
                             "max_per_genome_bin": args.max_per_genome_bin,
                 "write_module_parquet": args.write_module_parquet,
@@ -753,6 +777,8 @@ def main() -> None:
                 "all_candidate_sqlite_path": args.all_candidate_sqlite_path,
                 "all_candidate_work_sqlite_path": args.all_candidate_work_sqlite_path,
                 "global_candidate_sqlite_path": args.global_candidate_sqlite_path,
+                "global_source_index_mode": args.global_source_index_mode,
+                "global_index_progress_interval": args.global_index_progress_interval,
                 "sqlite_path": args.sqlite_path,
                 "sqlite_batch_size": args.sqlite_batch_size,
                 "profile": args.profile,
