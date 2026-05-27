@@ -371,3 +371,157 @@ class TestGlobalCandidateEvidenceAssignmentOptimisation(unittest.TestCase):
         self.assertEqual(call_count["n"], 1)
         self.assertEqual(retained["diagnostics_retained"], 3)
 
+
+
+class TestGlobalCandidateEvidenceCandidateUniverse(unittest.TestCase):
+    """Tests for early genome-spread candidate-universe building."""
+
+    def test_candidate_universe_samples_bounded_candidates(self) -> None:
+        """Candidate mode should sample far fewer rows than exhaustive source mode."""
+        from kmersutra.global_candidate_evidence import (
+            collect_candidate_universe_sqlite,
+        )
+
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            genome = root / "alpha.fna"
+            genome.write_text(">alpha\n" + "ACGT" * 100 + "\n", encoding="utf-8")
+            configs = [
+                GenomeConfig(
+                    genome_fasta=genome,
+                    species_name="Alpha target",
+                    taxid="11",
+                    role="target_species",
+                    clade="AlphaGenus",
+                )
+            ]
+            sqlite_path = root / "candidate.sqlite"
+            summary = collect_candidate_universe_sqlite(
+                genome_configs=configs,
+                k_values=[5],
+                sqlite_path=sqlite_path,
+                batch_size=3,
+                genome_bin_size=100,
+                max_per_genome_bin=2,
+                progress_interval=10,
+            )
+            connection = sqlite3.connect(sqlite_path)
+            try:
+                n_candidates = connection.execute(
+                    "SELECT COUNT(*) FROM candidate_kmers"
+                ).fetchone()[0]
+                n_sources = connection.execute(
+                    "SELECT COUNT(*) FROM global_kmer_sources"
+                ).fetchone()[0]
+            finally:
+                connection.close()
+
+        attempted = int(summary[0]["attempted_kmers"])
+        sampled = int(summary[0]["sampled_candidate_kmers"])
+        self.assertGreater(attempted, sampled)
+        self.assertGreater(n_candidates, 0)
+        self.assertEqual(n_candidates, n_sources)
+        self.assertLessEqual(sampled, 8)
+
+    def test_candidate_universe_retains_species_and_genus_evidence(self) -> None:
+        """Candidate mode should globally validate sampled k-mers."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            taxdump = root / "taxdump"
+            write_test_taxdump(taxdump)
+            taxonomy = TaxonomyDatabase.from_taxdump(taxonomy_dir=taxdump)
+            target = root / "target.fna"
+            neighbour = root / "neighbour.fna"
+            target.write_text(">target\nAAAAACCCCCGGGGG\n", encoding="utf-8")
+            neighbour.write_text(">neighbour\nAAAAATTTTTCCCCC\n", encoding="utf-8")
+            configs = [
+                GenomeConfig(
+                    genome_fasta=target,
+                    species_name="Alpha target",
+                    taxid="11",
+                    role="target_species",
+                    clade="AlphaGenus",
+                ),
+                GenomeConfig(
+                    genome_fasta=neighbour,
+                    species_name="Alpha neighbour",
+                    taxid="12",
+                    role="near_neighbour",
+                    clade="AlphaGenus",
+                ),
+            ]
+            result = build_global_candidate_evidence_sqlite(
+                genome_configs=configs,
+                k_values=[5],
+                sqlite_path=root / "candidate.sqlite",
+                taxonomy_db=taxonomy,
+                preferred_ranks=["species", "genus"],
+                batch_size=2,
+                source_index_mode="candidate_universe",
+                genome_bin_size=5,
+                max_per_genome_bin=2,
+                max_per_evidence_per_k=50,
+            )
+            diagnostics = list(
+                iter_retained_global_candidate_diagnostics(sqlite_path=result.sqlite_path)
+            )
+            evidence = {(item.evidence_name, item.evidence_rank) for item in diagnostics}
+            connection = sqlite3.connect(result.sqlite_path)
+            try:
+                n_candidates = connection.execute(
+                    "SELECT COUNT(*) FROM candidate_kmers"
+                ).fetchone()[0]
+                n_sources = connection.execute(
+                    "SELECT COUNT(*) FROM global_kmer_sources"
+                ).fetchone()[0]
+            finally:
+                connection.close()
+
+        self.assertGreater(n_candidates, 0)
+        self.assertGreaterEqual(n_sources, n_candidates)
+        self.assertIn(("Alpha target", "species"), evidence)
+        self.assertIn(("Alpha neighbour", "species"), evidence)
+        self.assertIn(("AlphaGenus", "genus"), evidence)
+        self.assertTrue(
+            any(row["stage"] == "sample_candidate_universe" for row in result.collection_summary)
+        )
+        self.assertTrue(
+            any(row["stage"] == "annotate_candidate_universe" for row in result.collection_summary)
+        )
+
+    def test_candidate_universe_rejects_bad_bin_settings(self) -> None:
+        """Candidate mode should reject invalid genome-spread parameters."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            taxdump = root / "taxdump"
+            write_test_taxdump(taxdump)
+            taxonomy = TaxonomyDatabase.from_taxdump(taxonomy_dir=taxdump)
+            genome = root / "target.fna"
+            genome.write_text(">target\nAAAAACCCCC\n", encoding="utf-8")
+            configs = [
+                GenomeConfig(
+                    genome_fasta=genome,
+                    species_name="Alpha target",
+                    taxid="11",
+                    role="target_species",
+                    clade="AlphaGenus",
+                )
+            ]
+            with self.assertRaisesRegex(ValueError, "genome_bin_size"):
+                build_global_candidate_evidence_sqlite(
+                    genome_configs=configs,
+                    k_values=[5],
+                    sqlite_path=root / "bad.sqlite",
+                    taxonomy_db=taxonomy,
+                    source_index_mode="candidate_universe",
+                    genome_bin_size=0,
+                )
+            with self.assertRaisesRegex(ValueError, "max_per_genome_bin"):
+                build_global_candidate_evidence_sqlite(
+                    genome_configs=configs,
+                    k_values=[5],
+                    sqlite_path=root / "bad2.sqlite",
+                    taxonomy_db=taxonomy,
+                    source_index_mode="candidate_universe",
+                    max_per_genome_bin=0,
+                )

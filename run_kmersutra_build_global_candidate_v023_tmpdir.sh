@@ -5,7 +5,7 @@
 #$ -jc long
 #$ -mods l_hard mfree 300G
 #$ -adds l_hard h_vmem 300G
-#$ -N KSbuild_global_v021
+#$ -N KSbuild_global_v023
 
 set -euo pipefail
 
@@ -81,7 +81,7 @@ KMERSUTRA_THREADS="${KMERSUTRA_THREADS:-${NSLOTS:-24}}"
 MAX_KMERSUTRA_THREADS="${MAX_KMERSUTRA_THREADS:-24}"
 SQLITE_BATCH_SIZE="${SQLITE_BATCH_SIZE:-50000}"
 MAX_PER_SPECIES_PER_K="${MAX_PER_SPECIES_PER_K:-100000}"
-GLOBAL_SOURCE_INDEX_MODE="${GLOBAL_SOURCE_INDEX_MODE:-source_rows}"
+GLOBAL_SOURCE_INDEX_MODE="${GLOBAL_SOURCE_INDEX_MODE:-candidate_universe}"
 GLOBAL_INDEX_PROGRESS_INTERVAL="${GLOBAL_INDEX_PROGRESS_INTERVAL:-1000000}"
 MARKER_SELECTION="${MARKER_SELECTION:-genome_spread}"
 GENOME_BIN_SIZE="${GENOME_BIN_SIZE:-10000}"
@@ -129,6 +129,7 @@ log_info "K values: ${K_VALUES}"
 log_info "Threads: ${KMERSUTRA_THREADS}"
 log_info "Keep SQLite: ${KEEP_SQLITE}"
 log_info "Global source-index mode: ${GLOBAL_SOURCE_INDEX_MODE}"
+log_info "Candidate-universe mode samples genome-spread candidates before conflict annotation"
 log_info "Global index progress interval: ${GLOBAL_INDEX_PROGRESS_INTERVAL}"
 log_info "Marker selection: ${MARKER_SELECTION}"
 log_info "Genome bin size: ${GENOME_BIN_SIZE}"

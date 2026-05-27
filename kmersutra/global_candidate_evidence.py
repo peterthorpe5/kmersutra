@@ -5,12 +5,13 @@ builder. The v0.13 builder was biologically correct, but it validated each
 candidate species by rescanning every other genome. That made the build behave
 like an all-versus-all loop and became too slow for realistic panels.
 
-The global builder reads each genome once per requested k value, stores compact
-source metadata for each distinct ``(k, kmer)`` key in SQLite, and then assigns
-that k-mer to the most specific supported taxonomic evidence level using the
-complete set of observed source taxids. This keeps the query-agnostic behaviour
-needed for unknown samples while avoiding repeated candidate-versus-filter
-passes.
+The global builder supports both exhaustive and bounded candidate-universe
+construction. Exhaustive modes read each genome once per requested k value and
+store source metadata for every distinct ``(k, kmer)`` key. The scalable
+``candidate_universe`` mode first samples genome-spread candidate markers from
+each genome/bin, then rescans references only to annotate conflicts for that
+bounded candidate universe. Both routes assign k-mers to the most specific
+supported taxonomic evidence level using observed source taxids.
 """
 
 from __future__ import annotations
@@ -38,6 +39,12 @@ DEFAULT_EXCLUDED_REPORTABLE_ROLES = {
     "host_background",
     "background",
     "environmental_background",
+}
+
+VALID_GLOBAL_SOURCE_INDEX_MODES = {
+    "source_rows",
+    "aggregated",
+    "candidate_universe",
 }
 
 
@@ -203,6 +210,18 @@ def initialise_global_candidate_database(*, sqlite_path: str | Path) -> None:
         )
         connection.execute(
             """
+            CREATE TABLE IF NOT EXISTS candidate_kmers (
+                k INTEGER NOT NULL,
+                kmer TEXT NOT NULL,
+                first_genome_id TEXT NOT NULL DEFAULT '',
+                first_contig_id TEXT NOT NULL DEFAULT '',
+                first_position INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (k, kmer)
+            )
+            """
+        )
+        connection.execute(
+            """
             CREATE TABLE IF NOT EXISTS build_events (
                 event_order INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp_epoch REAL NOT NULL,
@@ -222,6 +241,12 @@ def initialise_global_candidate_database(*, sqlite_path: str | Path) -> None:
             """
             CREATE INDEX IF NOT EXISTS global_kmer_sources_key_idx
             ON global_kmer_sources(k, kmer)
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS candidate_kmers_k_idx
+            ON candidate_kmers(k)
             """
         )
         connection.commit()
@@ -312,6 +337,13 @@ GLOBAL_KMER_SOURCE_INSERT_SQL = """
         example_position
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+
+CANDIDATE_KMER_INSERT_SQL = """
+    INSERT OR IGNORE INTO candidate_kmers(
+        k, kmer, first_genome_id, first_contig_id, first_position
+    )
+    VALUES (?, ?, ?, ?, ?)
 """
 
 
@@ -449,7 +481,8 @@ def _flush_global_rows(
         connection.executemany(GLOBAL_KMER_UPSERT_SQL, rows)
     else:
         raise ValueError(
-            "source_index_mode must be 'source_rows' or 'aggregated'"
+            "source_index_mode must be one of: "
+            + ", ".join(sorted(VALID_GLOBAL_SOURCE_INDEX_MODES))
         )
     flushed = len(rows)
     rows.clear()
@@ -647,6 +680,393 @@ def _upsert_global_kmer(
     )
 
 
+
+def _candidate_row_tuple(
+    *,
+    k: int,
+    kmer: str,
+    genome_config: GenomeConfig,
+    contig_id: str,
+    position: int,
+) -> tuple[object, ...]:
+    """Return a candidate-universe row for one sampled k-mer.
+
+    Parameters
+    ----------
+    k : int
+        K-mer length.
+    kmer : str
+        Canonical k-mer sequence.
+    genome_config : GenomeConfig
+        Source genome metadata.
+    contig_id : str
+        Source contig identifier.
+    position : int
+        Zero-based position in the source contig.
+
+    Returns
+    -------
+    tuple[object, ...]
+        SQLite parameter tuple for ``CANDIDATE_KMER_INSERT_SQL``.
+    """
+    return (
+        int(k),
+        kmer,
+        genome_config.genome_id,
+        contig_id,
+        int(position),
+    )
+
+
+def _flush_candidate_rows(
+    *,
+    connection: sqlite3.Connection,
+    candidate_rows: list[tuple[object, ...]],
+    source_rows: list[tuple[object, ...]],
+) -> dict[str, int]:
+    """Flush candidate and source rows used by candidate-universe mode.
+
+    Parameters
+    ----------
+    connection : sqlite3.Connection
+        Open SQLite connection.
+    candidate_rows : list[tuple[object, ...]]
+        Buffered candidate-kmer rows.
+    source_rows : list[tuple[object, ...]]
+        Buffered source rows for the same sampled candidates or hits.
+
+    Returns
+    -------
+    dict[str, int]
+        Counts of candidate and source rows flushed from Python buffers.
+    """
+    n_candidate = len(candidate_rows)
+    n_source = len(source_rows)
+    if candidate_rows:
+        connection.executemany(CANDIDATE_KMER_INSERT_SQL, candidate_rows)
+        candidate_rows.clear()
+    if source_rows:
+        connection.executemany(GLOBAL_KMER_SOURCE_INSERT_SQL, source_rows)
+        source_rows.clear()
+    return {"candidate_rows": n_candidate, "source_rows": n_source}
+
+
+def _load_candidate_kmers_by_k(
+    *,
+    connection: sqlite3.Connection,
+) -> dict[int, set[str]]:
+    """Load the bounded candidate universe into memory grouped by k.
+
+    Parameters
+    ----------
+    connection : sqlite3.Connection
+        Open SQLite connection containing ``candidate_kmers``.
+
+    Returns
+    -------
+    dict[int, set[str]]
+        Candidate k-mers grouped by k value.
+    """
+    candidates: dict[int, set[str]] = defaultdict(set)
+    cursor = connection.execute("SELECT k, kmer FROM candidate_kmers ORDER BY k")
+    for k_value, kmer in cursor:
+        candidates[int(k_value)].add(str(kmer))
+    return dict(candidates)
+
+
+def collect_candidate_universe_sqlite(
+    *,
+    genome_configs: Iterable[GenomeConfig],
+    k_values: list[int],
+    sqlite_path: str | Path,
+    batch_size: int = 50000,
+    genome_bin_size: int = 10000,
+    max_per_genome_bin: int = 10,
+    progress_interval: int = 1000000,
+    logger: logging.Logger | None = None,
+) -> list[dict[str, object]]:
+    """Collect a bounded genome-spread candidate k-mer universe.
+
+    This is the scalable alternative to storing every sliding-window k-mer.
+    For each genome, contig, k value and genomic bin, at most
+    ``max_per_genome_bin`` candidate k-mers are retained. Candidate source rows
+    are written immediately so every sampled candidate has at least its origin
+    genome represented before cross-genome conflict annotation.
+
+    Parameters
+    ----------
+    genome_configs : iterable of GenomeConfig
+        Genome records to sample.
+    k_values : list[int]
+        K-mer sizes to sample.
+    sqlite_path : str or pathlib.Path
+        SQLite database path.
+    batch_size : int, optional
+        SQLite flush interval for sampled candidate rows.
+    genome_bin_size : int, optional
+        Reference bases per candidate-sampling bin.
+    max_per_genome_bin : int, optional
+        Maximum sampled candidates per genome/contig/k/bin.
+    progress_interval : int, optional
+        Attempted k-mer interval for logging.
+    logger : logging.Logger or None, optional
+        Logger for progress messages.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        Per-genome candidate-sampling summaries.
+    """
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive")
+    if genome_bin_size <= 0:
+        raise ValueError("genome_bin_size must be positive")
+    if max_per_genome_bin <= 0:
+        raise ValueError("max_per_genome_bin must be positive")
+    if progress_interval <= 0:
+        raise ValueError("progress_interval must be positive")
+
+    configs = list(genome_configs)
+    initialise_global_candidate_database(sqlite_path=sqlite_path)
+    summaries: list[dict[str, object]] = []
+    connection = _connect(sqlite_path=sqlite_path)
+    try:
+        configure_fast_global_sqlite(connection=connection)
+        for genome_index, config in enumerate(configs, start=1):
+            if logger:
+                logger.info(
+                    "Sampling genome-spread candidate k-mers from genome %d/%d: %s (%s; role=%s)",
+                    genome_index,
+                    len(configs),
+                    config.genome_id,
+                    config.species_name,
+                    config.role,
+                )
+            attempted = 0
+            selected = 0
+            last_logged_at = 0
+            candidate_buffer: list[tuple[object, ...]] = []
+            source_buffer: list[tuple[object, ...]] = []
+            bin_counts: dict[tuple[int, str, int], int] = defaultdict(int)
+            for record in read_fasta_records(fasta_path=config.genome_fasta):
+                for k in k_values:
+                    for position, kmer in iter_kmers(sequence=record.sequence, k=k):
+                        attempted += 1
+                        bin_id = int(position) // genome_bin_size
+                        bin_key = (int(k), record.identifier, bin_id)
+                        if bin_counts[bin_key] < max_per_genome_bin:
+                            bin_counts[bin_key] += 1
+                            selected += 1
+                            candidate_buffer.append(
+                                _candidate_row_tuple(
+                                    k=k,
+                                    kmer=kmer,
+                                    genome_config=config,
+                                    contig_id=record.identifier,
+                                    position=position,
+                                )
+                            )
+                            source_buffer.append(
+                                _source_row_tuple(
+                                    k=k,
+                                    kmer=kmer,
+                                    genome_config=config,
+                                    contig_id=record.identifier,
+                                    position=position,
+                                )
+                            )
+                        if len(candidate_buffer) + len(source_buffer) >= batch_size:
+                            _flush_candidate_rows(
+                                connection=connection,
+                                candidate_rows=candidate_buffer,
+                                source_rows=source_buffer,
+                            )
+                            connection.commit()
+                        if logger and attempted - last_logged_at >= progress_interval:
+                            logger.info(
+                                "Sampled %d candidate k-mer(s) from %d attempted observations in %s",
+                                selected,
+                                attempted,
+                                config.genome_id,
+                            )
+                            last_logged_at = attempted
+            _flush_candidate_rows(
+                connection=connection,
+                candidate_rows=candidate_buffer,
+                source_rows=source_buffer,
+            )
+            connection.commit()
+            _record_event(
+                connection=connection,
+                stage="sample_candidate_universe",
+                detail=f"{config.genome_id}:{config.species_name}",
+                n_records=selected,
+            )
+            connection.commit()
+            summaries.append(
+                {
+                    "stage": "sample_candidate_universe",
+                    "genome_id": config.genome_id,
+                    "species_name": config.species_name,
+                    "role": config.role,
+                    "taxid": config.taxid,
+                    "k_values": ";".join(str(value) for value in k_values),
+                    "source_index_mode": "candidate_universe",
+                    "attempted_kmers": attempted,
+                    "sampled_candidate_kmers": selected,
+                    "genome_bin_size": genome_bin_size,
+                    "max_per_genome_bin": max_per_genome_bin,
+                }
+            )
+    finally:
+        connection.close()
+    return summaries
+
+
+def annotate_candidate_universe_sources_sqlite(
+    *,
+    genome_configs: Iterable[GenomeConfig],
+    k_values: list[int],
+    sqlite_path: str | Path,
+    batch_size: int = 50000,
+    progress_interval: int = 1000000,
+    logger: logging.Logger | None = None,
+) -> list[dict[str, object]]:
+    """Annotate candidate-universe k-mers against all source genomes.
+
+    Each genome is scanned, but only k-mers present in the bounded candidate
+    universe are written to ``global_kmer_sources``. This preserves global
+    near-neighbour/outgroup validation while avoiding SQLite writes for every
+    non-candidate sliding-window observation.
+
+    Parameters
+    ----------
+    genome_configs : iterable of GenomeConfig
+        Genome records to scan for candidate hits.
+    k_values : list[int]
+        K-mer sizes to scan.
+    sqlite_path : str or pathlib.Path
+        SQLite database path.
+    batch_size : int, optional
+        SQLite flush interval for source-hit rows.
+    progress_interval : int, optional
+        Attempted k-mer interval for logging.
+    logger : logging.Logger or None, optional
+        Logger for progress messages.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        Per-genome candidate-hit annotation summaries.
+    """
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive")
+    if progress_interval <= 0:
+        raise ValueError("progress_interval must be positive")
+
+    configs = list(genome_configs)
+    connection = _connect(sqlite_path=sqlite_path)
+    try:
+        configure_fast_global_sqlite(connection=connection)
+        candidates_by_k = _load_candidate_kmers_by_k(connection=connection)
+        candidate_count = sum(len(values) for values in candidates_by_k.values())
+        if logger:
+            logger.info(
+                "Loaded %d distinct candidate k-mer(s) across %d k value(s) for conflict annotation",
+                candidate_count,
+                len(candidates_by_k),
+            )
+    finally:
+        connection.close()
+
+    summaries: list[dict[str, object]] = []
+    connection = _connect(sqlite_path=sqlite_path)
+    try:
+        configure_fast_global_sqlite(connection=connection)
+        for genome_index, config in enumerate(configs, start=1):
+            if logger:
+                logger.info(
+                    "Annotating candidate hits in genome %d/%d: %s (%s; role=%s)",
+                    genome_index,
+                    len(configs),
+                    config.genome_id,
+                    config.species_name,
+                    config.role,
+                )
+            attempted = 0
+            matched = 0
+            last_logged_at = 0
+            source_buffer: list[tuple[object, ...]] = []
+            for record in read_fasta_records(fasta_path=config.genome_fasta):
+                for k in k_values:
+                    candidate_set = candidates_by_k.get(int(k))
+                    if not candidate_set:
+                        continue
+                    for position, kmer in iter_kmers(sequence=record.sequence, k=k):
+                        attempted += 1
+                        if kmer not in candidate_set:
+                            if logger and attempted - last_logged_at >= progress_interval:
+                                logger.info(
+                                    "Scanned %d observations and found %d candidate hit(s) in %s",
+                                    attempted,
+                                    matched,
+                                    config.genome_id,
+                                )
+                                last_logged_at = attempted
+                            continue
+                        matched += 1
+                        source_buffer.append(
+                            _source_row_tuple(
+                                k=k,
+                                kmer=kmer,
+                                genome_config=config,
+                                contig_id=record.identifier,
+                                position=position,
+                            )
+                        )
+                        if len(source_buffer) >= batch_size:
+                            connection.executemany(
+                                GLOBAL_KMER_SOURCE_INSERT_SQL,
+                                source_buffer,
+                            )
+                            source_buffer.clear()
+                            connection.commit()
+                        if logger and attempted - last_logged_at >= progress_interval:
+                            logger.info(
+                                "Scanned %d observations and found %d candidate hit(s) in %s",
+                                attempted,
+                                matched,
+                                config.genome_id,
+                            )
+                            last_logged_at = attempted
+            if source_buffer:
+                connection.executemany(GLOBAL_KMER_SOURCE_INSERT_SQL, source_buffer)
+                source_buffer.clear()
+            connection.commit()
+            _record_event(
+                connection=connection,
+                stage="annotate_candidate_universe",
+                detail=f"{config.genome_id}:{config.species_name}",
+                n_records=matched,
+            )
+            connection.commit()
+            summaries.append(
+                {
+                    "stage": "annotate_candidate_universe",
+                    "genome_id": config.genome_id,
+                    "species_name": config.species_name,
+                    "role": config.role,
+                    "taxid": config.taxid,
+                    "k_values": ";".join(str(value) for value in k_values),
+                    "source_index_mode": "candidate_universe",
+                    "attempted_kmers": attempted,
+                    "candidate_hits": matched,
+                }
+            )
+    finally:
+        connection.close()
+    return summaries
+
 def collect_global_kmer_sources_sqlite(
     *,
     genome_configs: Iterable[GenomeConfig],
@@ -655,6 +1075,8 @@ def collect_global_kmer_sources_sqlite(
     batch_size: int = 50000,
     source_index_mode: str = "source_rows",
     progress_interval: int = 1000000,
+    genome_bin_size: int = 10000,
+    max_per_genome_bin: int = 10,
     logger: logging.Logger | None = None,
 ) -> list[dict[str, object]]:
     """Collect source metadata for all genomes in one global SQLite index.
@@ -681,11 +1103,58 @@ def collect_global_kmer_sources_sqlite(
         raise ValueError("batch_size must be positive")
     if progress_interval <= 0:
         raise ValueError("progress_interval must be positive")
-    if source_index_mode not in {"source_rows", "aggregated"}:
-        raise ValueError("source_index_mode must be 'source_rows' or 'aggregated'")
+    if genome_bin_size <= 0:
+        raise ValueError("genome_bin_size must be positive")
+    if max_per_genome_bin <= 0:
+        raise ValueError("max_per_genome_bin must be positive")
+    if source_index_mode not in VALID_GLOBAL_SOURCE_INDEX_MODES:
+        raise ValueError(
+            "source_index_mode must be one of: "
+            + ", ".join(sorted(VALID_GLOBAL_SOURCE_INDEX_MODES))
+        )
+
+    configs = list(genome_configs)
+    if source_index_mode == "candidate_universe":
+        summaries = collect_candidate_universe_sqlite(
+            genome_configs=configs,
+            k_values=k_values,
+            sqlite_path=sqlite_path,
+            batch_size=batch_size,
+            genome_bin_size=genome_bin_size,
+            max_per_genome_bin=max_per_genome_bin,
+            progress_interval=progress_interval,
+            logger=logger,
+        )
+        summaries.extend(
+            annotate_candidate_universe_sources_sqlite(
+                genome_configs=configs,
+                k_values=k_values,
+                sqlite_path=sqlite_path,
+                batch_size=batch_size,
+                progress_interval=progress_interval,
+                logger=logger,
+            )
+        )
+        materialise_summary = materialise_global_kmers_from_sources(
+            sqlite_path=sqlite_path,
+            logger=logger,
+        )
+        summaries.append(
+            {
+                "stage": "materialise_global_sources",
+                "genome_id": "",
+                "species_name": "",
+                "role": "",
+                "taxid": "",
+                "k_values": ";".join(str(value) for value in k_values),
+                "source_index_mode": source_index_mode,
+                "attempted_kmers": materialise_summary["source_rows"],
+                "distinct_global_kmers": materialise_summary["global_kmers"],
+            }
+        )
+        return summaries
 
     summaries: list[dict[str, object]] = []
-    configs = list(genome_configs)
     initialise_global_candidate_database(sqlite_path=sqlite_path)
     connection = _connect(sqlite_path=sqlite_path)
     try:
@@ -1495,6 +1964,8 @@ def build_global_candidate_evidence_sqlite(
     max_per_evidence_per_k: int | None = None,
     source_index_mode: str = "source_rows",
     progress_interval: int = 1000000,
+    genome_bin_size: int = 10000,
+    max_per_genome_bin: int = 10,
     logger: logging.Logger | None = None,
 ) -> GlobalCandidateEvidenceBuildResult:
     """Build a global query-agnostic evidence database.
@@ -1542,8 +2013,11 @@ def build_global_candidate_evidence_sqlite(
         raise ValueError("max_per_evidence_per_k must be positive")
     if progress_interval <= 0:
         raise ValueError("progress_interval must be positive")
-    if source_index_mode not in {"source_rows", "aggregated"}:
-        raise ValueError("source_index_mode must be 'source_rows' or 'aggregated'")
+    if source_index_mode not in VALID_GLOBAL_SOURCE_INDEX_MODES:
+        raise ValueError(
+            "source_index_mode must be one of: "
+            + ", ".join(sorted(VALID_GLOBAL_SOURCE_INDEX_MODES))
+        )
 
     db_path = Path(sqlite_path)
     if db_path.exists():
@@ -1568,6 +2042,8 @@ def build_global_candidate_evidence_sqlite(
         batch_size=batch_size,
         source_index_mode=source_index_mode,
         progress_interval=progress_interval,
+        genome_bin_size=genome_bin_size,
+        max_per_genome_bin=max_per_genome_bin,
         logger=logger,
     )
     assignment_summary = assign_global_candidate_evidence_sqlite(

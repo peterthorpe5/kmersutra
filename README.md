@@ -21,6 +21,57 @@ KmerSutra builds diagnostic k-mer panels from target genomes and outgroup genome
 
 The first implementation uses exact canonical k-mer matching. Optional fuzzy matching by Hamming distance is available for long k-mers, but should be benchmarked carefully before being used for final biological interpretation.
 
+
+
+## v0.23.0 scalable candidate-universe builder
+
+KmerSutra v0.23.0 adds a new global source-index mode for large
+query-agnostic database builds:
+
+```bash
+--global_source_index_mode candidate_universe
+```
+
+This is now the default for `--global_candidate_evidence` builds. Earlier
+source-row builds were biologically correct but still attempted to write source
+evidence for every sliding-window k-mer in every genome before the final marker
+cap was applied. That is too expensive for large panels.
+
+The candidate-universe builder changes the order of operations:
+
+1. sample bounded genome-spread candidate k-mers from each genome, contig, k
+   value and positional bin;
+2. combine those candidates into a candidate marker universe;
+3. rescan references and only record source hits for k-mers in that bounded
+   universe;
+4. assign taxonomic evidence from the observed candidate source pattern;
+5. write the final screenable panel.
+
+This keeps the intended KmerSutra logic: markers are still globally validated
+against near-neighbours and outgroups, and can still be downgraded from species
+to genus or broader evidence. The key change is that KmerSutra no longer needs
+to store every overlapping sliding-window k-mer as a candidate marker.
+
+Important parameters:
+
+```bash
+--global_source_index_mode candidate_universe
+--marker_selection genome_spread
+--genome_bin_size 10000
+--max_per_genome_bin 10
+--max_per_species_per_k 100000
+```
+
+Legacy modes remain available for regression checks:
+
+```bash
+--global_source_index_mode source_rows
+--global_source_index_mode aggregated
+```
+
+`source_rows` stores every genome/k-mer source row before materialisation.
+`aggregated` preserves the older direct-upsert behaviour.
+
 ## Installation
 
 For development:

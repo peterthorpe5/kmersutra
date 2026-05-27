@@ -223,13 +223,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--global_source_index_mode",
-        choices=["source_rows", "aggregated"],
-        default="source_rows",
+        choices=["candidate_universe", "source_rows", "aggregated"],
+        default="candidate_universe",
         help=(
             "Source-index implementation for --global_candidate_evidence. "
-            "source_rows is the default faster mode: it stores one row per "
-            "genome/k-mer source and materialises the aggregated table after "
-            "collection. aggregated preserves the older direct upsert mode."
+            "candidate_universe is the scalable default: it samples bounded "
+            "genome-spread candidate markers before global conflict annotation. "
+            "source_rows stores every genome/k-mer source row before "
+            "materialisation. aggregated preserves the older direct-upsert mode."
         ),
     )
     parser.add_argument(
@@ -538,6 +539,8 @@ def main() -> None:
                     ),
                     source_index_mode=args.global_source_index_mode,
                     progress_interval=args.global_index_progress_interval,
+                    genome_bin_size=args.genome_bin_size,
+                    max_per_genome_bin=args.max_per_genome_bin,
                     logger=logger,
                 )
             with profiler.time_stage(stage="write_panel", detail=str(panel_path)):
