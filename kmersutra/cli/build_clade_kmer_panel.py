@@ -563,6 +563,15 @@ def _maybe_write_panel_parquet(
             records=records,
             output_path=panel_parquet_path,
         )
+    except ValueError as exc:
+        if "contains no diagnostic records" not in str(exc):
+            raise
+        logger.warning(
+            "Skipping Parquet screen-panel export because the TSV panel contains "
+            "no diagnostic records: %s",
+            panel_path,
+        )
+        return None
     except OptionalParquetDependencyError:
         if panel_storage_format == "parquet":
             raise

@@ -1,3 +1,0 @@
-module_id	module_name	rank	parent_module_id	gate_panel_path	module_panel_path	min_gate_unique_kmers	min_gate_positive_sequences	min_gate_k_values	min_gate_best_k
-apicomplexa	Apicomplexa	phylum		modules/apicomplexa/gate_panel.tsv.gz	modules/apicomplexa/module_panel.tsv.gz	5	2	1	51
-plasmodium	Plasmodium	genus	apicomplexa	modules/plasmodium/gate_panel.tsv.gz	modules/plasmodium/module_panel.tsv.gz	5	2	1	77

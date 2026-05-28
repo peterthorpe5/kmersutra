@@ -13,6 +13,7 @@ from kmersutra.module_export import (
     ModuleExportConfig,
     export_hierarchical_modules_from_panel,
     infer_genus_from_record,
+    read_panel_records,
     safe_module_id,
 )
 
@@ -151,7 +152,7 @@ class TestAutomaticModuleExport(unittest.TestCase):
             plasmodium = [m for m in loaded if m.module_id == "genus_plasmodium"][0]
             self.assertTrue(Path(plasmodium.gate_panel_path).is_file())
             self.assertTrue(Path(plasmodium.module_panel_path).is_file())
-            detail_records = read_tsv(input_path=plasmodium.module_panel_path)
+            detail_records = read_panel_records(panel_path=plasmodium.module_panel_path)
             self.assertTrue(
                 any(record["species_name"] == "Plasmodium vivax" for record in detail_records)
             )

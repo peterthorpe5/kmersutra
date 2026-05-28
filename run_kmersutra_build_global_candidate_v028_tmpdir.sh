@@ -5,7 +5,7 @@
 #$ -jc long
 #$ -mods l_hard mfree 300G
 #$ -adds l_hard h_vmem 300G
-#$ -N KSbuild_global_v021
+#$ -N KSbuild_global_v028
 
 set -euo pipefail
 
@@ -81,14 +81,23 @@ KMERSUTRA_THREADS="${KMERSUTRA_THREADS:-${NSLOTS:-24}}"
 MAX_KMERSUTRA_THREADS="${MAX_KMERSUTRA_THREADS:-24}"
 SQLITE_BATCH_SIZE="${SQLITE_BATCH_SIZE:-50000}"
 MAX_PER_SPECIES_PER_K="${MAX_PER_SPECIES_PER_K:-100000}"
-GLOBAL_SOURCE_INDEX_MODE="${GLOBAL_SOURCE_INDEX_MODE:-source_rows}"
+GLOBAL_SOURCE_INDEX_MODE="${GLOBAL_SOURCE_INDEX_MODE:-candidate_universe}"
 GLOBAL_INDEX_PROGRESS_INTERVAL="${GLOBAL_INDEX_PROGRESS_INTERVAL:-1000000}"
 MARKER_SELECTION="${MARKER_SELECTION:-genome_spread}"
 GENOME_BIN_SIZE="${GENOME_BIN_SIZE:-10000}"
 MAX_PER_GENOME_BIN="${MAX_PER_GENOME_BIN:-10}"
+WRITE_MODULE_MANIFEST="${WRITE_MODULE_MANIFEST:-true}"
+MODULE_MANIFEST_DIR="${MODULE_MANIFEST_DIR:-}"
+MODULE_MAX_GATE_RECORDS_PER_K="${MODULE_MAX_GATE_RECORDS_PER_K:-0}"
+MODULE_MIN_GATE_UNIQUE_KMERS="${MODULE_MIN_GATE_UNIQUE_KMERS:-1}"
+MODULE_MIN_GATE_POSITIVE_SEQUENCES="${MODULE_MIN_GATE_POSITIVE_SEQUENCES:-1}"
+MODULE_MIN_GATE_K_VALUES="${MODULE_MIN_GATE_K_VALUES:-1}"
+MODULE_MIN_GATE_BEST_K="${MODULE_MIN_GATE_BEST_K:-0}"
+
 WRITE_MODULE_PARQUET="${WRITE_MODULE_PARQUET:-false}"
 MODULE_PARQUET_DIR="${MODULE_PARQUET_DIR:-${WORK_OUT_DIR}/module_parquet}"
 MODULE_NAME="${MODULE_NAME:-$(basename "${FINAL_OUT_DIR}")}"
+PANEL_STORAGE_FORMAT="${PANEL_STORAGE_FORMAT:-auto}"
 RAM_LOG_INTERVAL_SECONDS="${RAM_LOG_INTERVAL_SECONDS:-30}"
 KEEP_SQLITE="${KEEP_SQLITE:-false}"
 EVIDENCE_RANKS="${EVIDENCE_RANKS:-species genus family order class phylum superkingdom}"
@@ -129,11 +138,15 @@ log_info "K values: ${K_VALUES}"
 log_info "Threads: ${KMERSUTRA_THREADS}"
 log_info "Keep SQLite: ${KEEP_SQLITE}"
 log_info "Global source-index mode: ${GLOBAL_SOURCE_INDEX_MODE}"
+log_info "Candidate-universe mode samples genome-spread candidates before conflict annotation"
 log_info "Global index progress interval: ${GLOBAL_INDEX_PROGRESS_INTERVAL}"
 log_info "Marker selection: ${MARKER_SELECTION}"
 log_info "Genome bin size: ${GENOME_BIN_SIZE}"
 log_info "Max per genome bin: ${MAX_PER_GENOME_BIN}"
 log_info "Write module Parquet: ${WRITE_MODULE_PARQUET}"
+log_info "Write module manifest: ${WRITE_MODULE_MANIFEST}"
+log_info "Module manifest dir: ${MODULE_MANIFEST_DIR:-${WORK_OUT_DIR}/hierarchical_modules}"
+log_info "Panel storage format: ${PANEL_STORAGE_FORMAT}"
 
 df -h "${TMP_PARENT}" >&2 || true
 
@@ -209,11 +222,23 @@ BUILD_COMMAND=(
     --marker_selection "${MARKER_SELECTION}"
     --genome_bin_size "${GENOME_BIN_SIZE}"
     --max_per_genome_bin "${MAX_PER_GENOME_BIN}"
+    --module_min_gate_unique_kmers "${MODULE_MIN_GATE_UNIQUE_KMERS}"
+    --module_min_gate_positive_sequences "${MODULE_MIN_GATE_POSITIVE_SEQUENCES}"
+    --module_min_gate_k_values "${MODULE_MIN_GATE_K_VALUES}"
+    --module_min_gate_best_k "${MODULE_MIN_GATE_BEST_K}"
+    --module_max_gate_records_per_k "${MODULE_MAX_GATE_RECORDS_PER_K}"
+    --panel_storage_format "${PANEL_STORAGE_FORMAT}"
     --ram_log_path "${RAM_LOG_TSV}"
     --ram_log_interval_seconds "${RAM_LOG_INTERVAL_SECONDS}"
     --profile
     --verbose
 )
+
+if [ "${WRITE_MODULE_MANIFEST}" != "true" ]; then
+    BUILD_COMMAND+=(--no_write_module_manifest)
+elif [ -n "${MODULE_MANIFEST_DIR}" ]; then
+    BUILD_COMMAND+=(--module_manifest_dir "${MODULE_MANIFEST_DIR}")
+fi
 
 if [ "${WRITE_MODULE_PARQUET}" = "true" ]; then
     BUILD_COMMAND+=(
