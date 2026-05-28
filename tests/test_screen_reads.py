@@ -5,7 +5,9 @@ import unittest
 from kmersutra.build_panel import DiagnosticKmer
 from kmersutra.fasta import SequenceRecord
 from kmersutra.screen_reads import (
+    build_orientation_aware_exact_index,
     iter_mismatch_neighbourhood,
+    iter_unambiguous_windows,
     screen_records_for_species_kmers,
     screen_sequence_for_kmers,
 )
@@ -13,6 +15,75 @@ from kmersutra.screen_reads import (
 
 class TestScreenReads(unittest.TestCase):
     """Tests for screening sequences against a panel."""
+
+    def test_orientation_aware_index_adds_reverse_complement_key(self) -> None:
+        """Orientation-aware exact index should include reverse complements."""
+        diagnostic = DiagnosticKmer(
+            kmer="AAAAC",
+            k=5,
+            panel_type="species_unique",
+            species_name="Alpha",
+            clade="Demo",
+            source_genomes="g1",
+            source_contigs="c1",
+            example_position=0,
+        )
+        oriented = build_orientation_aware_exact_index(
+            panel_index={5: {"AAAAC": [diagnostic]}},
+        )
+        self.assertIn("AAAAC", oriented[5])
+        self.assertIn("GTTTT", oriented[5])
+        self.assertEqual(oriented[5]["GTTTT"][0].species_name, "Alpha")
+
+    def test_unambiguous_windows_skip_ambiguous_segments(self) -> None:
+        """Fast exact windows should skip ambiguous bases without losing offsets."""
+        windows = list(iter_unambiguous_windows(sequence="AANAAAACT", k=5))
+        self.assertEqual(windows, [(3, "AAAAC"), (4, "AAACT")])
+
+    def test_fast_exact_orientation_matches_reverse_complement_read(self) -> None:
+        """Fast exact screening should find reverse-complement panel matches."""
+        diagnostic = DiagnosticKmer(
+            kmer="AAAAC",
+            k=5,
+            panel_type="species_unique",
+            species_name="Alpha",
+            clade="Demo",
+            source_genomes="g1",
+            source_contigs="c1",
+            example_position=0,
+        )
+        oriented = build_orientation_aware_exact_index(
+            panel_index={5: {"AAAAC": [diagnostic]}},
+        )
+        record = SequenceRecord(
+            identifier="read_rc",
+            description="read_rc",
+            sequence="GGGGTTTTCCC",
+        )
+        hits = screen_sequence_for_kmers(
+            sequence_record=record,
+            panel_index=oriented,
+            sample_id="sample1",
+            sequence_type="read",
+            exact_orientation_index=True,
+        )
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0].matched_kmer, "AAAAC")
+        self.assertEqual(hits[0].query_kmer, "GTTTT")
+
+    def test_fast_exact_orientation_rejects_fuzzy_matching(self) -> None:
+        """Orientation-aware exact mode should reject fuzzy matching."""
+        record = SequenceRecord(identifier="read1", description="read1", sequence="AAAAA")
+        with self.assertRaises(ValueError):
+            screen_sequence_for_kmers(
+                sequence_record=record,
+                panel_index={},
+                sample_id="sample1",
+                sequence_type="read",
+                max_mismatches=1,
+                exact_orientation_index=True,
+            )
+
 
     def test_screen_sequence_exact_hit(self) -> None:
         """Screening should identify exact species-unique k-mer hits."""

@@ -12,13 +12,14 @@ from pathlib import Path
 from kmersutra.build_panel import DiagnosticKmer
 from kmersutra.panel_cache import load_panel_with_cache
 from kmersutra.fasta import SequenceRecord, read_fasta_records, read_fastq_records
-from kmersutra.kmers import VALID_BASES, hamming_distance, iter_kmers
+from kmersutra.kmers import VALID_BASES, hamming_distance, iter_kmers, reverse_complement
 
 _GLOBAL_PANEL_INDEX: dict[int, dict[str, list[DiagnosticKmer]]] | None = None
 _GLOBAL_SAMPLE_ID = ""
 _GLOBAL_SEQUENCE_TYPE = ""
 _GLOBAL_MAX_MISMATCHES = 0
 _GLOBAL_FUZZY_MIN_K = 71
+_GLOBAL_EXACT_ORIENTATION_INDEX = False
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,87 @@ class KmerHit:
             "evidence_rank": self.evidence_rank,
         }
 
+
+
+def build_orientation_aware_exact_index(
+    *,
+    panel_index: dict[int, dict[str, list[DiagnosticKmer]]],
+) -> dict[int, dict[str, list[DiagnosticKmer]]]:
+    """Build a forward-or-reverse-complement exact-match index.
+
+    Parameters
+    ----------
+    panel_index : dict[int, dict[str, list[DiagnosticKmer]]]
+        Canonical panel index loaded from a KmerSutra panel.
+
+    Returns
+    -------
+    dict[int, dict[str, list[DiagnosticKmer]]]
+        Orientation-aware exact-match index. For each diagnostic k-mer, both
+        the stored k-mer and its reverse complement are indexed. This allows
+        exact screening to avoid canonicalising every query k-mer, which is
+        expensive for long k values and large FASTQ files.
+    """
+    oriented: dict[int, dict[str, list[DiagnosticKmer]]] = {}
+    for k, kmer_map in panel_index.items():
+        oriented_map: dict[str, list[DiagnosticKmer]] = {}
+        for panel_kmer, diagnostics in kmer_map.items():
+            if not panel_kmer:
+                continue
+            panel_kmer_upper = panel_kmer.upper()
+            oriented_map.setdefault(panel_kmer_upper, []).extend(diagnostics)
+            reverse = reverse_complement(panel_kmer_upper)
+            if reverse != panel_kmer_upper:
+                oriented_map.setdefault(reverse, []).extend(diagnostics)
+        oriented[int(k)] = oriented_map
+    return oriented
+
+
+def iter_unambiguous_windows(
+    *,
+    sequence: str,
+    k: int,
+) -> Iterator[tuple[int, str]]:
+    """Yield raw k-length windows from unambiguous sequence segments.
+
+    Parameters
+    ----------
+    sequence : str
+        Normalised nucleotide sequence.
+    k : int
+        K-mer length.
+
+    Yields
+    ------
+    tuple[int, str]
+        Zero-based start position and raw forward-orientation k-mer.
+
+    Notes
+    -----
+    This iterator avoids the per-window ``set(kmer)`` validity check and
+    reverse-complement canonicalisation used by the general-purpose iterator.
+    It is intended for exact matching against an orientation-aware panel index.
+    """
+    if k <= 0:
+        raise ValueError("k must be a positive integer")
+    sequence_length = len(sequence)
+    if sequence_length < k:
+        return
+
+    segment_start = 0
+    while segment_start < sequence_length:
+        while segment_start < sequence_length and sequence[segment_start] not in VALID_BASES:
+            segment_start += 1
+        segment_end = segment_start
+        while segment_end < sequence_length and sequence[segment_end] in VALID_BASES:
+            segment_end += 1
+
+        if segment_end - segment_start >= k:
+            last_start = segment_end - k
+            for start in range(segment_start, last_start + 1):
+                yield start, sequence[start : start + k]
+
+        segment_start = segment_end + 1
 
 def _exact_hits(
     *,
@@ -196,6 +278,7 @@ def screen_sequence_for_kmers(
     sequence_type: str,
     max_mismatches: int = 0,
     fuzzy_min_k: int = 71,
+    exact_orientation_index: bool = False,
 ) -> list[KmerHit]:
     """Screen a sequence for diagnostic k-mers.
 
@@ -213,6 +296,11 @@ def screen_sequence_for_kmers(
         Maximum mismatches for optional fuzzy matching.
     fuzzy_min_k : int, optional
         Minimum k value eligible for fuzzy matching.
+    exact_orientation_index : bool, optional
+        If True, ``panel_index`` is assumed to contain both forward and
+        reverse-complement diagnostic keys, so query k-mers are looked up in
+        their raw forward orientation without canonicalisation. This is only
+        valid for exact matching.
 
     Returns
     -------
@@ -224,9 +312,20 @@ def screen_sequence_for_kmers(
     if max_mismatches > 2:
         raise ValueError("max_mismatches above two is not currently supported")
 
+    if exact_orientation_index and max_mismatches > 0:
+        raise ValueError("exact_orientation_index is only valid for exact matching")
+
     hits: list[KmerHit] = []
     for k, diagnostics in panel_index.items():
-        for position, query_kmer in iter_kmers(sequence=sequence_record.sequence, k=k):
+        if exact_orientation_index:
+            kmer_iterator = iter_unambiguous_windows(
+                sequence=sequence_record.sequence,
+                k=k,
+            )
+        else:
+            kmer_iterator = iter_kmers(sequence=sequence_record.sequence, k=k)
+
+        for position, query_kmer in kmer_iterator:
             matched = _exact_hits(query_kmer=query_kmer, diagnostics=diagnostics)
             if max_mismatches > 0 and k >= fuzzy_min_k:
                 matched.extend(
@@ -291,6 +390,7 @@ def _screen_chunk(
     sequence_type: str,
     max_mismatches: int,
     fuzzy_min_k: int,
+    exact_orientation_index: bool,
 ) -> list[KmerHit]:
     """Screen one chunk of records."""
     hits: list[KmerHit] = []
@@ -303,6 +403,7 @@ def _screen_chunk(
                 sequence_type=sequence_type,
                 max_mismatches=max_mismatches,
                 fuzzy_min_k=fuzzy_min_k,
+                exact_orientation_index=exact_orientation_index,
             )
         )
     return hits
@@ -314,6 +415,7 @@ def _init_worker(
     sequence_type: str,
     max_mismatches: int,
     fuzzy_min_k: int,
+    exact_orientation_index: bool,
 ) -> None:
     """Initialise worker process globals for screening."""
     global _GLOBAL_PANEL_INDEX
@@ -321,11 +423,13 @@ def _init_worker(
     global _GLOBAL_SEQUENCE_TYPE
     global _GLOBAL_MAX_MISMATCHES
     global _GLOBAL_FUZZY_MIN_K
+    global _GLOBAL_EXACT_ORIENTATION_INDEX
     _GLOBAL_PANEL_INDEX = panel_index
     _GLOBAL_SAMPLE_ID = sample_id
     _GLOBAL_SEQUENCE_TYPE = sequence_type
     _GLOBAL_MAX_MISMATCHES = max_mismatches
     _GLOBAL_FUZZY_MIN_K = fuzzy_min_k
+    _GLOBAL_EXACT_ORIENTATION_INDEX = exact_orientation_index
 
 
 def _screen_chunk_worker(records: list[SequenceRecord]) -> list[KmerHit]:
@@ -339,6 +443,7 @@ def _screen_chunk_worker(records: list[SequenceRecord]) -> list[KmerHit]:
         sequence_type=_GLOBAL_SEQUENCE_TYPE,
         max_mismatches=_GLOBAL_MAX_MISMATCHES,
         fuzzy_min_k=_GLOBAL_FUZZY_MIN_K,
+        exact_orientation_index=_GLOBAL_EXACT_ORIENTATION_INDEX,
     )
 
 
@@ -392,6 +497,13 @@ def screen_records_for_species_kmers(
     if chunk_size <= 0:
         raise ValueError("chunk_size must be a positive integer")
 
+    use_exact_orientation_index = max_mismatches == 0
+    screening_panel_index = (
+        build_orientation_aware_exact_index(panel_index=panel_index)
+        if use_exact_orientation_index
+        else panel_index
+    )
+
     if logger:
         logger.info(
             "Screening records using %d worker(s), chunk_size=%d, max_mismatches=%d",
@@ -399,6 +511,17 @@ def screen_records_for_species_kmers(
             chunk_size,
             max_mismatches,
         )
+        if use_exact_orientation_index:
+            n_keys = sum(len(kmer_map) for kmer_map in screening_panel_index.values())
+            logger.info(
+                "Using orientation-aware exact screening index with %d lookup keys",
+                n_keys,
+            )
+        else:
+            logger.info(
+                "Using canonical/fuzzy screening path because max_mismatches=%d",
+                max_mismatches,
+            )
 
     if threads == 1:
         all_hits: list[KmerHit] = []
@@ -408,11 +531,12 @@ def screen_records_for_species_kmers(
             all_hits.extend(
                 _screen_chunk(
                     records=chunk,
-                    panel_index=panel_index,
+                    panel_index=screening_panel_index,
                     sample_id=sample_id,
                     sequence_type=sequence_type,
                     max_mismatches=max_mismatches,
                     fuzzy_min_k=fuzzy_min_k,
+                    exact_orientation_index=use_exact_orientation_index,
                 )
             )
         if logger:
@@ -431,11 +555,12 @@ def screen_records_for_species_kmers(
         return executor.submit(
             _screen_chunk,
             records=chunk,
-            panel_index=panel_index,
+            panel_index=screening_panel_index,
             sample_id=sample_id,
             sequence_type=sequence_type,
             max_mismatches=max_mismatches,
             fuzzy_min_k=fuzzy_min_k,
+            exact_orientation_index=use_exact_orientation_index,
         )
 
     with ThreadPoolExecutor(max_workers=threads) as executor:
