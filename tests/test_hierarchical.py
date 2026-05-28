@@ -10,10 +10,14 @@ from unittest.mock import patch
 
 from kmersutra.cli.screen_reads_for_clade_kmers import main as screen_main
 from kmersutra.hierarchical import (
+    diagnostic_signature,
     gate_summary_passes,
+    load_combined_gate_index,
+    merge_panel_indices,
     load_module_manifest,
     order_modules_by_parentage,
     screen_file_hierarchical,
+    split_gate_hits_by_module,
     summarise_gate_hits,
 )
 from kmersutra.io import read_tsv, write_tsv
@@ -281,6 +285,167 @@ class TestHierarchicalScreening(unittest.TestCase):
                 sample_id="sample1",
                 input_format="fastq",
             )
+            self.assertTrue([hit for hit in result.hits if hit.species_name == "Plasmodium vivax"])
+
+
+    def test_merge_panel_indices_deduplicates_shared_records(self) -> None:
+        """Merged hierarchical indices should collapse duplicate diagnostics."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            panel_a = base / "panel_a.tsv"
+            panel_b = base / "panel_b.tsv"
+            self._write_panel(
+                path=panel_a,
+                kmer="AAAAA",
+                species_name="",
+                evidence_name="Apicomplexa",
+                evidence_rank="phylum",
+            )
+            self._write_panel(
+                path=panel_b,
+                kmer="AAAAA",
+                species_name="",
+                evidence_name="Apicomplexa",
+                evidence_rank="phylum",
+            )
+            from kmersutra.build_panel import load_panel
+
+            merged = merge_panel_indices(
+                panel_indices=[load_panel(panel_path=panel_a), load_panel(panel_path=panel_b)],
+            )
+            self.assertEqual(len(merged[5]["AAAAA"]), 1)
+
+    def test_combined_gate_index_tracks_module_membership(self) -> None:
+        """One combined gate index should still map hits back to modules."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            gate_a = base / "gate_a.tsv"
+            gate_b = base / "gate_b.tsv"
+            module_panel = base / "module.tsv"
+            manifest = base / "modules.tsv"
+            self._write_panel(
+                path=gate_a,
+                kmer="AAAAA",
+                species_name="",
+                evidence_name="Apicomplexa",
+                evidence_rank="phylum",
+            )
+            self._write_panel(
+                path=gate_b,
+                kmer="CCCCC",
+                species_name="",
+                evidence_name="Kinetoplastida",
+                evidence_rank="class",
+            )
+            self._write_panel(
+                path=module_panel,
+                kmer="GGGGG",
+                species_name="Plasmodium vivax",
+                evidence_name="Plasmodium vivax",
+                evidence_rank="species",
+            )
+            write_tsv(
+                records=[
+                    {
+                        "module_id": "apicomplexa",
+                        "module_name": "Apicomplexa",
+                        "rank": "phylum",
+                        "parent_module_id": "",
+                        "gate_panel_path": str(gate_a),
+                        "module_panel_path": str(module_panel),
+                        "min_gate_unique_kmers": 1,
+                        "min_gate_positive_sequences": 1,
+                        "min_gate_k_values": 1,
+                        "min_gate_best_k": 5,
+                    },
+                    {
+                        "module_id": "kinetoplastida",
+                        "module_name": "Kinetoplastida",
+                        "rank": "class",
+                        "parent_module_id": "",
+                        "gate_panel_path": str(gate_b),
+                        "module_panel_path": str(module_panel),
+                        "min_gate_unique_kmers": 1,
+                        "min_gate_positive_sequences": 1,
+                        "min_gate_k_values": 1,
+                        "min_gate_best_k": 5,
+                    },
+                ],
+                output_path=manifest,
+                fieldnames=MANIFEST_COLUMNS,
+            )
+            modules = load_module_manifest(manifest_path=manifest)
+            combined, membership = load_combined_gate_index(
+                modules=modules,
+                panel_cache_path=None,
+                use_panel_cache=False,
+                write_panel_cache=False,
+                logger=None,
+            )
+            self.assertIn("AAAAA", combined[5])
+            self.assertIn("CCCCC", combined[5])
+            signatures = {
+                diagnostic_signature(diagnostic=diagnostic): module_ids
+                for kmer_map in combined.values()
+                for diagnostics in kmer_map.values()
+                for diagnostic in diagnostics
+                for module_ids in [membership[diagnostic_signature(diagnostic=diagnostic)]]
+            }
+            self.assertIn("apicomplexa", next(iter(signatures.values())) | set().union(*signatures.values()))
+            self.assertTrue(any("kinetoplastida" in ids for ids in membership.values()))
+
+    def test_two_pass_hierarchical_screens_input_only_twice(self) -> None:
+        """Hierarchical mode should use one gate pass and one module pass."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _, _, manifest, fastq = self._write_basic_inputs(tmpdir)
+            with patch("kmersutra.hierarchical.screen_file_for_panel_index") as mocked_screen:
+                from kmersutra.screen_reads import KmerHit
+
+                mocked_screen.side_effect = [
+                    [
+                        KmerHit(
+                            sample_id="sample1",
+                            sequence_id="read1",
+                            sequence_type="read",
+                            k=5,
+                            query_position=3,
+                            matched_kmer="AAAAA",
+                            query_kmer="AAAAA",
+                            mismatches=0,
+                            panel_type="clade_core",
+                            species_name="",
+                            clade="Apicomplexa",
+                            evidence_taxid="1",
+                            evidence_name="Apicomplexa",
+                            evidence_rank="phylum",
+                        )
+                    ],
+                    [
+                        KmerHit(
+                            sample_id="sample1",
+                            sequence_id="read1",
+                            sequence_type="read",
+                            k=5,
+                            query_position=11,
+                            matched_kmer="CCCCC",
+                            query_kmer="CCCCC",
+                            mismatches=0,
+                            panel_type="species_unique",
+                            species_name="Plasmodium vivax",
+                            clade="Apicomplexa",
+                            evidence_taxid="1",
+                            evidence_name="Plasmodium vivax",
+                            evidence_rank="species",
+                        )
+                    ],
+                ]
+                result = screen_file_hierarchical(
+                    input_path=fastq,
+                    module_manifest_path=manifest,
+                    sample_id="sample1",
+                    input_format="fastq",
+                )
+            self.assertEqual(mocked_screen.call_count, 2)
             self.assertTrue([hit for hit in result.hits if hit.species_name == "Plasmodium vivax"])
 
     def test_screen_cli_hierarchical_writes_activation_report(self) -> None:

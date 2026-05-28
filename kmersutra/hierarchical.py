@@ -11,12 +11,19 @@ underlying k-mer matching semantics.
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from kmersutra.build_panel import DiagnosticKmer
 from kmersutra.io import read_tsv
-from kmersutra.screen_reads import KmerHit, screen_file_for_species_kmers
+from kmersutra.panel_cache import load_panel_with_cache
+from kmersutra.screen_reads import (
+    KmerHit,
+    screen_file_for_panel_index,
+    screen_file_for_species_kmers,
+)
 
 
 MODULE_MANIFEST_FIELDNAMES = [
@@ -437,6 +444,203 @@ def _screen_panel(
     )
 
 
+
+def diagnostic_signature(*, diagnostic: DiagnosticKmer) -> tuple[str, ...]:
+    """Return a stable signature for a diagnostic marker record.
+
+    Parameters
+    ----------
+    diagnostic : DiagnosticKmer
+        Diagnostic marker from a panel index.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Signature that can be matched back from a :class:`KmerHit`.
+    """
+    return (
+        str(diagnostic.k),
+        diagnostic.kmer,
+        diagnostic.panel_type,
+        diagnostic.species_name,
+        diagnostic.clade,
+        diagnostic.evidence_taxid,
+        diagnostic.evidence_name,
+        diagnostic.evidence_rank,
+    )
+
+
+def hit_signature(*, hit: KmerHit) -> tuple[str, ...]:
+    """Return the diagnostic-marker signature represented by a hit."""
+    return (
+        str(hit.k),
+        hit.matched_kmer,
+        hit.panel_type,
+        hit.species_name,
+        hit.clade,
+        hit.evidence_taxid,
+        hit.evidence_name,
+        hit.evidence_rank,
+    )
+
+
+def merge_panel_indices(
+    *,
+    panel_indices: Iterable[dict[int, dict[str, list[DiagnosticKmer]]]],
+) -> dict[int, dict[str, list[DiagnosticKmer]]]:
+    """Merge multiple panel indices into one lookup index.
+
+    Parameters
+    ----------
+    panel_indices : iterable of dict[int, dict[str, list[DiagnosticKmer]]]
+        Panel indices to merge.
+
+    Returns
+    -------
+    dict[int, dict[str, list[DiagnosticKmer]]]
+        Combined panel index. Duplicate diagnostic records for the same k-mer
+        are collapsed using their stable diagnostic signature.
+    """
+    merged: dict[int, dict[str, list[DiagnosticKmer]]] = defaultdict(lambda: defaultdict(list))
+    seen: set[tuple[str, ...]] = set()
+    for panel_index in panel_indices:
+        for k, kmer_map in panel_index.items():
+            for kmer, diagnostics in kmer_map.items():
+                for diagnostic in diagnostics:
+                    key = diagnostic_signature(diagnostic=diagnostic)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    merged[int(k)][kmer].append(diagnostic)
+    return {int(k): dict(kmer_map) for k, kmer_map in merged.items()}
+
+
+def _load_panel_index_for_hierarchical(
+    *,
+    panel_path: str,
+    panel_cache_path: str | Path | None,
+    use_panel_cache: bool,
+    write_panel_cache: bool,
+    logger: logging.Logger | None,
+) -> dict[int, dict[str, list[DiagnosticKmer]]]:
+    """Load one module panel with safe per-panel cache handling."""
+    if logger:
+        logger.info("Loading hierarchical panel: %s", panel_path)
+    panel_index, source = load_panel_with_cache(
+        panel_path=panel_path,
+        cache_path=_module_cache_path(
+            panel_path=panel_path,
+            panel_cache_path=panel_cache_path,
+        ),
+        use_cache=use_panel_cache,
+        write_cache=write_panel_cache,
+    )
+    if logger:
+        n_keys = sum(len(kmer_map) for kmer_map in panel_index.values())
+        logger.info(
+            "Loaded hierarchical panel from %s with %d k values and %d keys",
+            source,
+            len(panel_index),
+            n_keys,
+        )
+    return panel_index
+
+
+def load_combined_gate_index(
+    *,
+    modules: list[ModuleDefinition],
+    panel_cache_path: str | Path | None,
+    use_panel_cache: bool,
+    write_panel_cache: bool,
+    logger: logging.Logger | None,
+) -> tuple[dict[int, dict[str, list[DiagnosticKmer]]], dict[tuple[str, ...], set[str]]]:
+    """Load all gate panels into one combined index.
+
+    Returns a mapping from diagnostic signature to the module IDs whose gate
+    panels contain that diagnostic marker. This allows gate hits from one file
+    pass to be assigned back to the correct module activation summaries.
+    """
+    panel_indices = []
+    signature_to_modules: dict[tuple[str, ...], set[str]] = defaultdict(set)
+    for module in modules:
+        if not module.gate_panel_path:
+            continue
+        panel_index = _load_panel_index_for_hierarchical(
+            panel_path=module.gate_panel_path,
+            panel_cache_path=panel_cache_path,
+            use_panel_cache=use_panel_cache,
+            write_panel_cache=write_panel_cache,
+            logger=logger,
+        )
+        panel_indices.append(panel_index)
+        for kmer_map in panel_index.values():
+            for diagnostics in kmer_map.values():
+                for diagnostic in diagnostics:
+                    signature_to_modules[diagnostic_signature(diagnostic=diagnostic)].add(
+                        module.module_id
+                    )
+    combined = merge_panel_indices(panel_indices=panel_indices)
+    if logger:
+        logger.info(
+            "Prepared combined gate index from %d gate panel(s); %d k values; %d keys",
+            len(panel_indices),
+            len(combined),
+            sum(len(kmer_map) for kmer_map in combined.values()),
+        )
+    return combined, dict(signature_to_modules)
+
+
+def load_combined_module_index(
+    *,
+    modules: list[ModuleDefinition],
+    active_module_ids: set[str],
+    panel_cache_path: str | Path | None,
+    use_panel_cache: bool,
+    write_panel_cache: bool,
+    logger: logging.Logger | None,
+) -> dict[int, dict[str, list[DiagnosticKmer]]]:
+    """Load activated module panels into one combined index."""
+    panel_indices = []
+    seen_paths: set[str] = set()
+    for module in modules:
+        if module.module_id not in active_module_ids or not module.module_panel_path:
+            continue
+        if module.module_panel_path in seen_paths:
+            continue
+        seen_paths.add(module.module_panel_path)
+        panel_indices.append(
+            _load_panel_index_for_hierarchical(
+                panel_path=module.module_panel_path,
+                panel_cache_path=panel_cache_path,
+                use_panel_cache=use_panel_cache,
+                write_panel_cache=write_panel_cache,
+                logger=logger,
+            )
+        )
+    combined = merge_panel_indices(panel_indices=panel_indices)
+    if logger:
+        logger.info(
+            "Prepared combined activated-module index from %d module panel(s); "
+            "%d k values; %d keys",
+            len(panel_indices),
+            len(combined),
+            sum(len(kmer_map) for kmer_map in combined.values()),
+        )
+    return combined
+
+
+def split_gate_hits_by_module(
+    *,
+    gate_hits: Iterable[KmerHit],
+    signature_to_modules: dict[tuple[str, ...], set[str]],
+) -> dict[str, list[KmerHit]]:
+    """Assign combined gate hits back to module IDs."""
+    hits_by_module: dict[str, list[KmerHit]] = defaultdict(list)
+    for hit in gate_hits:
+        for module_id in signature_to_modules.get(hit_signature(hit=hit), set()):
+            hits_by_module[module_id].append(hit)
+    return dict(hits_by_module)
+
 def screen_file_hierarchical(
     *,
     input_path: str | Path,
@@ -508,6 +712,45 @@ def screen_file_hierarchical(
     active_modules: set[str] = set()
     weak_gate_modules: set[str] = set()
 
+    if logger:
+        logger.info(
+            "Running two-pass hierarchical cascade: combined gate screen followed "
+            "by one combined activated-module screen"
+        )
+
+    gate_index, signature_to_modules = load_combined_gate_index(
+        modules=modules,
+        panel_cache_path=panel_cache_path,
+        use_panel_cache=use_panel_cache,
+        write_panel_cache=write_panel_cache,
+        logger=logger,
+    )
+    if gate_index:
+        if logger:
+            logger.info("Screening combined gate index once for all modules")
+        gate_hits = screen_file_for_panel_index(
+            input_path=input_path,
+            panel_index=gate_index,
+            sample_id=sample_id,
+            input_format=input_format,
+            max_mismatches=max_mismatches,
+            fuzzy_min_k=fuzzy_min_k,
+            threads=threads,
+            chunk_size=chunk_size,
+            max_pending_chunks=max_pending_chunks,
+            profile_records=profile_records,
+            logger=logger,
+        )
+    else:
+        gate_hits = []
+        if logger:
+            logger.info("No gate panels found in module manifest")
+    all_hits.extend(gate_hits)
+    gate_hits_by_module = split_gate_hits_by_module(
+        gate_hits=gate_hits,
+        signature_to_modules=signature_to_modules,
+    )
+
     for module in modules:
         parent_active = not module.parent_module_id or module.parent_module_id in active_modules
         if not parent_active:
@@ -527,34 +770,11 @@ def screen_file_hierarchical(
             ))
             continue
 
-        gate_hits: list[KmerHit] = []
         if module.gate_panel_path:
-            if logger:
-                logger.info(
-                    "Screening gate panel for module %s: %s",
-                    module.module_id,
-                    module.gate_panel_path,
-                )
-            gate_hits = _screen_panel(
-                input_path=input_path,
-                panel_path=module.gate_panel_path,
-                sample_id=sample_id,
-                input_format=input_format,
-                max_mismatches=max_mismatches,
-                fuzzy_min_k=fuzzy_min_k,
-                threads=threads,
-                chunk_size=chunk_size,
-                max_pending_chunks=max_pending_chunks,
-                panel_cache_path=panel_cache_path,
-                use_panel_cache=use_panel_cache,
-                write_panel_cache=write_panel_cache,
-                profile_records=profile_records,
-                logger=logger,
-            )
-            all_hits.extend(gate_hits)
-            summary = summarise_gate_hits(hits=gate_hits)
+            module_gate_hits = gate_hits_by_module.get(module.module_id, [])
+            summary = summarise_gate_hits(hits=module_gate_hits)
             passes = gate_summary_passes(module=module, summary=summary)
-            if gate_hits and not passes:
+            if module_gate_hits and not passes:
                 weak_gate_modules.add(module.module_id)
         else:
             summary = {
@@ -606,22 +826,20 @@ def screen_file_hierarchical(
                     reason="fail_open_weak_gate_signal",
                 ))
 
-    screened_module_panels: set[str] = set()
-    for module in modules:
-        if module.module_id not in active_modules or not module.module_panel_path:
-            continue
-        if module.module_panel_path in screened_module_panels:
-            continue
-        screened_module_panels.add(module.module_panel_path)
+    module_index = load_combined_module_index(
+        modules=modules,
+        active_module_ids=active_modules,
+        panel_cache_path=panel_cache_path,
+        use_panel_cache=use_panel_cache,
+        write_panel_cache=write_panel_cache,
+        logger=logger,
+    )
+    if module_index:
         if logger:
-            logger.info(
-                "Screening activated module %s panel: %s",
-                module.module_id,
-                module.module_panel_path,
-            )
-        module_hits = _screen_panel(
+            logger.info("Screening combined activated-module index once")
+        module_hits = screen_file_for_panel_index(
             input_path=input_path,
-            panel_path=module.module_panel_path,
+            panel_index=module_index,
             sample_id=sample_id,
             input_format=input_format,
             max_mismatches=max_mismatches,
@@ -629,13 +847,12 @@ def screen_file_hierarchical(
             threads=threads,
             chunk_size=chunk_size,
             max_pending_chunks=max_pending_chunks,
-            panel_cache_path=panel_cache_path,
-            use_panel_cache=use_panel_cache,
-            write_panel_cache=write_panel_cache,
             profile_records=profile_records,
             logger=logger,
         )
         all_hits.extend(module_hits)
+    elif logger:
+        logger.info("No activated module panels to screen")
 
     return HierarchicalScreenResult(
         hits=unique_hits(hits=all_hits),

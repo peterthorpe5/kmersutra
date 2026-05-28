@@ -599,6 +599,113 @@ def screen_records_for_species_kmers(
     return all_hits
 
 
+
+def screen_file_for_panel_index(
+    *,
+    input_path: str | Path,
+    panel_index: dict[int, dict[str, list[DiagnosticKmer]]],
+    sample_id: str,
+    input_format: str,
+    max_mismatches: int = 0,
+    fuzzy_min_k: int = 71,
+    threads: int = 1,
+    chunk_size: int = 1000,
+    max_pending_chunks: int | None = None,
+    profile_records: list[dict[str, object]] | None = None,
+    logger: logging.Logger | None = None,
+) -> list[KmerHit]:
+    """Screen a FASTA or FASTQ file against a pre-loaded panel index.
+
+    Parameters
+    ----------
+    input_path : str or pathlib.Path
+        Query FASTA/FASTQ path.
+    panel_index : dict[int, dict[str, list[DiagnosticKmer]]]
+        Pre-loaded diagnostic panel index. This is used by hierarchical
+        two-pass screening to avoid writing temporary merged panel files and
+        to avoid repeatedly loading many module panels.
+    sample_id : str
+        Sample identifier.
+    input_format : str
+        Input format, either ``fasta`` or ``fastq``.
+    max_mismatches : int, optional
+        Maximum mismatches for fuzzy matching.
+    fuzzy_min_k : int, optional
+        Minimum k value eligible for fuzzy matching.
+    threads : int, optional
+        Number of worker threads.
+    chunk_size : int, optional
+        Number of records submitted per worker task.
+    max_pending_chunks : int or None, optional
+        Maximum number of submitted chunks kept in the worker queue.
+    profile_records : list[dict[str, object]] or None, optional
+        Optional profile sink.
+    logger : logging.Logger or None, optional
+        Logger for progress messages.
+
+    Returns
+    -------
+    list[KmerHit]
+        Query hits.
+
+    Raises
+    ------
+    ValueError
+        If ``input_format`` is not ``fasta`` or ``fastq``.
+    """
+    if not panel_index:
+        if logger:
+            logger.info("Pre-loaded panel index is empty; returning no hits")
+        return []
+
+    n_panel_kmers = sum(len(kmer_map) for kmer_map in panel_index.values())
+    if logger:
+        logger.info(
+            "Screening with pre-loaded panel index containing %d k values and "
+            "%d unique panel k-mer keys",
+            len(panel_index),
+            n_panel_kmers,
+        )
+
+    parse_start = time.perf_counter()
+    if input_format == "fasta":
+        records = read_fasta_records(fasta_path=input_path)
+        sequence_type = "contig"
+    elif input_format == "fastq":
+        records = read_fastq_records(fastq_path=input_path)
+        sequence_type = "read"
+    else:
+        raise ValueError("input_format must be either fasta or fastq")
+    parse_seconds = time.perf_counter() - parse_start
+    if profile_records is not None:
+        profile_records.append({
+            "stage": "prepare_input_iterator",
+            "seconds": f"{parse_seconds:.6f}",
+            "detail": input_format,
+        })
+
+    screen_start = time.perf_counter()
+    hits = screen_records_for_species_kmers(
+        records=records,
+        panel_index=panel_index,
+        sample_id=sample_id,
+        sequence_type=sequence_type,
+        max_mismatches=max_mismatches,
+        fuzzy_min_k=fuzzy_min_k,
+        threads=threads,
+        chunk_size=chunk_size,
+        max_pending_chunks=max_pending_chunks,
+        logger=logger,
+    )
+    screen_seconds = time.perf_counter() - screen_start
+    if profile_records is not None:
+        profile_records.append({
+            "stage": "screen_records",
+            "seconds": f"{screen_seconds:.6f}",
+            "detail": f"hits={len(hits)}",
+        })
+    return hits
+
 def screen_file_for_species_kmers(
     *,
     input_path: str | Path,
