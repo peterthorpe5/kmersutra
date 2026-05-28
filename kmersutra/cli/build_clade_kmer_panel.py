@@ -21,6 +21,7 @@ from kmersutra.all_candidate_evidence import (
 from kmersutra.global_candidate_evidence import (
     build_global_candidate_evidence_sqlite,
     iter_retained_global_candidate_diagnostics,
+    summarise_candidate_universe_audit_sqlite,
 )
 from kmersutra.target_evidence import (
     build_target_evidence_sqlite,
@@ -478,6 +479,8 @@ def main() -> None:
         metadata_path = out_dir / "species_kmer_panel_metadata.json"
         html_path = out_dir / "species_detection_report.html"
         target_evidence_summary_path = out_dir / "target_evidence_build_summary.tsv"
+        candidate_sampling_audit_path = out_dir / "candidate_sampling_audit.tsv"
+        candidate_evidence_audit_path = out_dir / "candidate_evidence_audit.tsv"
 
         selected_sqlite_builds = sum(
             [
@@ -561,6 +564,67 @@ def main() -> None:
                     max_per_genome_bin=args.max_per_genome_bin,
                 )
             collection_summary = global_candidate_result.collection_summary
+            if args.global_source_index_mode == "candidate_universe":
+                sampling_records = [
+                    record
+                    for record in collection_summary
+                    if str(record.get("stage", "")).startswith("sample_candidate_universe")
+                    or str(record.get("stage", "")).startswith("annotate_candidate_universe")
+                    or str(record.get("stage", "")).startswith("materialise_global_sources")
+                ]
+                if sampling_records:
+                    sampling_fieldnames = sorted(
+                        {key for record in sampling_records for key in record}
+                    )
+                    write_tsv(
+                        records=sampling_records,
+                        output_path=candidate_sampling_audit_path,
+                        fieldnames=sampling_fieldnames,
+                    )
+                    logger.info(
+                        "Candidate sampling audit written to %s",
+                        candidate_sampling_audit_path,
+                    )
+                evidence_audit = summarise_candidate_universe_audit_sqlite(
+                    sqlite_path=global_candidate_result.sqlite_path,
+                    taxonomy_db=taxonomy_db,
+                    preferred_ranks=args.evidence_ranks,
+                    target_taxid=args.target_taxid,
+                    candidate_roles=args.candidate_roles,
+                    excluded_candidate_roles=args.excluded_candidate_roles,
+                    batch_size=args.sqlite_batch_size,
+                    logger=logger,
+                )
+                if evidence_audit:
+                    write_tsv(
+                        records=evidence_audit,
+                        output_path=candidate_evidence_audit_path,
+                        fieldnames=[
+                            "origin_species_name",
+                            "origin_taxid",
+                            "origin_role",
+                            "k",
+                            "candidate_kmers",
+                            "globally_validated_candidates",
+                            "validated_fraction",
+                            "species_level_candidates",
+                            "species_level_fraction",
+                            "genus_level_candidates",
+                            "higher_rank_candidates",
+                            "shared_with_other_taxa_candidates",
+                            "shared_with_other_taxa_fraction",
+                            "shared_with_other_species_candidates",
+                            "non_reportable_candidates",
+                            "unranked_candidates",
+                            "outside_target_candidates",
+                            "max_source_taxids",
+                            "max_source_genomes",
+                        ],
+                    )
+                    logger.info(
+                        "Candidate evidence audit written to %s",
+                        candidate_evidence_audit_path,
+                    )
             if args.write_module_parquet:
                 module_dir = (
                     Path(args.module_parquet_dir)
@@ -581,6 +645,8 @@ def main() -> None:
                             "marker_selection": args.marker_selection,
                             "global_source_index_mode": args.global_source_index_mode,
                             "global_index_progress_interval": args.global_index_progress_interval,
+                "candidate_sampling_audit": str(candidate_sampling_audit_path) if args.global_candidate_evidence else "",
+                "candidate_evidence_audit": str(candidate_evidence_audit_path) if args.global_candidate_evidence else "",
                             "genome_bin_size": args.genome_bin_size,
                             "max_per_genome_bin": args.max_per_genome_bin,
                 "write_module_parquet": args.write_module_parquet,
@@ -782,6 +848,8 @@ def main() -> None:
                 "global_candidate_sqlite_path": args.global_candidate_sqlite_path,
                 "global_source_index_mode": args.global_source_index_mode,
                 "global_index_progress_interval": args.global_index_progress_interval,
+                "candidate_sampling_audit": str(candidate_sampling_audit_path) if args.global_candidate_evidence else "",
+                "candidate_evidence_audit": str(candidate_evidence_audit_path) if args.global_candidate_evidence else "",
                 "sqlite_path": args.sqlite_path,
                 "sqlite_batch_size": args.sqlite_batch_size,
                 "profile": args.profile,

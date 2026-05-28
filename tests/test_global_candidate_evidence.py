@@ -525,3 +525,93 @@ class TestGlobalCandidateEvidenceCandidateUniverse(unittest.TestCase):
                     source_index_mode="candidate_universe",
                     max_per_genome_bin=0,
                 )
+
+
+class TestCandidateUniverseAudit(unittest.TestCase):
+    """Tests for candidate-universe validation audit outputs."""
+
+    def test_candidate_audit_reports_species_and_genus_downgrade(self) -> None:
+        """Audit should report globally validated and shared candidates."""
+        from kmersutra.global_candidate_evidence import (
+            build_global_candidate_evidence_sqlite,
+            summarise_candidate_universe_audit_sqlite,
+        )
+
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            taxdump = root / "taxdump"
+            write_test_taxdump(taxdump)
+            taxonomy = TaxonomyDatabase.from_taxdump(taxonomy_dir=taxdump)
+            target = root / "target.fna"
+            neighbour = root / "neighbour.fna"
+            target.write_text(">target\nAAAAACCCCCGGGGG\n", encoding="utf-8")
+            neighbour.write_text(">neighbour\nAAAAATTTTTCCCCC\n", encoding="utf-8")
+            configs = [
+                GenomeConfig(
+                    genome_fasta=target,
+                    species_name="Alpha target",
+                    taxid="11",
+                    role="target_species",
+                    clade="AlphaGenus",
+                ),
+                GenomeConfig(
+                    genome_fasta=neighbour,
+                    species_name="Alpha neighbour",
+                    taxid="12",
+                    role="near_neighbour",
+                    clade="AlphaGenus",
+                ),
+            ]
+            result = build_global_candidate_evidence_sqlite(
+                genome_configs=configs,
+                k_values=[5],
+                sqlite_path=root / "candidate.sqlite",
+                taxonomy_db=taxonomy,
+                preferred_ranks=["species", "genus"],
+                batch_size=2,
+                source_index_mode="candidate_universe",
+                genome_bin_size=5,
+                max_per_genome_bin=3,
+                max_per_evidence_per_k=50,
+            )
+            audit = summarise_candidate_universe_audit_sqlite(
+                sqlite_path=result.sqlite_path,
+                taxonomy_db=taxonomy,
+                preferred_ranks=["species", "genus"],
+                batch_size=2,
+            )
+
+        self.assertTrue(audit)
+        total_candidates = sum(int(row["candidate_kmers"]) for row in audit)
+        total_validated = sum(
+            int(row["globally_validated_candidates"]) for row in audit
+        )
+        total_species = sum(int(row["species_level_candidates"]) for row in audit)
+        total_genus = sum(int(row["genus_level_candidates"]) for row in audit)
+        total_shared = sum(
+            int(row["shared_with_other_taxa_candidates"]) for row in audit
+        )
+        self.assertGreater(total_candidates, 0)
+        self.assertEqual(total_candidates, total_validated)
+        self.assertGreater(total_species, 0)
+        self.assertGreater(total_genus, 0)
+        self.assertGreater(total_shared, 0)
+
+    def test_candidate_audit_rejects_bad_batch_size(self) -> None:
+        """Audit should reject non-positive batch sizes defensively."""
+        from kmersutra.global_candidate_evidence import (
+            summarise_candidate_universe_audit_sqlite,
+        )
+
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            taxdump = root / "taxdump"
+            write_test_taxdump(taxdump)
+            taxonomy = TaxonomyDatabase.from_taxdump(taxonomy_dir=taxdump)
+            sqlite_path = root / "missing.sqlite"
+            with self.assertRaisesRegex(ValueError, "batch_size"):
+                summarise_candidate_universe_audit_sqlite(
+                    sqlite_path=sqlite_path,
+                    taxonomy_db=taxonomy,
+                    batch_size=0,
+                )

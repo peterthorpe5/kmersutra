@@ -23,6 +23,26 @@ The first implementation uses exact canonical k-mer matching. Optional fuzzy mat
 
 
 
+
+## v0.24.0 candidate-universe audit outputs
+
+KmerSutra v0.24.0 adds explicit audit outputs for the scalable
+`candidate_universe` global builder. Each sampled candidate k-mer is validated
+by scanning every reference genome in full for that candidate. The audit files
+make that behaviour visible:
+
+- `candidate_sampling_audit.tsv` records per-genome candidate sampling and
+  candidate-hit annotation counts.
+- `candidate_evidence_audit.tsv` summarises, by origin species and k value,
+  how sampled candidates were classified after global validation, including
+  species-level candidates, genus-level candidates, higher-rank candidates,
+  shared candidates, non-reportable candidates and candidates outside an
+  optional target subtree.
+
+These outputs are designed to test whether the candidate-universe sampling
+settings are deep enough and whether apparently species-level markers remain
+species-level after global validation against the full build panel.
+
 ## v0.23.0 scalable candidate-universe builder
 
 KmerSutra v0.23.0 adds a new global source-index mode for large

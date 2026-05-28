@@ -1643,6 +1643,275 @@ def _cached_evidence_assignment(
     cache[source_taxids] = result
     return result
 
+
+
+def _rank_group(evidence_rank: str) -> str:
+    """Return a coarse rank group for audit reporting.
+
+    Parameters
+    ----------
+    evidence_rank : str
+        Assigned evidence rank.
+
+    Returns
+    -------
+    str
+        ``species``, ``genus``, ``higher_rank`` or ``none``.
+    """
+    if evidence_rank == "species":
+        return "species"
+    if evidence_rank == "genus":
+        return "genus"
+    if evidence_rank:
+        return "higher_rank"
+    return "none"
+
+
+def _count_semicolon_values(value: str | None) -> int:
+    """Count unique non-empty values in a semicolon-delimited field.
+
+    Parameters
+    ----------
+    value : str or None
+        Semicolon-separated value.
+
+    Returns
+    -------
+    int
+        Number of unique non-empty items.
+    """
+    return len(_normalise_semicolon_set(value))
+
+
+def _empty_candidate_audit_record(*, origin_species_name: str, origin_taxid: str, origin_role: str, k: int) -> dict[str, object]:
+    """Create an empty candidate-universe audit record.
+
+    Parameters
+    ----------
+    origin_species_name : str
+        Species name from which the candidate was first sampled.
+    origin_taxid : str
+        Taxid from which the candidate was first sampled.
+    origin_role : str
+        Build role from which the candidate was first sampled.
+    k : int
+        K-mer size.
+
+    Returns
+    -------
+    dict[str, object]
+        Mutable audit summary record.
+    """
+    return {
+        "origin_species_name": origin_species_name,
+        "origin_taxid": origin_taxid,
+        "origin_role": origin_role,
+        "k": int(k),
+        "candidate_kmers": 0,
+        "globally_validated_candidates": 0,
+        "species_level_candidates": 0,
+        "genus_level_candidates": 0,
+        "higher_rank_candidates": 0,
+        "shared_with_other_taxa_candidates": 0,
+        "shared_with_other_species_candidates": 0,
+        "non_reportable_candidates": 0,
+        "unranked_candidates": 0,
+        "outside_target_candidates": 0,
+        "max_source_taxids": 0,
+        "max_source_genomes": 0,
+    }
+
+
+def summarise_candidate_universe_audit_sqlite(
+    *,
+    sqlite_path: str | Path,
+    taxonomy_db: TaxonomyDatabase,
+    preferred_ranks: list[str] | None = None,
+    target_taxid: str = "",
+    candidate_roles: Iterable[str] | None = None,
+    excluded_candidate_roles: Iterable[str] | None = None,
+    batch_size: int = 50000,
+    logger: logging.Logger | None = None,
+) -> list[dict[str, object]]:
+    """Summarise candidate-universe sampling and global validation.
+
+    The candidate-universe builder samples a bounded set of genome-spread
+    candidate k-mers and then rescans every genome for those candidates. This
+    audit reports how sampled candidates were classified after global
+    validation, grouped by origin species and k value. It is intended to answer
+    whether sampled candidates remain species-level, are downgraded to genus or
+    higher-rank evidence, become non-reportable, or are outside the requested
+    target subtree.
+
+    Parameters
+    ----------
+    sqlite_path : str or pathlib.Path
+        SQLite database produced by the global candidate builder.
+    taxonomy_db : TaxonomyDatabase
+        Taxonomy database used for evidence assignment.
+    preferred_ranks : list[str] or None, optional
+        Evidence ranks to retain. Defaults to ``CORE_RANK_ORDER``.
+    target_taxid : str, optional
+        Optional subtree restriction.
+    candidate_roles : iterable of str or None, optional
+        Optional whitelist of reportable roles.
+    excluded_candidate_roles : iterable of str or None, optional
+        Roles excluded from reportable status when no whitelist is supplied.
+    batch_size : int, optional
+        Number of candidate rows to fetch per SQLite batch.
+    logger : logging.Logger or None, optional
+        Logger for audit progress.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        Candidate validation audit records grouped by origin species and k.
+    """
+    if taxonomy_db is None:
+        raise ValueError("taxonomy_db is required for candidate audit")
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive")
+
+    ranks = preferred_ranks or CORE_RANK_ORDER
+    target_taxid = taxonomy_db.normalise_taxid(target_taxid)
+    role_filter = _normalise_roles(candidate_roles)
+    excluded_roles = _normalise_roles(excluded_candidate_roles) or DEFAULT_EXCLUDED_REPORTABLE_ROLES
+
+    taxid_tuple_cache: dict[str, tuple[str, ...]] = {}
+    role_reportable_cache: dict[str, bool] = {}
+    evidence_cache: dict[tuple[str, ...], tuple[str, str, str, str, str]] = {}
+    records: dict[tuple[str, str, str, int], dict[str, object]] = {}
+    considered = 0
+
+    connection = _connect(sqlite_path=sqlite_path)
+    connection.row_factory = sqlite3.Row
+    try:
+        query = """
+            SELECT
+                ck.k,
+                ck.kmer,
+                ck.first_genome_id AS origin_genome_id,
+                ck.first_contig_id,
+                ck.first_position,
+                COALESCE(origin.species_name, '') AS origin_species_name,
+                COALESCE(origin.taxid, '') AS origin_taxid,
+                COALESCE(origin.role, '') AS origin_role,
+                COALESCE(g.taxids, '') AS taxids,
+                COALESCE(g.roles, '') AS roles,
+                COALESCE(g.genome_ids, '') AS genome_ids,
+                COALESCE(g.species_names, '') AS species_names
+            FROM candidate_kmers AS ck
+            LEFT JOIN global_kmer_sources AS origin
+              ON origin.k = ck.k
+             AND origin.kmer = ck.kmer
+             AND origin.genome_id = ck.first_genome_id
+            LEFT JOIN global_kmers AS g
+              ON g.k = ck.k
+             AND g.kmer = ck.kmer
+            ORDER BY ck.k, origin_species_name, ck.kmer
+        """
+        cursor = connection.execute(query)
+        while True:
+            rows = cursor.fetchmany(batch_size)
+            if not rows:
+                break
+            for row in rows:
+                considered += 1
+                origin_species = row["origin_species_name"] or row["origin_genome_id"] or "unknown"
+                origin_taxid = row["origin_taxid"] or ""
+                origin_role = row["origin_role"] or "unknown"
+                key = (origin_species, origin_taxid, origin_role, int(row["k"]))
+                record = records.get(key)
+                if record is None:
+                    record = _empty_candidate_audit_record(
+                        origin_species_name=origin_species,
+                        origin_taxid=origin_taxid,
+                        origin_role=origin_role,
+                        k=int(row["k"]),
+                    )
+                    records[key] = record
+
+                record["candidate_kmers"] = int(record["candidate_kmers"]) + 1
+                source_taxids = _cached_taxid_tuple(
+                    taxid_text=row["taxids"],
+                    taxonomy_db=taxonomy_db,
+                    cache=taxid_tuple_cache,
+                )
+                if source_taxids:
+                    record["globally_validated_candidates"] = int(record["globally_validated_candidates"]) + 1
+                source_taxid_count = len(source_taxids)
+                source_genome_count = _count_semicolon_values(row["genome_ids"])
+                source_species_count = _count_semicolon_values(row["species_names"])
+                record["max_source_taxids"] = max(int(record["max_source_taxids"]), source_taxid_count)
+                record["max_source_genomes"] = max(int(record["max_source_genomes"]), source_genome_count)
+                if source_taxid_count > 1:
+                    record["shared_with_other_taxa_candidates"] = int(record["shared_with_other_taxa_candidates"]) + 1
+                if source_species_count > 1:
+                    record["shared_with_other_species_candidates"] = int(record["shared_with_other_species_candidates"]) + 1
+
+                if not source_taxids:
+                    record["unranked_candidates"] = int(record["unranked_candidates"]) + 1
+                    continue
+                if not _cached_reportable_roles(
+                    role_text=row["roles"],
+                    role_filter=role_filter,
+                    excluded_roles=excluded_roles,
+                    cache=role_reportable_cache,
+                ):
+                    record["non_reportable_candidates"] = int(record["non_reportable_candidates"]) + 1
+                    continue
+                evidence_status, _, _, evidence_rank, _ = _cached_evidence_assignment(
+                    source_taxids=source_taxids,
+                    taxonomy_db=taxonomy_db,
+                    ranks=ranks,
+                    target_taxid=target_taxid,
+                    cache=evidence_cache,
+                )
+                if evidence_status == "unranked":
+                    record["unranked_candidates"] = int(record["unranked_candidates"]) + 1
+                    continue
+                if evidence_status == "outside_target":
+                    record["outside_target_candidates"] = int(record["outside_target_candidates"]) + 1
+                    continue
+                rank_group = _rank_group(evidence_rank)
+                if rank_group == "species":
+                    record["species_level_candidates"] = int(record["species_level_candidates"]) + 1
+                elif rank_group == "genus":
+                    record["genus_level_candidates"] = int(record["genus_level_candidates"]) + 1
+                elif rank_group == "higher_rank":
+                    record["higher_rank_candidates"] = int(record["higher_rank_candidates"]) + 1
+            if logger and considered % (batch_size * 20) == 0:
+                logger.info(
+                    "Audited %d candidate-universe k-mer(s); groups=%d",
+                    considered,
+                    len(records),
+                )
+    finally:
+        connection.close()
+
+    audit_records = []
+    for key in sorted(records):
+        record = records[key]
+        candidate_count = int(record["candidate_kmers"])
+        validated_count = int(record["globally_validated_candidates"])
+        record["validated_fraction"] = (
+            validated_count / candidate_count if candidate_count else 0.0
+        )
+        record["species_level_fraction"] = (
+            int(record["species_level_candidates"]) / candidate_count if candidate_count else 0.0
+        )
+        record["shared_with_other_taxa_fraction"] = (
+            int(record["shared_with_other_taxa_candidates"]) / candidate_count if candidate_count else 0.0
+        )
+        audit_records.append(record)
+    if logger:
+        logger.info(
+            "Candidate-universe audit summarised %d candidate k-mer(s) into %d group(s)",
+            considered,
+            len(audit_records),
+        )
+    return audit_records
+
 def assign_global_candidate_evidence_sqlite(
     *,
     sqlite_path: str | Path,

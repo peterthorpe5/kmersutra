@@ -175,5 +175,7 @@ class TestBuildCliGlobalCandidateEvidence(unittest.TestCase):
             self.assertTrue((out_dir / "species_kmer_panel.tsv.gz").is_file())
             self.assertTrue((out_dir / "global_candidate_evidence.sqlite").is_file())
             self.assertTrue((out_dir / "target_evidence_build_summary.tsv").is_file())
+            self.assertTrue((out_dir / "candidate_sampling_audit.tsv").is_file())
+            self.assertTrue((out_dir / "candidate_evidence_audit.tsv").is_file())
             self.assertTrue((out_dir / "build_profile_timing.tsv").is_file())
             self.assertTrue((out_dir / "ram_usage.tsv").is_file())
