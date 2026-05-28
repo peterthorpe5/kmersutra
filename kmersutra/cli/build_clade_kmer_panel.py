@@ -9,6 +9,11 @@ from kmersutra.build_panel import DiagnosticKmer, build_panel
 from kmersutra.config import load_genome_config
 from kmersutra.io import write_json, write_tsv
 from kmersutra.marker_selection import MarkerSelectionConfig, select_genome_spread_markers
+from kmersutra.module_export import (
+    DEFAULT_GATE_RANKS,
+    ModuleExportConfig,
+    export_hierarchical_modules_from_panel,
+)
 from kmersutra.logging_utils import configure_logging
 from kmersutra.parquet_modules import export_global_candidate_module
 from kmersutra.profiling import WorkflowProfiler
@@ -123,6 +128,83 @@ def parse_args() -> argparse.Namespace:
         "--module_name",
         default="",
         help="Optional module name recorded in module Parquet metadata.",
+    )
+    parser.add_argument(
+        "--write_module_manifest",
+        dest="write_module_manifest",
+        action="store_true",
+        default=True,
+        help=(
+            "Write hierarchical gate/detail panels and kmersutra_module_manifest.tsv "
+            "from the final diagnostic panel. This is enabled by default so "
+            "global databases are immediately usable by hierarchical screening."
+        ),
+    )
+    parser.add_argument(
+        "--no_write_module_manifest",
+        dest="write_module_manifest",
+        action="store_false",
+        help="Do not export hierarchical module panels/manifest after panel build.",
+    )
+    parser.add_argument(
+        "--module_manifest_dir",
+        default="",
+        help=(
+            "Output directory for automatic hierarchical module export. Defaults "
+            "to hierarchical_modules inside --out_dir."
+        ),
+    )
+    parser.add_argument(
+        "--module_gate_ranks",
+        nargs="+",
+        default=sorted(DEFAULT_GATE_RANKS),
+        help=(
+            "Evidence ranks used as gate markers during automatic hierarchical "
+            "module export."
+        ),
+    )
+    parser.add_argument(
+        "--module_min_gate_unique_kmers",
+        type=int,
+        default=1,
+        help="Default unique-k-mer activation threshold in exported module manifest.",
+    )
+    parser.add_argument(
+        "--module_min_gate_positive_sequences",
+        type=int,
+        default=1,
+        help="Default positive-sequence activation threshold in exported module manifest.",
+    )
+    parser.add_argument(
+        "--module_min_gate_k_values",
+        type=int,
+        default=1,
+        help="Default distinct-k-value activation threshold in exported module manifest.",
+    )
+    parser.add_argument(
+        "--module_min_gate_best_k",
+        type=int,
+        default=0,
+        help="Default minimum longest positive k value in exported module manifest.",
+    )
+    parser.add_argument(
+        "--module_max_gate_records_per_k",
+        type=int,
+        default=0,
+        help=(
+            "Optional per-k cap for each exported gate panel. Use 0 for no cap; "
+            "uncapped gates preserve sensitivity but may be larger."
+        ),
+    )
+    parser.add_argument(
+        "--no_species_gate_fallback",
+        dest="module_species_gate_fallback",
+        action="store_false",
+        default=True,
+        help=(
+            "Disable species-marker fallback gates for modules without broad-rank "
+            "genus/family/etc. gate markers."
+        ),
     )
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument(
@@ -440,6 +522,7 @@ def main() -> None:
     logger.info("Build profiling: %s", args.profile)
     logger.info("Marker selection: %s", args.marker_selection)
     logger.info("Write module Parquet: %s", args.write_module_parquet)
+    logger.info("Write hierarchical module manifest: %s", args.write_module_manifest)
     logger.info("Genome bin size: %d", args.genome_bin_size)
     logger.info("Max per genome bin: %d", args.max_per_genome_bin)
     profiler = WorkflowProfiler()
@@ -481,6 +564,11 @@ def main() -> None:
         target_evidence_summary_path = out_dir / "target_evidence_build_summary.tsv"
         candidate_sampling_audit_path = out_dir / "candidate_sampling_audit.tsv"
         candidate_evidence_audit_path = out_dir / "candidate_evidence_audit.tsv"
+        module_manifest_dir = (
+            Path(args.module_manifest_dir)
+            if args.module_manifest_dir
+            else out_dir / "hierarchical_modules"
+        )
 
         selected_sqlite_builds = sum(
             [
@@ -820,6 +908,36 @@ def main() -> None:
                 output_path=collection_summary_path,
                 fieldnames=collection_fieldnames,
             )
+        module_export_result = None
+        if args.write_module_manifest:
+            with profiler.time_stage(
+                stage="export_hierarchical_module_manifest",
+                detail=str(module_manifest_dir),
+            ):
+                try:
+                    module_export_result = export_hierarchical_modules_from_panel(
+                        panel_path=panel_path,
+                        out_dir=module_manifest_dir,
+                        config=ModuleExportConfig(
+                            gate_ranks={str(rank).lower() for rank in args.module_gate_ranks},
+                            min_gate_unique_kmers=args.module_min_gate_unique_kmers,
+                            min_gate_positive_sequences=args.module_min_gate_positive_sequences,
+                            min_gate_k_values=args.module_min_gate_k_values,
+                            min_gate_best_k=args.module_min_gate_best_k,
+                            allow_species_gate_fallback=args.module_species_gate_fallback,
+                            max_gate_records_per_module_per_k=args.module_max_gate_records_per_k,
+                        ),
+                        logger=logger,
+                    )
+                except ValueError as exc:
+                    if "no diagnostic records" not in str(exc):
+                        raise
+                    logger.warning(
+                        "Skipping hierarchical module export because the final "
+                        "panel has no diagnostic records: %s",
+                        panel_path,
+                    )
+
         write_json(
             data={
                 "genome_config": str(args.genome_config),
@@ -831,6 +949,10 @@ def main() -> None:
                 "evidence_ranks": args.evidence_ranks,
                 "max_per_species_per_k": args.max_per_species_per_k,
                 "marker_selection": args.marker_selection,
+                "module_manifest_path": str(module_export_result.manifest_path) if module_export_result else "",
+                "module_export_summary_path": str(module_export_result.summary_path) if module_export_result else "",
+                "module_manifest_dir": str(module_manifest_dir) if args.write_module_manifest else "",
+                "module_count": module_export_result.n_modules if module_export_result else 0,
                 "genome_bin_size": args.genome_bin_size,
                 "max_per_genome_bin": args.max_per_genome_bin,
                 "write_module_parquet": args.write_module_parquet,
