@@ -1323,17 +1323,9 @@ def load_panel(*, panel_path: str | Path) -> dict[int, dict[str, list[Diagnostic
         Mapping of k to k-mer to diagnostic records.
     """
     from kmersutra.io import read_tsv
-    from kmersutra.panel_parquet import is_parquet_path, read_panel_parquet
-
-    path = Path(panel_path)
-    records = (
-        read_panel_parquet(input_path=path)
-        if is_parquet_path(path=path)
-        else read_tsv(input_path=path)
-    )
 
     index: dict[int, dict[str, list[DiagnosticKmer]]] = defaultdict(lambda: defaultdict(list))
-    for record in records:
+    for record in read_tsv(input_path=panel_path):
         item = DiagnosticKmer(
             kmer=record["kmer"],
             k=int(record["k"]),

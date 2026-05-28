@@ -19,12 +19,6 @@ from typing import Iterable
 
 from kmersutra.hierarchical import MODULE_MANIFEST_FIELDNAMES
 from kmersutra.io import open_text, write_tsv
-from kmersutra.panel_parquet import (
-    is_parquet_path,
-    pyarrow_available,
-    read_panel_parquet,
-    write_panel_parquet,
-)
 
 PANEL_FIELDNAMES = [
     "kmer",
@@ -81,9 +75,6 @@ class ModuleExportConfig:
         the fallback explicit via gate counts.
     max_gate_records_per_module_per_k : int
         Optional cap for gate panels. Use 0 for no cap.
-    panel_storage_format : str
-        Storage format for exported gate/detail panels. Use ``auto`` to prefer
-        Parquet when ``pyarrow`` is installed, otherwise TSV.GZ.
     """
 
     gate_ranks: set[str]
@@ -93,7 +84,6 @@ class ModuleExportConfig:
     min_gate_best_k: int = 0
     allow_species_gate_fallback: bool = True
     max_gate_records_per_module_per_k: int = 0
-    panel_storage_format: str = "auto"
 
     def validate(self) -> None:
         """Validate the export configuration.
@@ -113,13 +103,6 @@ class ModuleExportConfig:
             raise ValueError("min_gate_best_k must be zero or greater")
         if self.max_gate_records_per_module_per_k < 0:
             raise ValueError("max_gate_records_per_module_per_k must be zero or greater")
-        if self.panel_storage_format not in {"auto", "tsv", "parquet"}:
-            raise ValueError("panel_storage_format must be one of auto, tsv or parquet")
-        if self.panel_storage_format == "parquet" and not pyarrow_available():
-            raise ValueError(
-                "panel_storage_format=parquet requires pyarrow. Install the "
-                "parquet extra, or use panel_storage_format=auto/tsv."
-            )
 
 
 @dataclass(frozen=True)
@@ -204,27 +187,24 @@ def read_panel_records(*, panel_path: str | Path) -> list[dict[str, str]]:
     path = Path(panel_path)
     if not path.is_file() or path.stat().st_size == 0:
         raise FileNotFoundError(f"Panel file is missing or empty: {path}")
-    if is_parquet_path(path=path):
-        records = read_panel_parquet(input_path=path)
-    else:
-        with open_text(path, "rt") as handle:
-            header = handle.readline().rstrip("\n").split("\t")
-            missing = [column for column in PANEL_FIELDNAMES if column not in header]
-            if missing:
-                raise ValueError(f"Panel is missing required columns: {', '.join(missing)}")
-            records = []
-            for line_number, line in enumerate(handle, start=2):
-                if not line.strip():
-                    continue
-                values = line.rstrip("\n").split("\t")
-                if len(values) < len(header):
-                    values += [""] * (len(header) - len(values))
-                elif len(values) > len(header):
-                    values = values[: len(header)]
-                record = dict(zip(header, values))
-                if not record.get("kmer") or not record.get("k"):
-                    raise ValueError(f"Malformed panel record at line {line_number}: missing kmer/k")
-                records.append(record)
+    with open_text(path, "rt") as handle:
+        header = handle.readline().rstrip("\n").split("\t")
+        missing = [column for column in PANEL_FIELDNAMES if column not in header]
+        if missing:
+            raise ValueError(f"Panel is missing required columns: {', '.join(missing)}")
+        records: list[dict[str, str]] = []
+        for line_number, line in enumerate(handle, start=2):
+            if not line.strip():
+                continue
+            values = line.rstrip("\n").split("\t")
+            if len(values) < len(header):
+                values += [""] * (len(header) - len(values))
+            elif len(values) > len(header):
+                values = values[: len(header)]
+            record = dict(zip(header, values))
+            if not record.get("kmer") or not record.get("k"):
+                raise ValueError(f"Malformed panel record at line {line_number}: missing kmer/k")
+            records.append(record)
     if not records:
         raise ValueError(f"Panel contains no diagnostic records: {path}")
     return records
@@ -236,11 +216,8 @@ def _write_panel_subset(
     output_path: Path,
 ) -> int:
     """Write a panel subset and return the number of records written."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    if is_parquet_path(path=output_path):
-        return write_panel_parquet(records=records, output_path=output_path)
-
     n_records = 0
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     with open_text(output_path, "wt") as handle:
         handle.write("\t".join(PANEL_FIELDNAMES) + "\n")
         for record in records:
@@ -251,22 +228,6 @@ def _write_panel_subset(
             n_records += 1
     return n_records
 
-
-def _resolved_panel_suffix(*, config: ModuleExportConfig, logger: logging.Logger | None) -> str:
-    """Return the exported module panel suffix for a validated config."""
-    if config.panel_storage_format == "tsv":
-        return ".tsv.gz"
-    if config.panel_storage_format == "parquet":
-        return ".parquet"
-    if pyarrow_available():
-        if logger:
-            logger.info("pyarrow is available; exporting hierarchical module panels as Parquet")
-        return ".parquet"
-    if logger:
-        logger.warning(
-            "pyarrow is not available; exporting hierarchical module panels as TSV.GZ"
-        )
-    return ".tsv.gz"
 
 def _limit_gate_records(
     *,
@@ -345,7 +306,6 @@ def export_hierarchical_modules_from_panel(
     manifest_path = output_dir / "kmersutra_module_manifest.tsv"
     summary_path = output_dir / "module_export_summary.tsv"
     output_dir.mkdir(parents=True, exist_ok=True)
-    panel_suffix = _resolved_panel_suffix(config=config, logger=logger)
 
     if logger:
         logger.info(
@@ -372,8 +332,8 @@ def export_hierarchical_modules_from_panel(
         module_records = broad_records or clade_records
         module_id = safe_module_id(value=clade, prefix="clade")
         clade_parent_ids[clade] = module_id
-        gate_path = gates_dir / f"{module_id}.gate{panel_suffix}"
-        module_path = modules_dir / f"{module_id}.module{panel_suffix}"
+        gate_path = gates_dir / f"{module_id}.gate.tsv.gz"
+        module_path = modules_dir / f"{module_id}.module.tsv.gz"
         gate_records = _limit_gate_records(
             records=broad_records or clade_records,
             max_per_module_per_k=config.max_gate_records_per_module_per_k,
@@ -432,8 +392,8 @@ def export_hierarchical_modules_from_panel(
         parent_clade = _dominant_clade(records=genus_records)
         parent_module_id = clade_parent_ids.get(parent_clade, root_id)
         module_id = safe_module_id(value=genus, prefix="genus")
-        gate_path = gates_dir / f"{module_id}.gate{panel_suffix}"
-        module_path = modules_dir / f"{module_id}.module{panel_suffix}"
+        gate_path = gates_dir / f"{module_id}.gate.tsv.gz"
+        module_path = modules_dir / f"{module_id}.module.tsv.gz"
         gate_records = _limit_gate_records(
             records=genus_gate_records,
             max_per_module_per_k=config.max_gate_records_per_module_per_k,

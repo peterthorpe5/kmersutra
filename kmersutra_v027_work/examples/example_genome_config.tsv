@@ -1,0 +1,4 @@
+genome_fasta	species_name	strain_name	taxid	assembly_accession	role	clade	source
+examples/species_a.fna	Species alpha	alpha_ref	1	ASM_ALPHA	target_species	DemoClade	example
+examples/species_b.fna	Species beta	beta_ref	2	ASM_BETA	target_species	DemoClade	example
+examples/outgroup.fna	Species gamma	gamma_ref	3	ASM_GAMMA	outgroup	Outgroup	example

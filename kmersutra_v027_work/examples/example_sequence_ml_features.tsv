@@ -1,0 +1,5 @@
+sample_id	sequence_id	sequence_type	n_total_hits	n_exact_hits	n_fuzzy_hits	n_species_unique_hits	n_clade_core_hits	n_unique_species_kmers	n_unique_clade_kmers	n_positive_k_values	longest_k	best_species	best_species_hits	second_species	second_species_hits	species_hit_margin	species_hit_ratio	conflict_ratio	best_clade	best_clade_hits	unresolved_clade_signal	true_species	true_clade
+sample_a	read_a1	read	10	10	0	10	0	8	0	2	101	Species A	10		0	10	1.0	0.0	Demo	10	0	Species A	Demo
+sample_a	read_a2	read	9	9	0	9	0	7	0	2	101	Species A	9	Species B	0	9	1.0	0.0	Demo	9	0	Species A	Demo
+sample_b	read_b1	read	5	5	0	5	0	4	0	1	71	Species B	5		0	5	1.0	0.0	Demo	5	0	Species B	Demo
+sample_unknown	read_u1	read	2	2	0	0	2	0	2	1	51		0		0	0	0.0	0.0	Demo	2	1	unknown_or_unresolved	Demo

@@ -1,0 +1,17 @@
+KmerSutra v0.17.0 test summary
+
+Command:
+python -m unittest discover -s tests -v
+
+Result:
+Ran 169 tests in 4.630s
+
+OK
+
+Main new tests added:
+- lineage-aware preset includes a mixed-species co-dominance fraction
+- weak passing neighbours are demoted to neighbour_lineage_evidence
+- co-dominant species remain reportable as present_in_mixed_sample
+- reportable/raw conflict metrics are exposed in species_detection_calls.tsv
+- neighbour_lineage_evidence can support possible novel or unsampled lineage reporting
+- neighbour_lineage_evidence is not counted as reportable species presence

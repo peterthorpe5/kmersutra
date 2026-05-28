@@ -16,13 +16,6 @@ from kmersutra.module_export import (
 )
 from kmersutra.logging_utils import configure_logging
 from kmersutra.parquet_modules import export_global_candidate_module
-from kmersutra.panel_parquet import (
-    OptionalParquetDependencyError,
-    derive_panel_parquet_path,
-    pyarrow_available,
-    write_panel_parquet,
-)
-from kmersutra.module_export import read_panel_records
 from kmersutra.profiling import WorkflowProfiler
 from kmersutra.reporting import write_html_report
 from kmersutra.resource_monitor import ResourceMonitor
@@ -135,17 +128,6 @@ def parse_args() -> argparse.Namespace:
         "--module_name",
         default="",
         help="Optional module name recorded in module Parquet metadata.",
-    )
-    parser.add_argument(
-        "--panel_storage_format",
-        choices=["auto", "tsv", "parquet"],
-        default="auto",
-        help=(
-            "Screen-panel storage format for flat and hierarchical panels. "
-            "auto keeps TSV.GZ compatibility and writes/uses Parquet when "
-            "pyarrow is available. parquet requires pyarrow. tsv disables "
-            "screen-panel Parquet export."
-        ),
     )
     parser.add_argument(
         "--write_module_manifest",
@@ -523,62 +505,6 @@ def _write_panel_streaming(
     return n_written, summary
 
 
-def _maybe_write_panel_parquet(
-    *,
-    panel_path: Path,
-    panel_parquet_path: Path,
-    panel_storage_format: str,
-    logger,
-) -> Path | None:
-    """Write an optional Parquet companion panel and return its path.
-
-    Parameters
-    ----------
-    panel_path : pathlib.Path
-        Existing TSV.GZ flat panel.
-    panel_parquet_path : pathlib.Path
-        Desired Parquet companion path.
-    panel_storage_format : str
-        One of ``auto``, ``tsv`` or ``parquet``.
-    logger : logging.Logger
-        Logger for progress and fallback messages.
-
-    Returns
-    -------
-    pathlib.Path or None
-        Parquet path when written, otherwise None.
-    """
-    if panel_storage_format == "tsv":
-        logger.info("Skipping screen-panel Parquet export because TSV was requested")
-        return None
-    if panel_storage_format == "auto" and not pyarrow_available():
-        logger.warning(
-            "pyarrow is not available; keeping TSV.GZ screen panels only"
-        )
-        return None
-
-    try:
-        records = read_panel_records(panel_path=panel_path)
-        n_records = write_panel_parquet(
-            records=records,
-            output_path=panel_parquet_path,
-        )
-    except OptionalParquetDependencyError:
-        if panel_storage_format == "parquet":
-            raise
-        logger.warning(
-            "pyarrow became unavailable during Parquet export; keeping TSV.GZ only"
-        )
-        return None
-
-    logger.info(
-        "Parquet screen panel written to %s with %d records",
-        panel_parquet_path,
-        n_records,
-    )
-    return panel_parquet_path
-
-
 def main() -> None:
     """Run the panel builder."""
     args = parse_args()
@@ -597,7 +523,6 @@ def main() -> None:
     logger.info("Marker selection: %s", args.marker_selection)
     logger.info("Write module Parquet: %s", args.write_module_parquet)
     logger.info("Write hierarchical module manifest: %s", args.write_module_manifest)
-    logger.info("Screen panel storage format: %s", args.panel_storage_format)
     logger.info("Genome bin size: %d", args.genome_bin_size)
     logger.info("Max per genome bin: %d", args.max_per_genome_bin)
     profiler = WorkflowProfiler()
@@ -632,7 +557,6 @@ def main() -> None:
         logger.info("Loaded %d genome records", len(genome_configs))
 
         panel_path = out_dir / "species_kmer_panel.tsv.gz"
-        panel_parquet_path = derive_panel_parquet_path(panel_path=panel_path)
         summary_path = out_dir / "kmer_uniqueness_summary.tsv"
         collection_summary_path = out_dir / "kmer_collection_summary.tsv"
         metadata_path = out_dir / "species_kmer_panel_metadata.json"
@@ -663,11 +587,6 @@ def main() -> None:
             raise ValueError(
                 "--write_module_parquet currently requires --global_candidate_evidence "
                 "because module merging revalidates global source-index tables"
-            )
-        if args.panel_storage_format == "parquet" and not pyarrow_available():
-            raise ValueError(
-                "--panel_storage_format parquet requires pyarrow. Install the "
-                "parquet extra, or use --panel_storage_format auto/tsv."
             )
 
         if args.global_candidate_evidence:
@@ -814,13 +733,13 @@ def main() -> None:
                             "marker_selection": args.marker_selection,
                             "global_source_index_mode": args.global_source_index_mode,
                             "global_index_progress_interval": args.global_index_progress_interval,
-                            "candidate_sampling_audit": str(candidate_sampling_audit_path),
-                            "candidate_evidence_audit": str(candidate_evidence_audit_path),
+                "candidate_sampling_audit": str(candidate_sampling_audit_path) if args.global_candidate_evidence else "",
+                "candidate_evidence_audit": str(candidate_evidence_audit_path) if args.global_candidate_evidence else "",
                             "genome_bin_size": args.genome_bin_size,
                             "max_per_genome_bin": args.max_per_genome_bin,
-                            "write_module_parquet": args.write_module_parquet,
-                            "module_parquet_dir": args.module_parquet_dir,
-                            "module_name": args.module_name,
+                "write_module_parquet": args.write_module_parquet,
+                "module_parquet_dir": args.module_parquet_dir,
+                "module_name": args.module_name,
                             "max_per_species_per_k": args.max_per_species_per_k,
                             "evidence_ranks": ";".join(args.evidence_ranks),
                         },
@@ -989,13 +908,6 @@ def main() -> None:
                 output_path=collection_summary_path,
                 fieldnames=collection_fieldnames,
             )
-        panel_parquet_written = _maybe_write_panel_parquet(
-            panel_path=panel_path,
-            panel_parquet_path=panel_parquet_path,
-            panel_storage_format=args.panel_storage_format,
-            logger=logger,
-        )
-
         module_export_result = None
         if args.write_module_manifest:
             with profiler.time_stage(
@@ -1014,7 +926,6 @@ def main() -> None:
                             min_gate_best_k=args.module_min_gate_best_k,
                             allow_species_gate_fallback=args.module_species_gate_fallback,
                             max_gate_records_per_module_per_k=args.module_max_gate_records_per_k,
-                            panel_storage_format=args.panel_storage_format,
                         ),
                         logger=logger,
                     )
@@ -1038,8 +949,6 @@ def main() -> None:
                 "evidence_ranks": args.evidence_ranks,
                 "max_per_species_per_k": args.max_per_species_per_k,
                 "marker_selection": args.marker_selection,
-                "panel_storage_format": args.panel_storage_format,
-                "panel_parquet_path": str(panel_parquet_written) if panel_parquet_written else "",
                 "module_manifest_path": str(module_export_result.manifest_path) if module_export_result else "",
                 "module_export_summary_path": str(module_export_result.summary_path) if module_export_result else "",
                 "module_manifest_dir": str(module_manifest_dir) if args.write_module_manifest else "",

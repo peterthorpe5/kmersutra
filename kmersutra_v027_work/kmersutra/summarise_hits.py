@@ -112,20 +112,14 @@ def load_panel_species_metadata(*, panel_path: str | Path) -> list[dict[str, str
     Parameters
     ----------
     panel_path : str or pathlib.Path
-        KmerSutra diagnostic k-mer panel TSV, TSV.GZ or Parquet.
+        KmerSutra diagnostic k-mer panel TSV or TSV.GZ.
 
     Returns
     -------
     list[dict[str, str]]
         One record per species with ``species_name`` and ``clade`` fields.
     """
-    from kmersutra.panel_parquet import is_parquet_path, read_panel_parquet
-
-    records = (
-        read_panel_parquet(input_path=panel_path)
-        if is_parquet_path(path=panel_path)
-        else read_tsv(input_path=panel_path)
-    )
+    records = read_tsv(input_path=panel_path)
     species_to_clade: dict[str, str] = {}
     for record in records:
         if record.get("panel_type") != "species_unique":

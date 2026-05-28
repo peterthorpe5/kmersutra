@@ -191,59 +191,6 @@ class TestAutomaticModuleExport(unittest.TestCase):
                     ),
                 )
 
-    def test_export_auto_falls_back_to_tsv_when_pyarrow_absent(self) -> None:
-        """Auto module export should remain usable without pyarrow."""
-        from kmersutra.panel_parquet import pyarrow_available
-
-        if pyarrow_available():
-            self.skipTest("pyarrow is installed; auto mode may choose Parquet")
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            panel_path = tmp_path / "panel.tsv.gz"
-            write_panel(
-                panel_path,
-                [
-                    {
-                        "kmer": "A" * 77,
-                        "k": 77,
-                        "panel_type": "genus_core",
-                        "species_name": "",
-                        "clade": "Plasmodium",
-                        "source_genomes": "g1",
-                        "source_contigs": "c1",
-                        "example_position": 10,
-                        "evidence_taxid": "5820",
-                        "evidence_name": "Plasmodium",
-                        "evidence_rank": "genus",
-                        "lineage_taxids": "1;5820",
-                        "source_taxids": "5855",
-                    }
-                ],
-            )
-            result = export_hierarchical_modules_from_panel(
-                panel_path=panel_path,
-                out_dir=tmp_path / "modules",
-                config=ModuleExportConfig(
-                    gate_ranks={"genus"},
-                    panel_storage_format="auto",
-                ),
-            )
-            records = read_tsv(input_path=result.manifest_path)
-            self.assertTrue(records)
-            self.assertTrue(records[0]["gate_panel_path"].endswith(".tsv.gz"))
-
-    def test_export_rejects_forced_parquet_without_pyarrow(self) -> None:
-        """Forced Parquet export should require the optional dependency."""
-        from kmersutra.panel_parquet import pyarrow_available
-
-        if pyarrow_available():
-            self.skipTest("pyarrow is installed; dependency error is not active")
-        with self.assertRaises(ValueError):
-            ModuleExportConfig(
-                gate_ranks={"genus"},
-                panel_storage_format="parquet",
-            ).validate()
-
 
 if __name__ == "__main__":
     unittest.main()
