@@ -57,6 +57,7 @@ MANIFEST_TSV="${MANIFEST_TSV:-}"
 BACKGROUND_CANDIDATE_TAXA="${BACKGROUND_CANDIDATE_TAXA:-}"
 BACKGROUND_CANDIDATE_FILE="${BACKGROUND_CANDIDATE_FILE:-}"
 BACKGROUND_CANDIDATE_CALLS="${BACKGROUND_CANDIDATE_CALLS:-background_candidate_signal}"
+DEMOTE_EXPECTED_GENUS_NEIGHBOURS="${DEMOTE_EXPECTED_GENUS_NEIGHBOURS:-true}"
 
 require_dir "${PROJECT_DIR}"
 require_dir "${OUT_ROOT}"
@@ -83,8 +84,7 @@ fi
 
 BACKGROUND_ARGS=()
 if [[ -n "${BACKGROUND_CANDIDATE_TAXA}" ]]; then
-    read -r -a BACKGROUND_TAXA_ARRAY <<< "${BACKGROUND_CANDIDATE_TAXA}"
-    BACKGROUND_ARGS+=(--background_candidate_taxa "${BACKGROUND_TAXA_ARRAY[@]}")
+    BACKGROUND_ARGS+=(--background_candidate_taxa "${BACKGROUND_CANDIDATE_TAXA}")
 fi
 if [[ -n "${BACKGROUND_CANDIDATE_FILE}" ]]; then
     require_file "${BACKGROUND_CANDIDATE_FILE}"
@@ -105,6 +105,9 @@ fi
 if [[ "${VERBOSE}" == "true" ]]; then
     PARTIAL_ARGS+=(--verbose)
 fi
+if [[ "${DEMOTE_EXPECTED_GENUS_NEIGHBOURS}" == "true" ]]; then
+    PARTIAL_ARGS+=(--demote_expected_genus_neighbours)
+fi
 
 log_info "Project directory: ${PROJECT_DIR}"
 log_info "Output root: ${OUT_ROOT}"
@@ -120,6 +123,7 @@ log_info "Panel 2 TSV: ${PANEL2_TSV}"
 log_info "Panel 3 TSV: ${PANEL3_TSV}"
 log_info "Background candidate taxa: ${BACKGROUND_CANDIDATE_TAXA:-none}"
 log_info "Background candidate file: ${BACKGROUND_CANDIDATE_FILE:-none}"
+log_info "Demote expected-genus neighbours: ${DEMOTE_EXPECTED_GENUS_NEIGHBOURS}"
 
 python3 "${SUMMARY_SCRIPT}" \
     --out_root "${OUT_ROOT}" \

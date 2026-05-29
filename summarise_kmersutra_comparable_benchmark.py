@@ -28,6 +28,11 @@ from typing import Iterable, Mapping, Sequence
 
 import pandas as pd
 
+from kmersutra.benchmark_reporting import (
+    is_expected_genus_neighbour,
+    reporting_layer_for_call,
+)
+
 try:
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
@@ -111,6 +116,8 @@ class SummaryPaths:
         Off-target taxon frequency summary TSV.
     background_candidate_summary : Path
         Plausible empirical-background candidate summary TSV.
+    neighbour_lineage_summary : Path
+        Expected-genus neighbouring-lineage evidence summary TSV.
     runtime_summary : Path
         Runtime summary TSV.
     workbook : Path
@@ -133,6 +140,7 @@ class SummaryPaths:
     real_world_summary: Path
     off_target_summary: Path
     background_candidate_summary: Path
+    neighbour_lineage_summary: Path
     runtime_summary: Path
     workbook: Path
     html_report: Path
@@ -219,6 +227,16 @@ def parse_args() -> argparse.Namespace:
         help="Optional text file with one background-candidate taxon per line.",
     )
     parser.add_argument(
+        "--demote_expected_genus_neighbours",
+        action="store_true",
+        help=(
+            "In positive spike-in samples, count non-expected same-genus "
+            "species calls as expected-lineage neighbour evidence rather than "
+            "strict reportable off-target species. Raw evidence is still "
+            "retained in the long-form tables."
+        ),
+    )
+    parser.add_argument(
         "--summary_name",
         default="kmersutra_comparable_summary",
         help="Prefix used for Excel and HTML outputs.",
@@ -302,6 +320,7 @@ def build_summary_paths(*, out_dir: Path, summary_name: str) -> SummaryPaths:
         real_world_summary=out_dir / "real_world_summary.tsv",
         off_target_summary=out_dir / "off_target_summary.tsv",
         background_candidate_summary=out_dir / "background_candidate_summary.tsv",
+        neighbour_lineage_summary=out_dir / "neighbour_lineage_summary.tsv",
         runtime_summary=out_dir / "runtime_summary.tsv",
         workbook=out_dir / f"{summary_name}.xlsx",
         html_report=out_dir / f"{summary_name}.html",
@@ -869,6 +888,7 @@ def add_call_metadata(
     positive_calls: set[str],
     background_candidate_calls: set[str] | None = None,
     background_candidate_taxa: set[str] | None = None,
+    demote_expected_genus_neighbours: bool = False,
 ) -> pd.DataFrame:
     """Add manifest and classification metadata to KmerSutra call rows.
 
@@ -884,6 +904,9 @@ def add_call_metadata(
         Expected target labels for the sample context.
     positive_calls : set[str]
         Positive KmerSutra call labels.
+    demote_expected_genus_neighbours : bool, optional
+        Whether to treat non-expected same-genus species in positive spike-in
+        samples as expected-lineage neighbour evidence.
 
     Returns
     -------
@@ -907,6 +930,12 @@ def add_call_metadata(
     expected_normalised = {
         normalise_taxon_name(value=target).lower() for target in expected_targets
     }
+    metadata = metadata_from_manifest_row(
+        row=row,
+        out_root=out_root,
+        expected_targets=expected_targets,
+    )
+    sample_is_negative = bool(metadata.get("is_negative", False))
     output["is_species_level"] = [
         is_species_level_row(row=record) for record in output.to_dict(orient="records")
     ]
@@ -943,23 +972,51 @@ def add_call_metadata(
     output["is_positive_background_candidate"] = (
         output["is_species_level"] & output["is_background_candidate_signal"]
     )
+    output["is_expected_genus_neighbour"] = output.apply(
+        lambda record: is_expected_genus_neighbour(
+            report_label=record.get("report_label", ""),
+            expected_targets=expected_targets,
+            is_expected_target=bool(record.get("is_expected_target", False)),
+            is_negative_sample=sample_is_negative,
+            is_background_candidate=bool(
+                record.get("is_background_candidate_signal", False)
+            ),
+            demote_expected_genus_neighbours=demote_expected_genus_neighbours,
+        ),
+        axis=1,
+    )
+    output["is_positive_neighbour_lineage"] = (
+        output["is_positive_call"]
+        & output["is_species_level"]
+        & output["is_expected_genus_neighbour"]
+    )
     output["is_positive_off_target_raw"] = (
         output["is_positive_call"] & ~output["is_expected_target"]
     )
     output["is_positive_off_target"] = (
         output["is_positive_off_target_raw"]
         & ~output["is_background_candidate_signal"]
+        & ~output["is_expected_genus_neighbour"]
     )
     output["is_positive_plasmodium_off_target"] = (
         output["is_positive_off_target"]
         & output["normalised_report_label"].str.contains("plasmodium", na=False)
     )
-
-    metadata = metadata_from_manifest_row(
-        row=row,
-        out_root=out_root,
-        expected_targets=expected_targets,
+    output["benchmark_report_layer"] = output.apply(
+        lambda record: reporting_layer_for_call(
+            is_positive_call=bool(record.get("is_positive_call", False)),
+            is_species_level=bool(record.get("is_species_level", False)),
+            is_expected_target=bool(record.get("is_expected_target", False)),
+            is_background_candidate=bool(
+                record.get("is_background_candidate_signal", False)
+            ),
+            is_expected_genus_neighbour_call=bool(
+                record.get("is_expected_genus_neighbour", False)
+            ),
+        ),
+        axis=1,
     )
+
     for key, value in metadata.items():
         output[key] = value
 
@@ -1048,6 +1105,7 @@ def read_sample_outputs(
     positive_calls: set[str],
     background_candidate_calls: set[str] | None = None,
     background_candidate_taxa: set[str] | None = None,
+    demote_expected_genus_neighbours: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Read all sample-level KmerSutra outputs.
 
@@ -1143,6 +1201,7 @@ def read_sample_outputs(
                     positive_calls=positive_calls,
                     background_candidate_calls=background_candidate_calls,
                     background_candidate_taxa=background_candidate_taxa,
+                    demote_expected_genus_neighbours=demote_expected_genus_neighbours,
                 )
             )
 
@@ -1228,10 +1287,12 @@ def build_sample_summary(
             "n_off_target_species",
             "n_plasmodium_off_target_species",
             "n_background_candidate_species",
+            "n_neighbour_lineage_species",
             "any_expected_detected",
             "all_expected_detected",
             "any_off_target_detected",
             "any_background_candidate_detected",
+            "any_neighbour_lineage_detected",
             "clean_expected_positive",
             "strict_clean_expected_positive",
             "positive_labels",
@@ -1239,6 +1300,8 @@ def build_sample_summary(
             "off_target_labels",
             "plasmodium_off_target_labels",
             "background_candidate_labels",
+        "neighbour_lineage_labels",
+            "neighbour_lineage_labels",
         ]:
             summary[column] = 0 if column.startswith("n_") else ""
         return summary
@@ -1260,6 +1323,12 @@ def build_sample_summary(
         background_candidates = positive_species.loc[
             positive_species.get(
                 "is_positive_background_candidate",
+                pd.Series(False, index=positive_species.index),
+            ).astype(bool)
+        ].copy()
+        neighbour_lineage = positive_species.loc[
+            positive_species.get(
+                "is_positive_neighbour_lineage",
                 pd.Series(False, index=positive_species.index),
             ).astype(bool)
         ].copy()
@@ -1297,6 +1366,9 @@ def build_sample_summary(
                 "n_background_candidate_species": int(
                     background_candidates["report_label"].nunique()
                 ),
+                "n_neighbour_lineage_species": int(
+                    neighbour_lineage["report_label"].nunique()
+                ),
                 "n_raw_off_target_species_including_background": raw_off_target_count,
                 "any_expected_detected": int(len(expected_detected_labels) > 0),
                 "all_expected_detected": int(all_expected_detected),
@@ -1305,6 +1377,9 @@ def build_sample_summary(
                 ),
                 "any_background_candidate_detected": int(
                     background_candidates["report_label"].nunique() > 0
+                ),
+                "any_neighbour_lineage_detected": int(
+                    neighbour_lineage["report_label"].nunique() > 0
                 ),
                 "clean_expected_positive": int(
                     all_expected_detected and off_target["report_label"].nunique() == 0
@@ -1325,6 +1400,9 @@ def build_sample_summary(
                 "background_candidate_labels": "; ".join(
                     sorted(set(background_candidates["report_label"].dropna().astype(str)))
                 ),
+                "neighbour_lineage_labels": "; ".join(
+                    sorted(set(neighbour_lineage["report_label"].dropna().astype(str)))
+                ),
             }
         )
 
@@ -1337,11 +1415,13 @@ def build_sample_summary(
         "n_off_target_species",
         "n_plasmodium_off_target_species",
         "n_background_candidate_species",
+        "n_neighbour_lineage_species",
         "n_raw_off_target_species_including_background",
         "any_expected_detected",
         "all_expected_detected",
         "any_off_target_detected",
         "any_background_candidate_detected",
+        "any_neighbour_lineage_detected",
         "clean_expected_positive",
         "strict_clean_expected_positive",
     ]
@@ -1354,6 +1434,7 @@ def build_sample_summary(
         "off_target_labels",
         "plasmodium_off_target_labels",
         "background_candidate_labels",
+        "neighbour_lineage_labels",
     ]:
         if column in summary.columns:
             summary[column] = summary[column].fillna("")
@@ -1517,6 +1598,10 @@ def build_real_world_by_sample(*, sample_summary: pd.DataFrame) -> pd.DataFrame:
         "any_background_candidate_detected",
         pd.Series(0, index=output.index),
     ).astype(int)
+    output["positive_with_neighbour_lineage"] = output.get(
+        "any_neighbour_lineage_detected",
+        pd.Series(0, index=output.index),
+    ).astype(int)
     output["strict_clean_positive"] = output.get(
         "strict_clean_expected_positive",
         output["clean_expected_positive"],
@@ -1597,6 +1682,10 @@ def summarise_real_world(*, real_world_by_sample: pd.DataFrame) -> pd.DataFrame:
                     numerator=float(positives["positive_with_background_candidate"].sum()),
                     denominator=float(positives.shape[0]),
                 ),
+                "positive_neighbour_lineage_rate": safe_divide(
+                    numerator=float(positives["positive_with_neighbour_lineage"].sum()),
+                    denominator=float(positives.shape[0]),
+                ),
                 "positive_off_target_rate": safe_divide(
                     numerator=float(positives["positive_with_off_target"].sum()),
                     denominator=float(positives.shape[0]),
@@ -1631,6 +1720,14 @@ def summarise_real_world(*, real_world_by_sample: pd.DataFrame) -> pd.DataFrame:
                 "mean_background_candidate_species_positive_samples": (
                     float(positives.get(
                         "n_background_candidate_species",
+                        pd.Series(dtype=float),
+                    ).mean())
+                    if not positives.empty
+                    else math.nan
+                ),
+                "mean_neighbour_lineage_species_positive_samples": (
+                    float(positives.get(
+                        "n_neighbour_lineage_species",
                         pd.Series(dtype=float),
                     ).mean())
                     if not positives.empty
@@ -1685,6 +1782,8 @@ def summarise_progress(*, sample_summary: pd.DataFrame) -> tuple[pd.DataFrame, p
             max_off_target_species=("n_off_target_species", "max"),
             median_background_candidate_species=("n_background_candidate_species", "median"),
             max_background_candidate_species=("n_background_candidate_species", "max"),
+            median_neighbour_lineage_species=("n_neighbour_lineage_species", "median"),
+            max_neighbour_lineage_species=("n_neighbour_lineage_species", "max"),
         )
         .reset_index()
         .sort_values(by=["benchmark_family", "panel", "spike_n"])
@@ -1773,6 +1872,47 @@ def summarise_background_candidates(*, calls_long: pd.DataFrame) -> pd.DataFrame
         .reset_index()
         .sort_values(by=["n_samples", "report_label"], ascending=[False, True])
     )
+
+def summarise_neighbour_lineages(*, calls_long: pd.DataFrame) -> pd.DataFrame:
+    """Summarise expected-genus neighbouring-lineage evidence.
+
+    Parameters
+    ----------
+    calls_long : pd.DataFrame
+        Annotated calls table.
+
+    Returns
+    -------
+    pd.DataFrame
+        Neighbour-lineage evidence summary table.
+    """
+    if calls_long.empty or "is_positive_neighbour_lineage" not in calls_long.columns:
+        return pd.DataFrame()
+    subset = calls_long.loc[
+        calls_long["is_positive_neighbour_lineage"].astype(bool)
+        & calls_long["is_species_level"].astype(bool)
+    ].copy()
+    if subset.empty:
+        return pd.DataFrame()
+    return (
+        subset.groupby(
+            ["benchmark_family", "panel", "report_label"],
+            dropna=False,
+        )
+        .agg(
+            n_samples=("sample_id", "nunique"),
+            median_unique_kmers=("n_unique_kmers", "median")
+            if "n_unique_kmers" in subset.columns
+            else ("sample_id", "size"),
+            median_positive_sequences=("n_positive_sequences", "median")
+            if "n_positive_sequences" in subset.columns
+            else ("sample_id", "size"),
+            example_expected_targets=("expected_targets", "first"),
+        )
+        .reset_index()
+        .sort_values(by=["n_samples", "report_label"], ascending=[False, True])
+    )
+
 
 def summarise_runtime(*, status_df: pd.DataFrame) -> pd.DataFrame:
     """Summarise runtime by benchmark family.
@@ -1891,16 +2031,44 @@ def write_html_report(
         Report title.
     """
     css = """
-    body { font-family: Arial, Helvetica, sans-serif; margin: 28px; color: #1a1a1a; }
+    body {
+        font-family: Arial, Helvetica, sans-serif;
+        margin: 28px;
+        color: #1a1a1a;
+    }
     h1, h2 { color: #1f4e79; }
     .note { max-width: 1100px; line-height: 1.45; }
     .small { color: #555; font-size: 13px; }
-    .table-wrap { overflow-x: auto; border: 1px solid #d9e2ef; margin: 18px 0; }
-    table.data-table { border-collapse: collapse; font-size: 13px; width: 100%; }
-    table.data-table th { background: #1f4e79; color: white; padding: 7px; text-align: left; white-space: nowrap; }
-    table.data-table td { border-bottom: 1px solid #e6edf5; padding: 6px; vertical-align: top; }
+    .table-wrap {
+        overflow-x: auto;
+        border: 1px solid #d9e2ef;
+        margin: 18px 0;
+    }
+    table.data-table {
+        border-collapse: collapse;
+        font-size: 13px;
+        width: 100%;
+    }
+    table.data-table th {
+        background: #1f4e79;
+        color: white;
+        padding: 7px;
+        text-align: left;
+        white-space: nowrap;
+    }
+    table.data-table td {
+        border-bottom: 1px solid #e6edf5;
+        padding: 6px;
+        vertical-align: top;
+    }
     table.data-table tr:nth-child(even) { background: #fbfdff; }
-    .kpi { display: inline-block; padding: 12px 16px; margin: 8px 8px 8px 0; background: #eef5fb; border-left: 5px solid #1f4e79; }
+    .kpi {
+        display: inline-block;
+        padding: 12px 16px;
+        margin: 8px 8px 8px 0;
+        background: #eef5fb;
+        border-left: 5px solid #1f4e79;
+    }
     """
     sample_summary = tables.get("sample_summary", pd.DataFrame())
     completed = 0
@@ -1917,6 +2085,7 @@ def write_html_report(
         "tracked_target_performance",
         "off_target_summary",
         "background_candidate_summary",
+        "neighbour_lineage_summary",
         "runtime_summary",
         "sample_status",
     ]
@@ -2011,6 +2180,7 @@ def run_summary(
     strict: bool,
     background_candidate_calls: set[str] | None = None,
     background_candidate_taxa: set[str] | None = None,
+    demote_expected_genus_neighbours: bool = False,
 ) -> SummaryPaths:
     """Run the full summary workflow.
 
@@ -2062,6 +2232,7 @@ def run_summary(
         positive_calls=positive_calls,
         background_candidate_calls=background_candidate_calls or set(),
         background_candidate_taxa=background_candidate_taxa or set(),
+        demote_expected_genus_neighbours=demote_expected_genus_neighbours,
     )
     sample_summary = build_sample_summary(
         status_df=status_df,
@@ -2077,6 +2248,7 @@ def run_summary(
     )
     off_target_summary = summarise_off_targets(calls_long=calls_long)
     background_candidate_summary = summarise_background_candidates(calls_long=calls_long)
+    neighbour_lineage_summary = summarise_neighbour_lineages(calls_long=calls_long)
     runtime_summary = summarise_runtime(status_df=status_df)
 
     tables = {
@@ -2089,6 +2261,7 @@ def run_summary(
         "real_world_summary": real_world_summary,
         "off_target_summary": off_target_summary,
         "background_candidate_summary": background_candidate_summary,
+        "neighbour_lineage_summary": neighbour_lineage_summary,
         "runtime_summary": runtime_summary,
         "detection_calls_long": calls_long,
         "evidence_long": evidence_long,
@@ -2106,6 +2279,7 @@ def run_summary(
     write_tsv(dataframe=real_world_summary, path=paths.real_world_summary)
     write_tsv(dataframe=off_target_summary, path=paths.off_target_summary)
     write_tsv(dataframe=background_candidate_summary, path=paths.background_candidate_summary)
+    write_tsv(dataframe=neighbour_lineage_summary, path=paths.neighbour_lineage_summary)
     write_tsv(dataframe=runtime_summary, path=paths.runtime_summary)
     write_excel_workbook(tables=tables, path=paths.workbook)
     write_html_report(
@@ -2164,6 +2338,7 @@ def main() -> None:
         positive_calls=set(args.positive_calls),
         background_candidate_calls=set(args.background_candidate_calls),
         background_candidate_taxa=background_candidate_taxa,
+        demote_expected_genus_neighbours=args.demote_expected_genus_neighbours,
         summary_name=args.summary_name,
         allow_partial=args.allow_partial,
         strict=args.strict,
