@@ -1,0 +1,32 @@
+KmerSutra v0.29.0 local test summary
+====================================
+
+Date: 2026-05-29
+Environment: ChatGPT sandbox, Python unittest runner
+
+Commands run:
+
+python -m py_compile \
+  kmersutra/cli/screen_reads_for_clade_kmers.py \
+  kmersutra/call_consolidation.py \
+  kmersutra/table_parquet.py
+
+python -m unittest \
+  tests.test_call_consolidation \
+  tests.test_table_parquet \
+  tests.test_screen_cli_outputs -v
+
+python -m unittest discover -s tests -v
+
+Summary:
+- Package unittest discovery: 242 tests run, all OK.
+- New call-consolidation tests passed.
+- New generic Parquet helper tests passed.
+- Updated screening CLI tests passed.
+- nose2 was not installed in the sandbox, so unittest discovery was used.
+
+Note:
+- pyarrow was not installed in the sandbox. Optional Parquet write paths were
+  tested for graceful warning/failure behaviour without pyarrow. Full Parquet
+  round-trip tests should be run on the cluster after installing with the
+  parquet extra or after installing pyarrow.

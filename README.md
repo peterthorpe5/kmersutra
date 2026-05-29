@@ -1487,3 +1487,48 @@ kmersutra-build-panel ... \
 
 Progress logging during genome indexing is controlled by
 `--global_index_progress_interval`.
+
+## v0.29.0 background-aware consolidation quick start
+
+The v0.29.0 interpretation layer keeps raw species evidence auditable while
+allowing reportable species calls to be consolidated for practical reporting.
+This is useful when a broad panel reports a dominant target species plus weaker
+same-genus near-neighbour taxa, or when a plausible empirical-background taxon
+is repeatedly observed in no-spike controls.
+
+Example screening command additions:
+
+```bash
+kmersutra-screen \
+  --input sample.fastq.gz \
+  --input_format fastq \
+  --panel species_kmer_panel.tsv.gz \
+  --sample_id sample1 \
+  --out_dir sample1_kmersutra \
+  --call_preset conservative \
+  --consolidate_species_calls \
+  --background_candidate_taxa "Hammondia hammondi" \
+  --dominant_species_min_margin 25 \
+  --dominant_species_min_ratio 2.0 \
+  --write_parquet_outputs \
+  --no_read_level_hits \
+  --profile \
+  --verbose
+```
+
+When consolidation is enabled, raw calls are written to
+`species_detection_calls_raw.tsv`, while the compatibility path
+`species_detection_calls.tsv` contains the report-layer calls. Background
+candidate taxa are labelled as `background_candidate_signal`, and dominated
+same-genus neighbours are labelled as `neighbour_lineage_evidence`.
+
+Example comparable-summary command additions:
+
+```bash
+BACKGROUND_CANDIDATE_TAXA="Hammondia hammondi" \
+OUT_ROOT=/path/to/runs_kmersutra_v028_global_exact_panel33 \
+bash run_kmersutra_comparable_summary.sh
+```
+
+The summary writes `background_candidate_summary.tsv` and keeps background-aware
+cleanliness separate from strict cleanliness that counts all non-expected taxa.

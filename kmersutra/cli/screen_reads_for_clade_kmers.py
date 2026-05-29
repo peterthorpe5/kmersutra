@@ -6,8 +6,15 @@ import argparse
 from contextlib import nullcontext
 from pathlib import Path
 
+from kmersutra.call_consolidation import (
+    CONSOLIDATED_CALL_FIELDNAMES,
+    consolidate_species_calls,
+    merge_background_taxa,
+)
 from kmersutra.features import FEATURE_FIELDNAMES, summarise_sequence_features
 from kmersutra.io import write_tsv
+from kmersutra.parquet_modules import OptionalParquetDependencyError
+from kmersutra.table_parquet import write_records_parquet
 from kmersutra.hierarchical import (
     MODULE_ACTIVATION_FIELDNAMES,
     load_module_manifest,
@@ -216,6 +223,66 @@ def parse_args() -> argparse.Namespace:
             "novel or unsampled lineage interpretation."
         ),
     )
+
+    parser.add_argument(
+        "--consolidate_species_calls",
+        action="store_true",
+        help=(
+            "After raw species thresholding, demote dominated same-genus "
+            "species to neighbour_lineage_evidence and separate supplied "
+            "empirical-background candidate taxa from ordinary species calls."
+        ),
+    )
+    parser.add_argument(
+        "--background_candidate_taxa",
+        nargs="*",
+        default=[],
+        help=(
+            "Species labels that should be retained as plausible empirical-"
+            "background candidate signals rather than ordinary off-target "
+            "species calls, for example 'Hammondia hammondi'."
+        ),
+    )
+    parser.add_argument(
+        "--background_candidate_file",
+        default=None,
+        help="Optional text file containing one background-candidate taxon per line.",
+    )
+    parser.add_argument(
+        "--disable_same_genus_neighbour_demotion",
+        action="store_true",
+        help=(
+            "With --consolidate_species_calls, keep co-reported same-genus "
+            "species as reportable species rather than demoting dominated "
+            "neighbours."
+        ),
+    )
+    parser.add_argument(
+        "--dominant_species_min_margin",
+        type=int,
+        default=25,
+        help=(
+            "Minimum unique-k-mer margin required to demote a same-genus "
+            "neighbour when --consolidate_species_calls is enabled."
+        ),
+    )
+    parser.add_argument(
+        "--dominant_species_min_ratio",
+        type=float,
+        default=2.0,
+        help=(
+            "Minimum primary/candidate unique-k-mer ratio required to demote "
+            "a same-genus neighbour when --consolidate_species_calls is enabled."
+        ),
+    )
+    parser.add_argument(
+        "--write_parquet_outputs",
+        action="store_true",
+        help=(
+            "Also write key screening output tables as Parquet files. Requires "
+            "the optional pyarrow dependency."
+        ),
+    )
     parser.add_argument(
         "--disallow_mixed_species",
         action="store_true",
@@ -288,6 +355,47 @@ def load_expected_species_for_screening(
     return _deduplicate_species_metadata(records=records)
 
 
+
+def maybe_write_parquet_table(
+    *,
+    records: list[dict[str, object]],
+    output_path: Path,
+    fieldnames: list[str],
+    enabled: bool,
+    logger,
+) -> None:
+    """Write an optional Parquet companion table.
+
+    Parameters
+    ----------
+    records : list of dict
+        Records to write.
+    output_path : pathlib.Path
+        Parquet output path.
+    fieldnames : list of str
+        Stable output column order.
+    enabled : bool
+        Whether Parquet output was requested.
+    logger : logging.Logger
+        Logger used for diagnostics.
+    """
+    if not enabled:
+        return
+    try:
+        n_written = write_records_parquet(
+            records=records,
+            output_path=output_path,
+            fieldnames=fieldnames,
+        )
+    except OptionalParquetDependencyError as exc:
+        logger.warning(
+            "Could not write Parquet output %s because pyarrow is unavailable: %s",
+            output_path,
+            exc,
+        )
+        return
+    logger.info("Wrote Parquet output %s (%d rows)", output_path, n_written)
+
 def main() -> None:
     """Run the sequence screening workflow."""
     args = parse_args()
@@ -353,6 +461,17 @@ def main() -> None:
         "Minimum weak neighbour species for possible novelty: %d",
         args.min_neighbour_species_for_novelty,
     )
+    logger.info("Consolidate species calls: %s", args.consolidate_species_calls)
+    logger.info(
+        "Same-genus neighbour demotion enabled: %s",
+        not args.disable_same_genus_neighbour_demotion,
+    )
+    logger.info(
+        "Dominant species demotion margin: %d; ratio: %.4f",
+        args.dominant_species_min_margin,
+        args.dominant_species_min_ratio,
+    )
+    logger.info("Write Parquet outputs: %s", args.write_parquet_outputs)
 
     profiler = WorkflowProfiler() if args.profile else None
     screen_profile_records: list[dict[str, object]] = []
@@ -443,7 +562,27 @@ def main() -> None:
                 call_settings["min_mixed_species_fraction"]
             ),
         )
-    logger.info("Built %d species detection-call rows", len(detection_calls))
+    logger.info("Built %d raw species detection-call rows", len(detection_calls))
+
+    raw_detection_calls = [dict(record) for record in detection_calls]
+    if args.consolidate_species_calls:
+        background_taxa = merge_background_taxa(
+            background_candidate_taxa=args.background_candidate_taxa,
+            background_candidate_file=args.background_candidate_file,
+        )
+        logger.info(
+            "Background candidate taxa supplied for consolidation: %s",
+            "; ".join(sorted(background_taxa)) or "none",
+        )
+        detection_calls = consolidate_species_calls(
+            species_calls=raw_detection_calls,
+            background_candidate_taxa=background_taxa,
+            demote_same_genus_neighbours=not args.disable_same_genus_neighbour_demotion,
+            dominant_species_min_margin=args.dominant_species_min_margin,
+            dominant_species_min_ratio=args.dominant_species_min_ratio,
+            logger=logger,
+        )
+    logger.info("Built %d report-layer species detection-call rows", len(detection_calls))
 
     with (profiler.time_stage(stage="interpret_lineage_evidence", detail="unresolved_novelty") if profiler else nullcontext()):
         lineage_interpretation = interpret_lineage_evidence(
@@ -527,34 +666,72 @@ def main() -> None:
         output_path=out_dir / "sample_taxonomic_kmer_evidence.tsv",
         fieldnames=TAXONOMIC_EVIDENCE_FIELDNAMES,
     )
+    maybe_write_parquet_table(
+        records=taxonomic_evidence,
+        output_path=out_dir / "sample_taxonomic_kmer_evidence.parquet",
+        fieldnames=TAXONOMIC_EVIDENCE_FIELDNAMES,
+        enabled=args.write_parquet_outputs,
+        logger=logger,
+    )
+    raw_call_fieldnames = [
+        "sample_id",
+        "species_name",
+        "clade",
+        "n_hits",
+        "n_unique_kmers",
+        "n_positive_sequences",
+        "n_k_values_positive",
+        "best_k",
+        "n_exact_hits",
+        "n_fuzzy_hits",
+        "conflicting_unique_kmers",
+        "conflict_ratio",
+        "reportable_conflicting_unique_kmers",
+        "reportable_conflict_ratio",
+        "mixed_species_support_fraction",
+        "confidence_score",
+        "signal_confidence_score",
+        "call",
+    ]
+    if args.consolidate_species_calls:
+        write_tsv(
+            records=raw_detection_calls,
+            output_path=out_dir / "species_detection_calls_raw.tsv",
+            fieldnames=raw_call_fieldnames,
+        )
+        maybe_write_parquet_table(
+            records=raw_detection_calls,
+            output_path=out_dir / "species_detection_calls_raw.parquet",
+            fieldnames=raw_call_fieldnames,
+            enabled=args.write_parquet_outputs,
+            logger=logger,
+        )
+        call_fieldnames = CONSOLIDATED_CALL_FIELDNAMES
+    else:
+        call_fieldnames = raw_call_fieldnames
     write_tsv(
         records=detection_calls,
         output_path=out_dir / "species_detection_calls.tsv",
-        fieldnames=[
-            "sample_id",
-            "species_name",
-            "clade",
-            "n_hits",
-            "n_unique_kmers",
-            "n_positive_sequences",
-            "n_k_values_positive",
-            "best_k",
-            "n_exact_hits",
-            "n_fuzzy_hits",
-            "conflicting_unique_kmers",
-            "conflict_ratio",
-            "reportable_conflicting_unique_kmers",
-            "reportable_conflict_ratio",
-            "mixed_species_support_fraction",
-            "confidence_score",
-            "signal_confidence_score",
-            "call",
-        ],
+        fieldnames=call_fieldnames,
+    )
+    maybe_write_parquet_table(
+        records=detection_calls,
+        output_path=out_dir / "species_detection_calls.parquet",
+        fieldnames=call_fieldnames,
+        enabled=args.write_parquet_outputs,
+        logger=logger,
     )
     write_tsv(
         records=lineage_interpretation,
         output_path=out_dir / "sample_lineage_interpretation.tsv",
         fieldnames=LINEAGE_INTERPRETATION_FIELDNAMES,
+    )
+    maybe_write_parquet_table(
+        records=lineage_interpretation,
+        output_path=out_dir / "sample_lineage_interpretation.parquet",
+        fieldnames=LINEAGE_INTERPRETATION_FIELDNAMES,
+        enabled=args.write_parquet_outputs,
+        logger=logger,
     )
     write_tsv(
         records=module_activation_records,

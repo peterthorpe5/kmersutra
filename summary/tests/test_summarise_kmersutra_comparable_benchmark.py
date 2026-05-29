@@ -435,3 +435,68 @@ class TestKmerSutraComparableSummary(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TestBackgroundAwareSummary(unittest.TestCase):
+    """Tests for empirical-background candidate reporting."""
+
+    def test_background_candidate_taxon_is_not_counted_as_off_target(self) -> None:
+        """Background candidates should be summarised separately from off-targets."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            out_root = root / "run"
+            sample_dir = out_root / "samples" / "shuffled_negative" / "s1"
+            sample_dir.mkdir(parents=True)
+            manifest = out_root / "kmersutra_comparable_manifest.tsv"
+            pd.DataFrame(
+                [
+                    {
+                        "sample_id": "s1",
+                        "input_fastq": "/fake/mixed.fastq.gz",
+                        "benchmark_family": "shuffled_negative",
+                        "panel": "shuffled",
+                        "replicate": "1",
+                        "spike_n": "0",
+                        "source_run_dir": "/fake",
+                        "source_relative_dir": "mix_rep1_n0",
+                    }
+                ]
+            ).to_csv(manifest, sep="\t", index=False)
+            pd.DataFrame(
+                [
+                    {
+                        "species_name": "Hammondia hammondi",
+                        "call": "present_high_confidence",
+                        "n_unique_kmers": "28",
+                        "n_positive_sequences": "73",
+                        "confidence_score": "0.62",
+                        "conflict_ratio": "0.37",
+                        "n_k_values_positive": "4",
+                        "best_k": "151",
+                        "evidence_rank": "species",
+                    }
+                ]
+            ).to_csv(sample_dir / "species_detection_calls.tsv", sep="\t", index=False)
+            pd.DataFrame(
+                [{"sample_id": "s1", "runtime_seconds": 1, "exit_status": 0}]
+            ).to_csv(sample_dir / "screen_timing.tsv", sep="\t", index=False)
+
+            paths = kmersutra_summary.run_summary(
+                out_root=out_root,
+                manifest_path=manifest,
+                out_dir=out_root / "summary",
+                panel1_targets=["Plasmodium vivax"],
+                panel2_tsv=None,
+                panel3_tsv=None,
+                positive_calls={"present_high_confidence"},
+                background_candidate_calls={"background_candidate_signal"},
+                background_candidate_taxa={"hammondia hammondi"},
+                summary_name="summary",
+                allow_partial=True,
+                strict=False,
+            )
+            sample_summary = pd.read_csv(paths.sample_summary, sep="\t")
+            self.assertEqual(int(sample_summary.loc[0, "n_background_candidate_species"]), 1)
+            self.assertEqual(int(sample_summary.loc[0, "n_off_target_species"]), 0)
+            background = pd.read_csv(paths.background_candidate_summary, sep="\t")
+            self.assertEqual(background.loc[0, "report_label"], "Hammondia hammondi")
+
