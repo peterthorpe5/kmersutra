@@ -1,0 +1,44 @@
+KmerSutra v0.32.1 nose2 repair notes
+=========================================
+
+This release is a packaging/working-tree repair of v0.32.0, not a scientific
+algorithm change.
+
+Why it exists
+-------------
+A cluster nose2 run showed two failures that are consistent with a mixed/stale
+working tree:
+
+1. tests/test_comparable_summary_neighbour_reporting.py could not import
+   summarise_kmersutra_comparable_benchmark.py from the repository root.
+   The script is present in the complete v0.32 package and is retained here.
+
+2. tests/test_cli.py still expected marker_selection == "genome_spread".
+   That expectation is stale. From v0.31 onward, and retained in v0.32,
+   the intended default is "independent_multik_genome_spread".
+
+What changed relative to v0.32.0
+--------------------------------
+Only the package version and repair notes were changed. The assembly-aware
+sampling, compressed table I/O and AI table support from v0.32.0 are unchanged.
+
+Recommended cluster install
+---------------------------
+Use a clean extracted directory or overwrite the existing checkout completely.
+A partial copy can leave old tests/scripts behind and reproduce the same error.
+
+    cd /home/pthorpe001/data/2026_plasmodium_kraken_sensitivity
+    mv kmersutra kmersutra_before_v0321_$(date +%Y%m%d_%H%M%S)
+    unzip KmerSutra_v0_32_1_nose2_repair.zip
+    mv kmersutra_v0_32_1_nose2_repair kmersutra
+    cd kmersutra
+    pip install -e ".[dev,reporting,ncbi,ml,parquet]"
+    python -m unittest discover -s tests -v
+    nose2 -v
+
+If you do not want to move the old directory, at minimum check these two files:
+
+    ls -lh summarise_kmersutra_comparable_benchmark.py
+    grep -n "independent_multik_genome_spread" tests/test_cli.py
+
+Do not submit a build while nose2 is failing.

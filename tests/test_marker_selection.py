@@ -241,3 +241,74 @@ class TestMarkerSelectionScalability(unittest.TestCase):
         self.assertTrue(bin_counts)
         self.assertLessEqual(max(bin_counts.values()), 2)
 
+
+
+class TestIndependentMultiKMarkerSelection(unittest.TestCase):
+    """Tests for v0.31 independent multi-k marker sampling."""
+
+    def test_shifted_bins_differ_between_k_values(self) -> None:
+        """Different k values should use different bin phases by default."""
+        from kmersutra.marker_selection import calculate_k_bin_offset
+
+        offsets = [
+            calculate_k_bin_offset(k=k, k_values=[51, 77, 101, 151], genome_bin_size=10000)
+            for k in [51, 77, 101, 151]
+        ]
+        self.assertEqual(len(set(offsets)), 4)
+        self.assertEqual(offsets[0], 0)
+
+    def test_independent_mode_reduces_cross_k_same_region_selection(self) -> None:
+        """Nested cross-k markers from one region should be de-correlated."""
+        markers = []
+        for k in [51, 77, 101]:
+            for offset in [0, 5, 10, 15]:
+                markers.append(
+                    make_marker(
+                        kmer=("A" * k)[:-len(str(offset))] + str(offset),
+                        position=1000 + offset,
+                        k=k,
+                    )
+                )
+        selected = list(
+            select_genome_spread_markers(
+                diagnostic_kmers=markers,
+                config=MarkerSelectionConfig(
+                    strategy="independent_multik_genome_spread",
+                    max_per_bucket=10,
+                    genome_bin_size=10000,
+                    max_per_genome_bin=10,
+                    min_cross_k_marker_distance=500,
+                ),
+            )
+        )
+        selected_k_values = {item.k for item in selected}
+        self.assertGreaterEqual(len(selected), 1)
+        self.assertEqual(len(selected_k_values), 1)
+
+    def test_independent_mode_allows_distant_cross_k_regions(self) -> None:
+        """Different k values should be retained when they come from distant regions."""
+        markers = [
+            make_marker(kmer="A" * 51, position=1000, k=51),
+            make_marker(kmer="C" * 77, position=10000, k=77),
+            make_marker(kmer="G" * 101, position=20000, k=101),
+        ]
+        selected = list(
+            select_genome_spread_markers(
+                diagnostic_kmers=markers,
+                config=MarkerSelectionConfig(
+                    strategy="independent_multik_genome_spread",
+                    max_per_bucket=10,
+                    genome_bin_size=10000,
+                    max_per_genome_bin=10,
+                    min_cross_k_marker_distance=500,
+                ),
+            )
+        )
+        self.assertEqual({item.k for item in selected}, {51, 77, 101})
+
+    def test_independent_mode_is_default_strategy(self) -> None:
+        """The v0.31 default should use independent multi-k sampling."""
+        self.assertEqual(
+            MarkerSelectionConfig().strategy,
+            "independent_multik_genome_spread",
+        )

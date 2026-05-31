@@ -292,8 +292,8 @@ def build_summary_paths(*, out_dir: Path, summary_name: str) -> SummaryPaths:
     return SummaryPaths(
         out_dir=out_dir,
         sample_status=out_dir / "sample_status.tsv",
-        calls_long=out_dir / "kmersutra_detection_calls_long.tsv",
-        evidence_long=out_dir / "kmersutra_evidence_long.tsv",
+        calls_long=out_dir / "kmersutra_detection_calls_long.tsv.gz",
+        evidence_long=out_dir / "kmersutra_evidence_long.tsv.gz",
         sample_summary=out_dir / "kmersutra_sample_summary.tsv",
         progress_by_family=out_dir / "progress_by_family.tsv",
         qc_by_family_spike=out_dir / "qc_by_family_spike.tsv",
@@ -334,14 +334,14 @@ def safe_read_tsv(*, path: Path) -> pd.DataFrame:
 
 
 def write_tsv(*, dataframe: pd.DataFrame, path: Path) -> None:
-    """Write a table as tab-separated text.
+    """Write a table as tab-separated text, optionally gzip-compressed.
 
     Parameters
     ----------
     dataframe : pd.DataFrame
         Table to write.
     path : Path
-        Output path.
+        Output path. Paths ending ``.gz`` are written as gzip-compressed TSV.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     dataframe.to_csv(path, sep="\t", index=False)

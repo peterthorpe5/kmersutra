@@ -44,6 +44,17 @@ class TestCliModules(unittest.TestCase):
         module = importlib.import_module("kmersutra.cli.predict_classifier")
         self.assertTrue(callable(module.main))
 
+
+    def test_build_call_training_cli_imports(self):
+        """AI call-training CLI module should expose a main function."""
+        module = importlib.import_module("kmersutra.cli.build_call_training_table")
+        self.assertTrue(callable(module.main))
+
+    def test_train_call_calibrator_cli_imports(self):
+        """AI call-calibrator CLI module should expose a main function."""
+        module = importlib.import_module("kmersutra.cli.train_call_calibrator")
+        self.assertTrue(callable(module.main))
+
     def test_summarise_run_cli_imports(self):
         """Run-summary CLI module should expose a main function."""
         module = importlib.import_module("kmersutra.cli.summarise_spikein_run")
@@ -79,8 +90,8 @@ class TestCliModules(unittest.TestCase):
 class TestBuildPanelCliDefaults(unittest.TestCase):
     """Test build-panel CLI defaults that affect publication builds."""
 
-    def test_marker_selection_defaults_to_genome_spread(self) -> None:
-        """Genome-spread marker selection should be the default build behaviour."""
+    def test_marker_selection_defaults_to_independent_multik_genome_spread(self) -> None:
+        """Independent multi-k marker selection should be the default build behaviour."""
         from kmersutra.cli.build_clade_kmer_panel import parse_args
         import sys
         from unittest.mock import patch
@@ -94,4 +105,4 @@ class TestBuildPanelCliDefaults(unittest.TestCase):
         ]
         with patch.object(sys, "argv", argv):
             args = parse_args()
-        self.assertEqual(args.marker_selection, "genome_spread")
+        self.assertEqual(args.marker_selection, "independent_multik_genome_spread")

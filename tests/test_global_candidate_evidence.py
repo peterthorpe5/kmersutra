@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import unittest
+from collections import defaultdict
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -615,3 +616,134 @@ class TestCandidateUniverseAudit(unittest.TestCase):
                     taxonomy_db=taxonomy,
                     batch_size=0,
                 )
+
+
+class TestCandidateUniverseIndependentSampling(unittest.TestCase):
+    """Tests for shifted cross-k candidate-universe sampling."""
+
+    def test_candidate_universe_rejects_bad_cross_k_distance(self) -> None:
+        """Negative cross-k marker distances should fail defensively."""
+        from kmersutra.global_candidate_evidence import collect_candidate_universe_sqlite
+
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            genome = root / "alpha.fna"
+            genome.write_text(">alpha\n" + "ACGT" * 20 + "\n", encoding="utf-8")
+            configs = [
+                GenomeConfig(
+                    genome_fasta=genome,
+                    species_name="Alpha target",
+                    taxid="11",
+                    role="target_species",
+                    clade="AlphaGenus",
+                )
+            ]
+            with self.assertRaisesRegex(ValueError, "min_cross_k_marker_distance"):
+                collect_candidate_universe_sqlite(
+                    genome_configs=configs,
+                    k_values=[5, 7],
+                    sqlite_path=root / "candidate.sqlite",
+                    min_cross_k_marker_distance=-1,
+                )
+
+    def test_candidate_universe_uses_shifted_cross_k_sampling(self) -> None:
+        """Candidate mode should avoid selecting every k from the same local region."""
+        from kmersutra.global_candidate_evidence import collect_candidate_universe_sqlite
+
+        sequence = "A" * 80 + "C" * 80 + "G" * 80 + "T" * 80
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            genome = root / "alpha.fna"
+            genome.write_text(f">alpha\n{sequence}\n", encoding="utf-8")
+            configs = [
+                GenomeConfig(
+                    genome_fasta=genome,
+                    species_name="Alpha target",
+                    taxid="11",
+                    role="target_species",
+                    clade="AlphaGenus",
+                )
+            ]
+            sqlite_path = root / "candidate.sqlite"
+            summary = collect_candidate_universe_sqlite(
+                genome_configs=configs,
+                k_values=[5, 7, 9],
+                sqlite_path=sqlite_path,
+                batch_size=10,
+                genome_bin_size=50,
+                max_per_genome_bin=10,
+                min_cross_k_marker_distance=40,
+                assembly_aware_binning=False,
+                progress_interval=1000,
+            )
+            connection = sqlite3.connect(sqlite_path)
+            try:
+                rows = connection.execute(
+                    "SELECT k, first_contig_id, first_position FROM candidate_kmers"
+                ).fetchall()
+            finally:
+                connection.close()
+        sampled = int(summary[0]["sampled_candidate_kmers"])
+        self.assertGreater(sampled, 0)
+        self.assertTrue(rows)
+        self.assertEqual(summary[0]["sampling_bin_phase"], "shifted_by_k")
+        self.assertEqual(int(summary[0]["min_cross_k_marker_distance"]), 40)
+        positions_by_k = defaultdict(list)
+        for k, _, position in rows:
+            positions_by_k[int(k)].append(int(position))
+        for k_a, positions_a in positions_by_k.items():
+            for k_b, positions_b in positions_by_k.items():
+                if k_a >= k_b:
+                    continue
+                self.assertTrue(
+                    all(abs(a - b) >= 40 for a in positions_a for b in positions_b)
+                )
+
+
+class TestGlobalCandidateAssemblyAwareSampling(unittest.TestCase):
+    """Tests for assembly-aware candidate-universe sampling."""
+
+    def test_candidate_universe_uses_global_bins_for_fragmented_small_assembly(self) -> None:
+        """Fragmented viral-like assemblies should not get one full bin set per contig."""
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            genome = root / "fragmented_viral.fna"
+            genome.write_text(
+                "\n".join(
+                    f">contig_{index}\n" + ("ACGT" * 250)
+                    for index in range(20)
+                ) + "\n",
+                encoding="utf-8",
+            )
+            configs = [
+                GenomeConfig(
+                    genome_fasta=genome,
+                    species_name="Fragmented viral example",
+                    taxid="11",
+                    role="target_species",
+                    clade="ExampleVirus",
+                )
+            ]
+            sqlite_path = root / "global.sqlite"
+            summary = collect_global_kmer_sources_sqlite(
+                genome_configs=configs,
+                k_values=[5],
+                sqlite_path=sqlite_path,
+                batch_size=50,
+                source_index_mode="candidate_universe",
+                genome_bin_size=100,
+                max_per_genome_bin=1,
+                min_cross_k_marker_distance=0,
+                assembly_aware_binning=True,
+                assembly_small_min_bin_size=10000,
+                assembly_small_target_bins=25,
+                progress_interval=100000,
+            )
+        sampling = [
+            row for row in summary
+            if row.get("stage") == "sample_candidate_universe"
+        ][0]
+        self.assertTrue(sampling["assembly_aware_binning"])
+        self.assertEqual(sampling["effective_genome_bin_size"], 10000)
+        self.assertLessEqual(int(sampling["sampled_candidate_kmers"]), 2)
+        self.assertEqual(sampling["sampling_bin_phase"], "shifted_by_k_global_assembly")

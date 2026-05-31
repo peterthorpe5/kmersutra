@@ -51,8 +51,8 @@ The main outputs are:
 
 ```text
 sample_status.tsv
-kmersutra_detection_calls_long.tsv
-kmersutra_evidence_long.tsv
+kmersutra_detection_calls_long.tsv.gz
+kmersutra_evidence_long.tsv.gz
 kmersutra_sample_summary.tsv
 progress_by_family.tsv
 qc_by_family_spike.tsv
