@@ -1,0 +1,144 @@
+KmerSutra v0.32.0 release notes
+================================
+
+Purpose
+-------
+This development package extends v0.31.0 with three changes requested before the
+next Plasmodium/outgroup database test:
+
+1. Genome assembly-aware candidate-universe sampling.
+2. Compressed long-table output defaults for benchmark summaries.
+3. Generic AI calibration table I/O supporting TSV, TSV.GZ and Parquet by suffix.
+
+Genome assembly-aware sampling
+------------------------------
+The global candidate-evidence build now supports assembly-aware binning in the
+candidate-universe marker sampler. This is enabled by default for new builds and
+can be disabled with --no_assembly_aware_binning.
+
+The sampler now computes assembly statistics before choosing sampling bins:
+
+total assembly length
+number of contigs
+number of contigs long enough to contain the shortest requested k-mer
+effective assembly length after excluding contigs shorter than k
+maximum contig length
+mean and median contig length
+N50
+estimated global bin count
+chosen effective bin size
+reason for the selected bin plan
+
+The updated binning is designed to avoid over-sampling small viral-like genomes
+and highly fragmented assemblies. For assembly-aware mode, contigs are placed on
+a deterministic cumulative assembly coordinate system before bin assignment. This
+prevents every short contig from creating a fresh local bin-0 opportunity and
+therefore avoids inflated marker retention in fragmented assemblies.
+
+New CLI options for kmersutra-build-panel
+-----------------------------------------
+
+--assembly_aware_binning / --no_assembly_aware_binning
+--assembly_small_length
+--assembly_small_min_bin_size
+--assembly_small_target_bins
+--assembly_fragmented_contig_count
+--assembly_fragmented_n50_multiplier
+--assembly_fragmented_max_global_bins
+
+The build metadata JSON records these settings, and candidate sampling summary
+rows now include assembly-level binning diagnostics.
+
+Compressed and generic table output
+-----------------------------------
+A new kmersutra.table_io module provides defensive table reading and writing for:
+
+.tsv
+.tsv.gz
+.parquet
+
+Unsupported suffixes, including .csv, fail clearly. Required columns are
+validated immediately where table readers are used.
+
+The comparable benchmark summary now defaults large long-format outputs to:
+
+kmersutra_detection_calls_long.tsv.gz
+kmersutra_evidence_long.tsv.gz
+
+AI call-calibration table support
+---------------------------------
+The AI calibration workflow now accepts generic table arguments while retaining
+backwards-compatible historical argument names.
+
+Preferred new argument names:
+
+kmersutra-build-call-training --calls_table ... --out_table ...
+kmersutra-train-call-calibrator --training_table ... --out_summary_table ... --out_evaluation_table ...
+
+Backwards-compatible aliases retained:
+
+--calls_tsv
+--out_tsv
+--training_tsv
+--out_summary_tsv
+--out_evaluation_tsv
+
+Despite the old names, suffix-driven I/O means these aliases can now read/write
+.tsv, .tsv.gz or .parquet where the relevant optional dependencies are installed.
+Parquet support requires the package to be installed with the parquet optional
+extra, for example:
+
+pip install -e ".[dev,reporting,ncbi,ml,parquet]"
+
+Example compressed AI workflow
+------------------------------
+
+kmersutra-build-call-training \
+  --calls_table summary_v030_expected_lineage_hammondia/kmersutra_detection_calls_long.tsv.gz \
+  --out_table ai_call_training.tsv.gz \
+  --max_not_detected 50000 \
+  --verbose
+
+kmersutra-train-call-calibrator \
+  --training_table ai_call_training.tsv.gz \
+  --out_model_json kmersutra_call_calibrator.json \
+  --out_summary_table kmersutra_call_calibrator_training_summary.tsv.gz \
+  --out_evaluation_table kmersutra_call_calibrator_evaluation.tsv.gz \
+  --group_columns sample_id \
+  --test_fraction 0.2 \
+  --distance_quantile 0.95 \
+  --verbose
+
+Example Parquet AI workflow
+---------------------------
+
+kmersutra-build-call-training \
+  --calls_table summary_v030_expected_lineage_hammondia/kmersutra_detection_calls_long.parquet \
+  --out_table ai_call_training.parquet \
+  --max_not_detected 50000 \
+  --verbose
+
+kmersutra-train-call-calibrator \
+  --training_table ai_call_training.parquet \
+  --out_model_json kmersutra_call_calibrator.json \
+  --out_summary_table kmersutra_call_calibrator_training_summary.parquet \
+  --out_evaluation_table kmersutra_call_calibrator_evaluation.parquet \
+  --group_columns sample_id \
+  --test_fraction 0.2 \
+  --distance_quantile 0.95 \
+  --verbose
+
+Testing
+-------
+The package test suite was run in the sandbox with:
+
+python -m unittest discover -s tests -v
+
+Result:
+
+Ran 280 tests
+OK
+
+nose2 was not installed in the sandbox, so the nose2 run could not be performed
+here. The unittest suite is the authoritative test evidence included with this
+package copy.

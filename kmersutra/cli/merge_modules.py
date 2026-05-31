@@ -100,12 +100,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_per_species_per_k", type=int, default=None)
     parser.add_argument(
         "--marker_selection",
-        choices=["first_seen", "genome_spread"],
-        default="genome_spread",
+        choices=["first_seen", "genome_spread", "independent_multik_genome_spread"],
+        default="independent_multik_genome_spread",
         help="Marker-selection strategy for capped merged panels.",
     )
     parser.add_argument("--genome_bin_size", type=int, default=10000)
     parser.add_argument("--max_per_genome_bin", type=int, default=10)
+    parser.add_argument("--min_cross_k_marker_distance", type=int, default=5000)
     parser.add_argument(
         "--write_merged_module_parquet",
         action="store_true",
@@ -162,7 +163,7 @@ def main() -> None:
         batch_size=args.sqlite_batch_size,
         max_per_evidence_per_k=(
             None
-            if args.marker_selection == "genome_spread"
+            if args.marker_selection != "first_seen"
             else args.max_per_species_per_k
         ),
         logger=logger,
@@ -179,13 +180,14 @@ def main() -> None:
         panel_path=panel_path,
         max_per_species_per_k=(
             args.max_per_species_per_k
-            if args.marker_selection == "genome_spread"
+            if args.marker_selection != "first_seen"
             else None
         ),
         logger=logger,
         marker_selection=args.marker_selection,
         genome_bin_size=args.genome_bin_size,
         max_per_genome_bin=args.max_per_genome_bin,
+        min_cross_k_marker_distance=args.min_cross_k_marker_distance,
     )
     write_tsv(
         records=panel_summary,
@@ -218,6 +220,7 @@ def main() -> None:
                 "marker_selection": args.marker_selection,
                 "genome_bin_size": args.genome_bin_size,
                 "max_per_genome_bin": args.max_per_genome_bin,
+                "min_cross_k_marker_distance": args.min_cross_k_marker_distance,
                 "max_per_species_per_k": args.max_per_species_per_k,
                 "evidence_ranks": ";".join(args.evidence_ranks),
             },
@@ -234,6 +237,7 @@ def main() -> None:
             "marker_selection": args.marker_selection,
             "genome_bin_size": args.genome_bin_size,
             "max_per_genome_bin": args.max_per_genome_bin,
+                "min_cross_k_marker_distance": args.min_cross_k_marker_distance,
             "max_per_species_per_k": args.max_per_species_per_k,
             "evidence_ranks": args.evidence_ranks,
         },

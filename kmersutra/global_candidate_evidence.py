@@ -24,10 +24,17 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+from kmersutra.assembly_stats import (
+    build_contig_offsets,
+    calculate_assembly_stats,
+    choose_assembly_aware_bin_plan,
+    collect_fasta_contig_lengths,
+)
 from kmersutra.build_panel import DiagnosticKmer
 from kmersutra.config import GenomeConfig
 from kmersutra.fasta import read_fasta_records
 from kmersutra.kmers import iter_kmers
+from kmersutra.marker_selection import calculate_k_bin_offset
 from kmersutra.target_evidence import _connect
 from kmersutra.taxonomy import CORE_RANK_ORDER, TaxonomyDatabase
 
@@ -46,6 +53,116 @@ VALID_GLOBAL_SOURCE_INDEX_MODES = {
     "aggregated",
     "candidate_universe",
 }
+
+
+def _candidate_sampling_score(
+    *,
+    k: int,
+    kmer: str,
+    genome_id: str,
+    contig_id: str,
+    position: int,
+) -> int:
+    """Return a deterministic score for candidate-universe sampling.
+
+    Parameters
+    ----------
+    k : int
+        K-mer size.
+    kmer : str
+        Canonical k-mer sequence.
+    genome_id : str
+        Source genome identifier.
+    contig_id : str
+        Source contig identifier.
+    position : int
+        Zero-based source position.
+
+    Returns
+    -------
+    int
+        Stable integer score; lower scores are preferred.
+    """
+    import hashlib
+
+    payload = "\t".join([str(k), kmer, genome_id, contig_id, str(position)])
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return int(digest[:16], 16)
+
+
+def _shifted_bin_id(
+    *,
+    position: int,
+    k: int,
+    k_values: Iterable[int],
+    genome_bin_size: int,
+) -> int:
+    """Return the shifted bin id for candidate-universe sampling.
+
+    Parameters
+    ----------
+    position : int
+        Zero-based source position.
+    k : int
+        K-mer size.
+    k_values : iterable of int
+        Full k ladder.
+    genome_bin_size : int
+        Reference bases per bin.
+
+    Returns
+    -------
+    int
+        Shifted positional bin id.
+    """
+    offset = calculate_k_bin_offset(
+        k=int(k),
+        k_values=k_values,
+        genome_bin_size=genome_bin_size,
+    )
+    return int(max(0, position) + offset) // genome_bin_size
+
+
+def _cross_k_candidate_available(
+    *,
+    selected_positions: list[tuple[str, int, int]],
+    contig_id: str,
+    position: int,
+    k: int,
+    min_cross_k_marker_distance: int,
+) -> bool:
+    """Return whether a candidate is distant from selected different-k markers.
+
+    Parameters
+    ----------
+    selected_positions : list[tuple[str, int, int]]
+        Selected candidates as contig, position and k.
+    contig_id : str
+        Candidate contig identifier.
+    position : int
+        Candidate start position.
+    k : int
+        Candidate k value.
+    min_cross_k_marker_distance : int
+        Minimum distance between markers from different k values.
+
+    Returns
+    -------
+    bool
+        True if the candidate can be retained.
+    """
+    if min_cross_k_marker_distance < 0:
+        raise ValueError("min_cross_k_marker_distance must be non-negative")
+    if min_cross_k_marker_distance == 0:
+        return True
+    for selected_contig, selected_position, selected_k in selected_positions:
+        if selected_k == int(k):
+            continue
+        if selected_contig != contig_id:
+            continue
+        if abs(int(selected_position) - int(position)) < min_cross_k_marker_distance:
+            return False
+    return True
 
 
 @dataclass(frozen=True)
@@ -782,6 +899,14 @@ def collect_candidate_universe_sqlite(
     batch_size: int = 50000,
     genome_bin_size: int = 10000,
     max_per_genome_bin: int = 10,
+    min_cross_k_marker_distance: int = 5000,
+    assembly_aware_binning: bool = True,
+    assembly_small_length: int = 250000,
+    assembly_small_min_bin_size: int = 10000,
+    assembly_small_target_bins: int = 25,
+    assembly_fragmented_contig_count: int = 500,
+    assembly_fragmented_n50_multiplier: float = 2.0,
+    assembly_fragmented_max_global_bins: int = 1000,
     progress_interval: int = 1000000,
     logger: logging.Logger | None = None,
 ) -> list[dict[str, object]]:
@@ -806,7 +931,25 @@ def collect_candidate_universe_sqlite(
     genome_bin_size : int, optional
         Reference bases per candidate-sampling bin.
     max_per_genome_bin : int, optional
-        Maximum sampled candidates per genome/contig/k/bin.
+        Maximum sampled candidates per effective genome/k/bin.
+    min_cross_k_marker_distance : int, optional
+        Minimum same-contig distance between sampled markers from different k
+        values.
+    assembly_aware_binning : bool, optional
+        Whether to lay contigs onto a cumulative assembly coordinate and adapt
+        bin size for small or fragmented assemblies.
+    assembly_small_length : int, optional
+        Effective length threshold for viral-scale/small-assembly handling.
+    assembly_small_min_bin_size : int, optional
+        Minimum candidate bin size used for small assemblies.
+    assembly_small_target_bins : int, optional
+        Approximate target maximum number of bins for small assemblies.
+    assembly_fragmented_contig_count : int, optional
+        Effective contig-count threshold for fragmented-assembly handling.
+    assembly_fragmented_n50_multiplier : float, optional
+        Fragmentation heuristic comparing N50 to the requested bin size.
+    assembly_fragmented_max_global_bins : int, optional
+        Approximate maximum global bins for fragmented assemblies.
     progress_interval : int, optional
         Attempted k-mer interval for logging.
     logger : logging.Logger or None, optional
@@ -823,8 +966,22 @@ def collect_candidate_universe_sqlite(
         raise ValueError("genome_bin_size must be positive")
     if max_per_genome_bin <= 0:
         raise ValueError("max_per_genome_bin must be positive")
+    if min_cross_k_marker_distance < 0:
+        raise ValueError("min_cross_k_marker_distance must be non-negative")
     if progress_interval <= 0:
         raise ValueError("progress_interval must be positive")
+    if assembly_small_length <= 0:
+        raise ValueError("assembly_small_length must be positive")
+    if assembly_small_min_bin_size <= 0:
+        raise ValueError("assembly_small_min_bin_size must be positive")
+    if assembly_small_target_bins <= 0:
+        raise ValueError("assembly_small_target_bins must be positive")
+    if assembly_fragmented_contig_count <= 0:
+        raise ValueError("assembly_fragmented_contig_count must be positive")
+    if assembly_fragmented_n50_multiplier <= 0:
+        raise ValueError("assembly_fragmented_n50_multiplier must be positive")
+    if assembly_fragmented_max_global_bins <= 0:
+        raise ValueError("assembly_fragmented_max_global_bins must be positive")
 
     configs = list(genome_configs)
     initialise_global_candidate_database(sqlite_path=sqlite_path)
@@ -848,15 +1005,83 @@ def collect_candidate_universe_sqlite(
             candidate_buffer: list[tuple[object, ...]] = []
             source_buffer: list[tuple[object, ...]] = []
             bin_counts: dict[tuple[int, str, int], int] = defaultdict(int)
+            selected_positions: list[tuple[str, int, int]] = []
+            ordered_k_values = sorted((int(value) for value in k_values), reverse=True)
+            contig_offsets: dict[str, int] = {}
+            assembly_stats = None
+            assembly_bin_plan = None
+            effective_genome_bin_size = genome_bin_size
+            if assembly_aware_binning:
+                contig_lengths = collect_fasta_contig_lengths(
+                    fasta_path=config.genome_fasta,
+                )
+                assembly_stats = calculate_assembly_stats(
+                    contig_lengths=contig_lengths,
+                    assembly_id=config.genome_id,
+                    k_values=k_values,
+                )
+                assembly_bin_plan = choose_assembly_aware_bin_plan(
+                    stats=assembly_stats,
+                    requested_bin_size=genome_bin_size,
+                    small_assembly_length=assembly_small_length,
+                    small_assembly_min_bin_size=assembly_small_min_bin_size,
+                    small_assembly_target_bins=assembly_small_target_bins,
+                    fragmented_contig_count=assembly_fragmented_contig_count,
+                    fragmented_n50_multiplier=assembly_fragmented_n50_multiplier,
+                    fragmented_max_global_bins=assembly_fragmented_max_global_bins,
+                )
+                effective_genome_bin_size = assembly_bin_plan.effective_bin_size
+                contig_offsets = build_contig_offsets(
+                    contig_lengths=contig_lengths,
+                    min_contig_length=assembly_stats.min_k,
+                )
+                if logger:
+                    logger.info(
+                        "Assembly-aware sampling for %s: total_length=%d; "
+                        "effective_length=%d; n_contigs=%d; n50=%d; "
+                        "requested_bin_size=%d; effective_bin_size=%d; "
+                        "estimated_global_bins=%d; reason=%s",
+                        config.genome_id,
+                        assembly_stats.total_length,
+                        assembly_stats.effective_length,
+                        assembly_stats.n_contigs,
+                        assembly_stats.n50,
+                        assembly_bin_plan.requested_bin_size,
+                        assembly_bin_plan.effective_bin_size,
+                        assembly_bin_plan.estimated_global_bins,
+                        assembly_bin_plan.reason,
+                    )
             for record in read_fasta_records(fasta_path=config.genome_fasta):
-                for k in k_values:
+                record_offset = contig_offsets.get(record.identifier, 0)
+                for k in ordered_k_values:
                     for position, kmer in iter_kmers(sequence=record.sequence, k=k):
                         attempted += 1
-                        bin_id = int(position) // genome_bin_size
-                        bin_key = (int(k), record.identifier, bin_id)
-                        if bin_counts[bin_key] < max_per_genome_bin:
+                        bin_position = int(position)
+                        bin_scope = record.identifier
+                        if assembly_aware_binning:
+                            bin_position = record_offset + int(position)
+                            bin_scope = "__assembly__"
+                        bin_id = _shifted_bin_id(
+                            position=bin_position,
+                            k=int(k),
+                            k_values=k_values,
+                            genome_bin_size=effective_genome_bin_size,
+                        )
+                        bin_key = (int(k), bin_scope, bin_id)
+                        if bin_counts[bin_key] >= max_per_genome_bin:
+                            pass
+                        elif not _cross_k_candidate_available(
+                            selected_positions=selected_positions,
+                            contig_id=record.identifier,
+                            position=int(position),
+                            k=int(k),
+                            min_cross_k_marker_distance=min_cross_k_marker_distance,
+                        ):
+                            pass
+                        else:
                             bin_counts[bin_key] += 1
                             selected += 1
+                            selected_positions.append((record.identifier, int(position), int(k)))
                             candidate_buffer.append(
                                 _candidate_row_tuple(
                                     k=k,
@@ -915,7 +1140,34 @@ def collect_candidate_universe_sqlite(
                     "attempted_kmers": attempted,
                     "sampled_candidate_kmers": selected,
                     "genome_bin_size": genome_bin_size,
+                    "effective_genome_bin_size": effective_genome_bin_size,
                     "max_per_genome_bin": max_per_genome_bin,
+                    "min_cross_k_marker_distance": min_cross_k_marker_distance,
+                    "assembly_aware_binning": assembly_aware_binning,
+                    "assembly_total_length": (
+                        assembly_stats.total_length if assembly_stats else ""
+                    ),
+                    "assembly_effective_length": (
+                        assembly_stats.effective_length if assembly_stats else ""
+                    ),
+                    "assembly_n_contigs": assembly_stats.n_contigs if assembly_stats else "",
+                    "assembly_n_effective_contigs": (
+                        assembly_stats.n_effective_contigs if assembly_stats else ""
+                    ),
+                    "assembly_n50": assembly_stats.n50 if assembly_stats else "",
+                    "assembly_estimated_global_bins": (
+                        assembly_bin_plan.estimated_global_bins
+                        if assembly_bin_plan
+                        else ""
+                    ),
+                    "assembly_bin_plan_reason": (
+                        assembly_bin_plan.reason if assembly_bin_plan else ""
+                    ),
+                    "sampling_bin_phase": (
+                        "shifted_by_k_global_assembly"
+                        if assembly_aware_binning
+                        else "shifted_by_k"
+                    ),
                 }
             )
     finally:
@@ -1077,6 +1329,14 @@ def collect_global_kmer_sources_sqlite(
     progress_interval: int = 1000000,
     genome_bin_size: int = 10000,
     max_per_genome_bin: int = 10,
+    min_cross_k_marker_distance: int = 5000,
+    assembly_aware_binning: bool = True,
+    assembly_small_length: int = 250000,
+    assembly_small_min_bin_size: int = 10000,
+    assembly_small_target_bins: int = 25,
+    assembly_fragmented_contig_count: int = 500,
+    assembly_fragmented_n50_multiplier: float = 2.0,
+    assembly_fragmented_max_global_bins: int = 1000,
     logger: logging.Logger | None = None,
 ) -> list[dict[str, object]]:
     """Collect source metadata for all genomes in one global SQLite index.
@@ -1107,6 +1367,8 @@ def collect_global_kmer_sources_sqlite(
         raise ValueError("genome_bin_size must be positive")
     if max_per_genome_bin <= 0:
         raise ValueError("max_per_genome_bin must be positive")
+    if min_cross_k_marker_distance < 0:
+        raise ValueError("min_cross_k_marker_distance must be non-negative")
     if source_index_mode not in VALID_GLOBAL_SOURCE_INDEX_MODES:
         raise ValueError(
             "source_index_mode must be one of: "
@@ -1122,6 +1384,14 @@ def collect_global_kmer_sources_sqlite(
             batch_size=batch_size,
             genome_bin_size=genome_bin_size,
             max_per_genome_bin=max_per_genome_bin,
+            min_cross_k_marker_distance=min_cross_k_marker_distance,
+            assembly_aware_binning=assembly_aware_binning,
+            assembly_small_length=assembly_small_length,
+            assembly_small_min_bin_size=assembly_small_min_bin_size,
+            assembly_small_target_bins=assembly_small_target_bins,
+            assembly_fragmented_contig_count=assembly_fragmented_contig_count,
+            assembly_fragmented_n50_multiplier=assembly_fragmented_n50_multiplier,
+            assembly_fragmented_max_global_bins=assembly_fragmented_max_global_bins,
             progress_interval=progress_interval,
             logger=logger,
         )
@@ -2235,6 +2505,14 @@ def build_global_candidate_evidence_sqlite(
     progress_interval: int = 1000000,
     genome_bin_size: int = 10000,
     max_per_genome_bin: int = 10,
+    min_cross_k_marker_distance: int = 5000,
+    assembly_aware_binning: bool = True,
+    assembly_small_length: int = 250000,
+    assembly_small_min_bin_size: int = 10000,
+    assembly_small_target_bins: int = 25,
+    assembly_fragmented_contig_count: int = 500,
+    assembly_fragmented_n50_multiplier: float = 2.0,
+    assembly_fragmented_max_global_bins: int = 1000,
     logger: logging.Logger | None = None,
 ) -> GlobalCandidateEvidenceBuildResult:
     """Build a global query-agnostic evidence database.
@@ -2313,6 +2591,14 @@ def build_global_candidate_evidence_sqlite(
         progress_interval=progress_interval,
         genome_bin_size=genome_bin_size,
         max_per_genome_bin=max_per_genome_bin,
+        min_cross_k_marker_distance=min_cross_k_marker_distance,
+        assembly_aware_binning=assembly_aware_binning,
+        assembly_small_length=assembly_small_length,
+        assembly_small_min_bin_size=assembly_small_min_bin_size,
+        assembly_small_target_bins=assembly_small_target_bins,
+        assembly_fragmented_contig_count=assembly_fragmented_contig_count,
+        assembly_fragmented_n50_multiplier=assembly_fragmented_n50_multiplier,
+        assembly_fragmented_max_global_bins=assembly_fragmented_max_global_bins,
         logger=logger,
     )
     assignment_summary = assign_global_candidate_evidence_sqlite(

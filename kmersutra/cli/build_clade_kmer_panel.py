@@ -89,21 +89,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_per_species_per_k", type=int, default=None)
     parser.add_argument(
         "--marker_selection",
-        choices=["first_seen", "genome_spread"],
-        default="genome_spread",
+        choices=["first_seen", "genome_spread", "independent_multik_genome_spread"],
+        default="independent_multik_genome_spread",
         help=(
             "Strategy used when --max_per_species_per_k limits retained "
-            "diagnostic k-mers. genome_spread is the default and thins "
-            "retained markers across source contig bins to avoid dense "
-            "adjacent k-mers from one genomic region. first_seen preserves "
-            "legacy behaviour for exact reproducibility checks."
+            "diagnostic k-mers. independent_multik_genome_spread is the "
+            "default and uses k-specific shifted bins plus cross-k "
+            "de-correlation to avoid nested markers from the same genomic "
+            "region. genome_spread preserves the older positional thinning "
+            "behaviour. first_seen preserves legacy behaviour for exact "
+            "reproducibility checks."
         ),
     )
     parser.add_argument(
         "--genome_bin_size",
         type=int,
         default=10000,
-        help="Reference bases per positional bin for --marker_selection genome_spread.",
+        help="Reference bases per positional bin for genome-spread marker selection.",
     )
     parser.add_argument(
         "--max_per_genome_bin",
@@ -111,8 +113,71 @@ def parse_args() -> argparse.Namespace:
         default=10,
         help=(
             "Maximum retained markers from one source genome/contig/bin within "
-            "an evidence bucket for --marker_selection genome_spread."
+            "an evidence bucket for genome-spread marker selection."
         ),
+    )
+    parser.add_argument(
+        "--min_cross_k_marker_distance",
+        type=int,
+        default=5000,
+        help=(
+            "Minimum distance in reference bases between retained markers from "
+            "different k values within the same genome/contig/evidence bucket "
+            "when using independent multi-k marker selection."
+        ),
+    )
+    parser.add_argument(
+        "--assembly_aware_binning",
+        dest="assembly_aware_binning",
+        action="store_true",
+        default=True,
+        help=(
+            "Use assembly-aware candidate-universe binning for global builds. "
+            "This lays contigs onto cumulative assembly coordinates and adapts "
+            "bin size for small or highly fragmented assemblies. Enabled by default."
+        ),
+    )
+    parser.add_argument(
+        "--no_assembly_aware_binning",
+        dest="assembly_aware_binning",
+        action="store_false",
+        help="Disable assembly-aware candidate-universe binning for reproducibility checks.",
+    )
+    parser.add_argument(
+        "--assembly_small_length",
+        type=int,
+        default=250000,
+        help="Effective assembly length at or below which small-genome binning is applied.",
+    )
+    parser.add_argument(
+        "--assembly_small_min_bin_size",
+        type=int,
+        default=10000,
+        help="Minimum effective candidate bin size for small assemblies.",
+    )
+    parser.add_argument(
+        "--assembly_small_target_bins",
+        type=int,
+        default=25,
+        help="Approximate target maximum number of bins for small assemblies.",
+    )
+    parser.add_argument(
+        "--assembly_fragmented_contig_count",
+        type=int,
+        default=500,
+        help="Effective contig-count threshold for fragmented-assembly handling.",
+    )
+    parser.add_argument(
+        "--assembly_fragmented_n50_multiplier",
+        type=float,
+        default=2.0,
+        help="Fragmentation heuristic: N50 below this multiple of requested bin size triggers handling.",
+    )
+    parser.add_argument(
+        "--assembly_fragmented_max_global_bins",
+        type=int,
+        default=1000,
+        help="Approximate maximum cumulative bins targeted for fragmented assemblies.",
     )
     parser.add_argument(
         "--write_module_parquet",
@@ -432,6 +497,7 @@ def _write_panel_streaming(
     marker_selection: str = "first_seen",
     genome_bin_size: int = 10000,
     max_per_genome_bin: int = 10,
+    min_cross_k_marker_distance: int = 5000,
 ) -> tuple[int, list[dict[str, object]]]:
     """Write diagnostic k-mers to a panel file while summarising counts.
 
@@ -453,6 +519,9 @@ def _write_panel_streaming(
     max_per_genome_bin : int, optional
         Maximum retained markers per source genome/contig/bin within an evidence
         bucket for genome-spread selection.
+    min_cross_k_marker_distance : int, optional
+        Minimum reference distance between retained markers from different k
+        values in independent multi-k marker selection.
 
     Returns
     -------
@@ -468,16 +537,20 @@ def _write_panel_streaming(
         max_per_bucket=max_per_species_per_k,
         genome_bin_size=genome_bin_size,
         max_per_genome_bin=max_per_genome_bin,
+        min_cross_k_marker_distance=min_cross_k_marker_distance,
     )
     selection_config.validate()
 
-    if marker_selection == "genome_spread" and max_per_species_per_k is not None:
+    if marker_selection != "first_seen" and max_per_species_per_k is not None:
         logger.info(
-            "Selecting genome-spread marker subset: max_per_bucket=%s; "
-            "genome_bin_size=%s; max_per_genome_bin=%s",
+            "Selecting %s marker subset: max_per_bucket=%s; "
+            "genome_bin_size=%s; max_per_genome_bin=%s; "
+            "min_cross_k_marker_distance=%s",
+            marker_selection,
             max_per_species_per_k,
             genome_bin_size,
             max_per_genome_bin,
+            min_cross_k_marker_distance,
         )
         diagnostic_kmers = select_genome_spread_markers(
             diagnostic_kmers=diagnostic_kmers,
@@ -609,6 +682,14 @@ def main() -> None:
     logger.info("Screen panel storage format: %s", args.panel_storage_format)
     logger.info("Genome bin size: %d", args.genome_bin_size)
     logger.info("Max per genome bin: %d", args.max_per_genome_bin)
+    logger.info("Minimum cross-k marker distance: %d", args.min_cross_k_marker_distance)
+    logger.info("Assembly-aware candidate binning: %s", args.assembly_aware_binning)
+    logger.info("Small assembly length threshold: %d", args.assembly_small_length)
+    logger.info("Small assembly minimum bin size: %d", args.assembly_small_min_bin_size)
+    logger.info("Small assembly target bins: %d", args.assembly_small_target_bins)
+    logger.info("Fragmented assembly contig threshold: %d", args.assembly_fragmented_contig_count)
+    logger.info("Fragmented assembly N50 multiplier: %.3f", args.assembly_fragmented_n50_multiplier)
+    logger.info("Fragmented assembly maximum global bins: %d", args.assembly_fragmented_max_global_bins)
     profiler = WorkflowProfiler()
 
     ram_log_path = Path(args.ram_log_path) if args.ram_log_path else out_dir / "ram_usage.tsv"
@@ -715,13 +796,21 @@ def main() -> None:
                     batch_size=args.sqlite_batch_size,
                     max_per_evidence_per_k=(
                         None
-                        if args.marker_selection == "genome_spread"
+                        if args.marker_selection != "first_seen"
                         else args.max_per_species_per_k
                     ),
                     source_index_mode=args.global_source_index_mode,
                     progress_interval=args.global_index_progress_interval,
                     genome_bin_size=args.genome_bin_size,
                     max_per_genome_bin=args.max_per_genome_bin,
+                    min_cross_k_marker_distance=args.min_cross_k_marker_distance,
+                    assembly_aware_binning=args.assembly_aware_binning,
+                    assembly_small_length=args.assembly_small_length,
+                    assembly_small_min_bin_size=args.assembly_small_min_bin_size,
+                    assembly_small_target_bins=args.assembly_small_target_bins,
+                    assembly_fragmented_contig_count=args.assembly_fragmented_contig_count,
+                    assembly_fragmented_n50_multiplier=args.assembly_fragmented_n50_multiplier,
+                    assembly_fragmented_max_global_bins=args.assembly_fragmented_max_global_bins,
                     logger=logger,
                 )
             with profiler.time_stage(stage="write_panel", detail=str(panel_path)):
@@ -733,13 +822,14 @@ def main() -> None:
                     panel_path=panel_path,
                     max_per_species_per_k=(
                         args.max_per_species_per_k
-                        if args.marker_selection == "genome_spread"
+                        if args.marker_selection != "first_seen"
                         else None
                     ),
                     logger=logger,
                     marker_selection=args.marker_selection,
                     genome_bin_size=args.genome_bin_size,
                     max_per_genome_bin=args.max_per_genome_bin,
+                    min_cross_k_marker_distance=args.min_cross_k_marker_distance,
                 )
             collection_summary = global_candidate_result.collection_summary
             if args.global_source_index_mode == "candidate_universe":
@@ -827,6 +917,7 @@ def main() -> None:
                             "candidate_evidence_audit": str(candidate_evidence_audit_path),
                             "genome_bin_size": args.genome_bin_size,
                             "max_per_genome_bin": args.max_per_genome_bin,
+                            "min_cross_k_marker_distance": args.min_cross_k_marker_distance,
                             "write_module_parquet": args.write_module_parquet,
                             "module_parquet_dir": args.module_parquet_dir,
                             "module_name": args.module_name,
@@ -880,7 +971,7 @@ def main() -> None:
                     batch_size=args.sqlite_batch_size,
                     max_per_evidence_per_k=(
                         None
-                        if args.marker_selection == "genome_spread"
+                        if args.marker_selection != "first_seen"
                         else args.max_per_species_per_k
                     ),
                     logger=logger,
@@ -894,13 +985,14 @@ def main() -> None:
                     panel_path=panel_path,
                     max_per_species_per_k=(
                         args.max_per_species_per_k
-                        if args.marker_selection == "genome_spread"
+                        if args.marker_selection != "first_seen"
                         else None
                     ),
                     logger=logger,
                     marker_selection=args.marker_selection,
                     genome_bin_size=args.genome_bin_size,
                     max_per_genome_bin=args.max_per_genome_bin,
+                    min_cross_k_marker_distance=args.min_cross_k_marker_distance,
                 )
             collection_summary = all_candidate_result.collection_summary
             write_tsv(
@@ -940,6 +1032,7 @@ def main() -> None:
                     marker_selection=args.marker_selection,
                     genome_bin_size=args.genome_bin_size,
                     max_per_genome_bin=args.max_per_genome_bin,
+                    min_cross_k_marker_distance=args.min_cross_k_marker_distance,
                 )
             collection_summary = target_result.collection_summary
             write_tsv(
@@ -1055,6 +1148,14 @@ def main() -> None:
                 "module_count": module_export_result.n_modules if module_export_result else 0,
                 "genome_bin_size": args.genome_bin_size,
                 "max_per_genome_bin": args.max_per_genome_bin,
+                "min_cross_k_marker_distance": args.min_cross_k_marker_distance,
+                "assembly_aware_binning": args.assembly_aware_binning,
+                "assembly_small_length": args.assembly_small_length,
+                "assembly_small_min_bin_size": args.assembly_small_min_bin_size,
+                "assembly_small_target_bins": args.assembly_small_target_bins,
+                "assembly_fragmented_contig_count": args.assembly_fragmented_contig_count,
+                "assembly_fragmented_n50_multiplier": args.assembly_fragmented_n50_multiplier,
+                "assembly_fragmented_max_global_bins": args.assembly_fragmented_max_global_bins,
                 "write_module_parquet": args.write_module_parquet,
                 "module_parquet_dir": args.module_parquet_dir,
                 "module_name": args.module_name,
