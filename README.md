@@ -1532,3 +1532,146 @@ bash run_kmersutra_comparable_summary.sh
 
 The summary writes `background_candidate_summary.tsv` and keeps background-aware
 cleanliness separate from strict cleanliness that counts all non-expected taxa.
+
+## v0.31.0 independent multi-k marker sampling and AI call calibration
+
+From v0.31.0, new builds use `independent_multik_genome_spread` by default. This keeps the earlier genome-spread idea, but changes the multi-k sampling so that different k values use shifted genome-bin phases and retained markers from different k values are prevented from coming from the same local genomic interval within an evidence bucket. The default minimum cross-k distance is 5,000 bp and can be changed with `--min_cross_k_marker_distance`.
+
+This matters because multi-k evidence should not simply mean that k=51, k=77, k=101 and k=151 markers are nested within the same locus. The v0.31.0 default is designed to make multi-k support more independent and more biologically interpretable.
+
+Example build flags:
+
+```bash
+kmersutra-build-panel \
+  --genome_config kmersutra_genome_config.tsv \
+  --out_dir kmersutra_build_v031 \
+  --k_values 51 77 101 151 \
+  --global_candidate_evidence \
+  --global_source_index_mode candidate_universe \
+  --marker_selection independent_multik_genome_spread \
+  --min_cross_k_marker_distance 5000 \
+  --genome_bin_size 10000 \
+  --max_per_genome_bin 10 \
+  --write_module_parquet \
+  --verbose
+```
+
+The release also adds an AI-ready call-calibration workflow. This is intended as an interpretable evidence calibration layer, not as a replacement for the rule-based KmerSutra calls.
+
+```bash
+kmersutra-build-call-training \
+  --calls_tsv summary_v030_expected_lineage_hammondia/kmersutra_detection_calls_long.tsv \
+  --out_tsv ai_call_training.tsv \
+  --max_not_detected 50000 \
+  --verbose
+
+kmersutra-train-call-calibrator \
+  --training_tsv ai_call_training.tsv \
+  --out_model_json kmersutra_call_calibrator.json \
+  --out_summary_tsv kmersutra_call_calibrator_training_summary.tsv \
+  --out_evaluation_tsv kmersutra_call_calibrator_evaluation.tsv \
+  --group_columns sample_id \
+  --test_fraction 0.2 \
+  --distance_quantile 0.95 \
+  --verbose
+```
+
+## v0.32.0 assembly-aware sampling and scalable AI tables
+
+From v0.32.0, the global candidate-evidence build includes assembly-aware
+candidate-universe sampling. This is intended to prevent small viral-like
+genomes and highly fragmented assemblies from being over-represented by a naïve
+fixed-bin strategy. In assembly-aware mode, KmerSutra computes total length,
+effective length, contig counts, N50 and an effective bin plan before sampling
+candidate markers. Contigs are then placed on a deterministic cumulative
+assembly coordinate system, so that many short contigs do not each create a new
+local first-bin sampling opportunity.
+
+The feature is enabled by default for new global candidate builds and can be
+controlled with:
+
+```bash
+--assembly_aware_binning
+--no_assembly_aware_binning
+--assembly_small_length 250000
+--assembly_small_min_bin_size 10000
+--assembly_small_target_bins 25
+--assembly_fragmented_contig_count 500
+--assembly_fragmented_n50_multiplier 2.0
+--assembly_fragmented_max_global_bins 1000
+```
+
+Candidate sampling summaries now include the effective bin size, assembly total
+length, effective length, contig counts, N50, estimated global bin count and the
+reason for the selected bin plan. These columns are intended to make viral and
+fragmented-assembly handling auditable after a database build.
+
+The AI call-calibration workflow now uses generic suffix-driven table I/O. The
+preferred argument names are `--calls_table`, `--out_table`, `--training_table`,
+`--out_summary_table` and `--out_evaluation_table`. The older `--calls_tsv`,
+`--out_tsv`, `--training_tsv`, `--out_summary_tsv` and `--out_evaluation_tsv`
+arguments remain available as backwards-compatible aliases.
+
+Supported table suffixes are:
+
+```text
+.tsv
+.tsv.gz
+.parquet
+```
+
+Unsupported suffixes, including `.csv`, are rejected deliberately because the
+project standard is tab-separated, compressed tab-separated or columnar output.
+Parquet support requires the optional Parquet dependencies to be installed.
+
+Compressed AI calibration example:
+
+```bash
+kmersutra-build-call-training \
+  --calls_table summary_v030_expected_lineage_hammondia/kmersutra_detection_calls_long.tsv.gz \
+  --out_table ai_call_training.tsv.gz \
+  --max_not_detected 50000 \
+  --verbose
+
+kmersutra-train-call-calibrator \
+  --training_table ai_call_training.tsv.gz \
+  --out_model_json kmersutra_call_calibrator.json \
+  --out_summary_table kmersutra_call_calibrator_training_summary.tsv.gz \
+  --out_evaluation_table kmersutra_call_calibrator_evaluation.tsv.gz \
+  --group_columns sample_id \
+  --test_fraction 0.2 \
+  --distance_quantile 0.95 \
+  --verbose
+```
+
+Parquet AI calibration example:
+
+```bash
+kmersutra-build-call-training \
+  --calls_table summary_v030_expected_lineage_hammondia/kmersutra_detection_calls_long.parquet \
+  --out_table ai_call_training.parquet \
+  --max_not_detected 50000 \
+  --verbose
+
+kmersutra-train-call-calibrator \
+  --training_table ai_call_training.parquet \
+  --out_model_json kmersutra_call_calibrator.json \
+  --out_summary_table kmersutra_call_calibrator_training_summary.parquet \
+  --out_evaluation_table kmersutra_call_calibrator_evaluation.parquet \
+  --group_columns sample_id \
+  --test_fraction 0.2 \
+  --distance_quantile 0.95 \
+  --verbose
+```
+
+The comparable benchmark summary now writes the largest long-format tables as
+compressed TSV.GZ by default:
+
+```text
+kmersutra_detection_calls_long.tsv.gz
+kmersutra_evidence_long.tsv.gz
+```
+
+This keeps the outputs portable while avoiding unnecessary uncompressed long
+call tables.
+
