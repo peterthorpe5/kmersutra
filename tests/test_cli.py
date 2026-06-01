@@ -112,3 +112,20 @@ class TestBuildPanelCliDefaults(unittest.TestCase):
         with patch.object(sys, "argv", argv):
             args = parse_args()
         self.assertEqual(args.marker_selection, "independent_multik_genome_spread")
+
+    def test_global_index_progress_interval_defaults_to_production_value(self) -> None:
+        """Global index progress logging should be quiet by default."""
+        from kmersutra.cli.build_clade_kmer_panel import parse_args
+        import sys
+        from unittest.mock import patch
+
+        argv = [
+            "kmersutra-build-panel",
+            "--genome_config",
+            "config.tsv",
+            "--out_dir",
+            "out",
+        ]
+        with patch.object(sys, "argv", argv):
+            args = parse_args()
+        self.assertEqual(args.global_index_progress_interval, 5_000_000)

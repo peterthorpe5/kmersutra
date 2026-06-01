@@ -972,6 +972,55 @@ def _load_candidate_kmers_by_k(
     return dict(candidates)
 
 
+def _should_log_progress_update(
+    *,
+    attempted: int,
+    last_logged_at: int,
+    current_count: int,
+    last_logged_count: int,
+    progress_interval: int,
+    heartbeat_multiplier: int = 10,
+) -> bool:
+    """Return whether candidate-progress logging should be emitted.
+
+    Progress logging can become very chatty during production-scale global
+    candidate builds, especially after the number of sampled candidates or
+    candidate hits has plateaued. This helper keeps informative updates when
+    the count changes, while still emitting an occasional heartbeat when the
+    count is unchanged for several progress intervals.
+
+    Parameters
+    ----------
+    attempted : int
+        Number of attempted k-mer observations processed so far.
+    last_logged_at : int
+        Attempted-observation count at the previous progress message.
+    current_count : int
+        Current sampled-candidate or candidate-hit count.
+    last_logged_count : int
+        Count reported at the previous progress message.
+    progress_interval : int
+        Minimum attempted-observation interval between progress messages.
+    heartbeat_multiplier : int, optional
+        Number of unchanged progress intervals to tolerate before emitting a
+        heartbeat progress message.
+
+    Returns
+    -------
+    bool
+        True when a progress message should be emitted.
+    """
+    if progress_interval <= 0:
+        raise ValueError("progress_interval must be positive")
+    if heartbeat_multiplier <= 0:
+        raise ValueError("heartbeat_multiplier must be positive")
+    if attempted - last_logged_at < progress_interval:
+        return False
+    if current_count != last_logged_count:
+        return True
+    return attempted - last_logged_at >= progress_interval * heartbeat_multiplier
+
+
 def collect_candidate_universe_sqlite(
     *,
     genome_configs: Iterable[GenomeConfig],
@@ -1083,6 +1132,7 @@ def collect_candidate_universe_sqlite(
             attempted = 0
             selected = 0
             last_logged_at = 0
+            last_logged_selected = -1
             candidate_buffer: list[tuple[object, ...]] = []
             source_buffer: list[tuple[object, ...]] = []
             bin_counts: dict[tuple[int, str, int], int] = defaultdict(int)
@@ -1194,7 +1244,13 @@ def collect_candidate_universe_sqlite(
                                 source_rows=source_buffer,
                             )
                             connection.commit()
-                        if logger and attempted - last_logged_at >= progress_interval:
+                        if logger and _should_log_progress_update(
+                            attempted=attempted,
+                            last_logged_at=last_logged_at,
+                            current_count=selected,
+                            last_logged_count=last_logged_selected,
+                            progress_interval=progress_interval,
+                        ):
                             logger.info(
                                 "Sampled %d candidate k-mer(s) from %d attempted observations in %s",
                                 selected,
@@ -1202,6 +1258,7 @@ def collect_candidate_universe_sqlite(
                                 config.genome_id,
                             )
                             last_logged_at = attempted
+                            last_logged_selected = selected
             _flush_candidate_rows(
                 connection=connection,
                 candidate_rows=candidate_buffer,
@@ -1335,6 +1392,7 @@ def annotate_candidate_universe_sources_sqlite(
             attempted = 0
             matched = 0
             last_logged_at = 0
+            last_logged_matched = -1
             source_buffer: list[tuple[object, ...]] = []
             for record in read_fasta_records(fasta_path=config.genome_fasta):
                 for k in k_values:
@@ -1344,7 +1402,13 @@ def annotate_candidate_universe_sources_sqlite(
                     for position, kmer in iter_kmers(sequence=record.sequence, k=k):
                         attempted += 1
                         if kmer not in candidate_set:
-                            if logger and attempted - last_logged_at >= progress_interval:
+                            if logger and _should_log_progress_update(
+                                attempted=attempted,
+                                last_logged_at=last_logged_at,
+                                current_count=matched,
+                                last_logged_count=last_logged_matched,
+                                progress_interval=progress_interval,
+                            ):
                                 logger.info(
                                     "Scanned %d observations and found %d candidate hit(s) in %s",
                                     attempted,
@@ -1352,6 +1416,7 @@ def annotate_candidate_universe_sources_sqlite(
                                     config.genome_id,
                                 )
                                 last_logged_at = attempted
+                                last_logged_matched = matched
                             continue
                         matched += 1
                         source_buffer.append(
@@ -1370,7 +1435,13 @@ def annotate_candidate_universe_sources_sqlite(
                             )
                             source_buffer.clear()
                             connection.commit()
-                        if logger and attempted - last_logged_at >= progress_interval:
+                        if logger and _should_log_progress_update(
+                            attempted=attempted,
+                            last_logged_at=last_logged_at,
+                            current_count=matched,
+                            last_logged_count=last_logged_matched,
+                            progress_interval=progress_interval,
+                        ):
                             logger.info(
                                 "Scanned %d observations and found %d candidate hit(s) in %s",
                                 attempted,
@@ -1378,6 +1449,7 @@ def annotate_candidate_universe_sources_sqlite(
                                 config.genome_id,
                             )
                             last_logged_at = attempted
+                            last_logged_matched = matched
             if source_buffer:
                 connection.executemany(GLOBAL_KMER_SOURCE_INSERT_SQL, source_buffer)
                 source_buffer.clear()

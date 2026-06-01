@@ -1785,3 +1785,31 @@ Typical outputs are:
 
 The Excel and HTML reports contain compact summaries and previews. The full
 analysis tables remain in TSV.GZ or Parquet-compatible tabular form.
+
+### v0.36 production progress logging
+
+KmerSutra v0.36 reduces global-candidate build log volume for production-scale
+runs. The build still performs complete candidate-universe and conflict/source
+annotation scans, but candidate sampling and candidate-hit annotation progress
+messages are throttled when the informative count has not changed. A heartbeat
+message is still emitted after several intervals so long scans remain visibly
+active.
+
+The default global source-index progress interval is now 5,000,000 attempted
+observations. Debug builds can still request more frequent updates, for example:
+
+```bash
+export GLOBAL_INDEX_PROGRESS_INTERVAL=100000
+```
+
+For manuscript or production builds, a quieter setting is recommended:
+
+```bash
+export GLOBAL_INDEX_PROGRESS_INTERVAL=5000000
+```
+
+The v0.36 wrapper `run_kmersutra_build_global_candidate_v036_tmpdir.sh` keeps the
+v4 Plasmodium/outgroup configuration, k values `51 77 101 151`, assembly-aware
+candidate sampling, independent multi-k genome-spread marker selection, and
+module Parquet defaults from v0.34/v0.35, but uses the quieter production logging
+default.

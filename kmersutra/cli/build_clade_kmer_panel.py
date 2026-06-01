@@ -402,7 +402,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--global_index_progress_interval",
         type=int,
-        default=1000000,
+        default=5000000,
         help=(
             "Attempted k-mer interval for progress logging during global "
             "source indexing."
