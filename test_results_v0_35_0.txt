@@ -1,0 +1,15 @@
+KmerSutra v0.35.0 test results
+==============================
+
+Command:
+    python -m unittest discover -s tests -v
+
+Result:
+    Ran 295 tests in 7.760s
+    OK
+
+Notes:
+    - No nose2 tests were run.
+    - v0.35.0 focuses on benchmark post-processing, LCA-aware AI training
+      preparation, optional AI calibrator training, and combined HTML/XLSX
+      reporting.
