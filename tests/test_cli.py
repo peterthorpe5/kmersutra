@@ -66,6 +66,12 @@ class TestCliModules(unittest.TestCase):
         self.assertTrue(callable(module.main))
 
 
+    def test_summarise_lca_cli_imports(self):
+        """LCA summary CLI module should expose a main function."""
+        module = importlib.import_module("kmersutra.cli.summarise_lca")
+        self.assertTrue(callable(module.main))
+
+
     def test_download_taxonomy_cli_imports(self):
         """Taxonomy downloader CLI module should expose a main function."""
         module = importlib.import_module("kmersutra.cli.download_taxonomy")

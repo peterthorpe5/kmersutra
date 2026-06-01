@@ -1675,3 +1675,56 @@ kmersutra_evidence_long.tsv.gz
 This keeps the outputs portable while avoiding unnecessary uncompressed long
 call tables.
 
+
+## Conservative LCA reporting in v0.33
+
+KmerSutra v0.33 adds a conservative lowest-common-ancestor reporting layer. This
+layer does not replace species-level calls, neighbour-lineage labels or
+background-candidate labels. Instead, it places supported evidence onto the NCBI
+taxonomy so that unknown or partially represented samples can be reported at the
+most specific defensible taxonomic level.
+
+The main command is:
+
+```bash
+kmersutra-summarise-lca \
+  --evidence_table summary_v030_expected_lineage_hammondia/kmersutra_detection_calls_long.tsv.gz \
+  --taxon_map_table /home/pthorpe001/data/databases/kmersutra_db/ncbi_genomes_plasmodium_outgroups_v4/kmersutra_genome_config.tsv \
+  --taxonomy_dir /home/pthorpe001/data/databases/kmersutra_db/taxonomy \
+  --out_table summary_v030_expected_lineage_hammondia/kmersutra_lca_summary.tsv.gz \
+  --taxon_name_column species_name \
+  --taxon_map_name_column species_name \
+  --taxon_map_taxid_column taxid \
+  --min_unique_kmers 1 \
+  --min_positive_sequences 1 \
+  --min_best_k 0 \
+  --verbose
+```
+
+The output includes separate LCA scopes:
+
+- `dominant_lineage`: the strongest coherent lineage, designed not to collapse
+  because of weak distant background evidence.
+- `all_supported_evidence`: the strict LCA across all supported taxa.
+- `background_candidate`: LCA placement for background-candidate rows.
+- `neighbour_lineage`: LCA placement for neighbour-lineage rows.
+- `reportable_positive`: LCA placement for positive/reportable call rows.
+
+Supported table suffixes remain `.tsv`, `.tsv.gz` and `.parquet`.
+
+### v0.34 LCA features for AI call calibration
+
+After producing an LCA summary table with `kmersutra-summarise-lca`, the AI
+training table can include LCA-derived numeric features:
+
+```bash
+kmersutra-build-call-training \
+  --calls_table summary/kmersutra_detection_calls_long.tsv.gz \
+  --lca_table summary/kmersutra_lca_summary.tsv.gz \
+  --out_table summary/ai_call_training_with_lca.tsv.gz \
+  --max_not_detected 50000 \
+  --verbose
+```
+
+The downstream calibrator automatically includes numeric `lca_*` features when
+present in the training table.

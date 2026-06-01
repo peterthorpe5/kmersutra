@@ -1,0 +1,61 @@
+KmerSutra v0.34.0 release notes
+================================
+
+Purpose
+-------
+
+v0.34.0 is a targeted performance and interpretation update following the
+first v0.32 assembly-aware database rebuild attempt and the v0.33 LCA reporting
+addition.
+
+Main changes
+------------
+
+1. Fast cross-k marker de-correlation
+   - The independent multi-k candidate-universe sampler no longer scans every
+     previously selected marker when deciding whether a candidate is too close
+     to a marker selected at another k value.
+   - A small spatial position index is now used per contig, reducing the
+     cross-k distance check from a potentially very expensive linear scan to a
+     nearby-bin lookup.
+   - This is intended to fix very slow genome-1 sampling behaviour observed in
+     v0.32/v0.33 when using independent_multik_genome_spread with a non-zero
+     minimum cross-k marker distance.
+
+2. LCA features for AI call calibration
+   - The AI call-training table can now optionally merge numeric features from
+     the LCA summary table produced by kmersutra-summarise-lca.
+   - Use --lca_table with kmersutra-build-call-training.
+   - Default model feature inference now includes numeric lca_* feature columns
+     when present.
+   - This makes the AI layer able to learn from whether evidence resolves to
+     species, genus, higher-rank, dominant-lineage, all-evidence, neighbour or
+     background LCA summaries.
+
+3. Continued v0.33 LCA reporting support
+   - v0.33's kmersutra-summarise-lca command remains the main post-screening
+     LCA reporting route.
+   - The existing build layer already stores evidence_taxid, evidence_name and
+     evidence_rank for retained markers, which are LCA-like build-time evidence
+     assignments. A deeper marker-level explicit lca_* schema can be added in a
+     later version if needed, but v0.34 prioritises the critical performance fix.
+
+Testing
+-------
+
+The package is intended to be validated with:
+
+    python -m unittest discover -s tests -v
+
+Do not use nose2 unless explicitly requested.
+
+Suggested action
+----------------
+
+If a v0.32 or v0.33 global candidate build is still stuck on the first large
+genome, cancel it and rebuild with v0.34.0 using the same v4 genome config and
+k values:
+
+    /home/pthorpe001/data/databases/kmersutra_db/ncbi_genomes_plasmodium_outgroups_v4/kmersutra_genome_config.tsv
+    K_VALUES="51 77 101 151"
+

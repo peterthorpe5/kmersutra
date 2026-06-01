@@ -46,6 +46,19 @@ def parse_args() -> argparse.Namespace:
             ".tsv, .tsv.gz and .parquet are supported."
         ),
     )
+    parser.add_argument(
+        "--lca_table",
+        default=None,
+        help=(
+            "Optional LCA summary table from kmersutra-summarise-lca. "
+            "Supported suffixes: .tsv, .tsv.gz and .parquet."
+        ),
+    )
+    parser.add_argument(
+        "--lca_sample_column",
+        default="sample_id",
+        help="Sample identifier column used to join LCA features.",
+    )
     parser.add_argument("--label_column", default="ml_report_label")
     parser.add_argument("--drop_not_detected", action="store_true")
     parser.add_argument("--max_not_detected", type=int, default=None)
@@ -68,12 +81,15 @@ def main() -> None:
     logger.info("Starting KmerSutra AI call-training table construction")
     logger.info("Call table: %s", calls_table)
     logger.info("Output table: %s", output_table)
+    logger.info("LCA table: %s", args.lca_table or "not supplied")
     records = write_call_training_table_from_table(
         calls_table=calls_table,
         output_table=out_path,
         label_column=args.label_column,
         include_not_detected=not args.drop_not_detected,
         max_not_detected=args.max_not_detected,
+        lca_table=args.lca_table,
+        lca_sample_column=args.lca_sample_column,
         logger=logger,
     )
     logger.info("Wrote %d AI training records to %s", len(records), out_path)

@@ -252,3 +252,94 @@ class TestAICalibration(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TestAICalibrationLcaFeatures(unittest.TestCase):
+    """Test optional LCA-derived AI features."""
+
+    def test_write_training_table_can_merge_lca_features(self) -> None:
+        """AI training output should include numeric LCA features when supplied."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            calls_tsv = root / "calls.tsv.gz"
+            lca_tsv = root / "lca.tsv.gz"
+            training_tsv = root / "training.tsv.gz"
+            lca_rows = [
+                {
+                    "sample_id": "s1",
+                    "lca_scope": "dominant_lineage",
+                    "lca_taxid": "11",
+                    "lca_rank": "species",
+                    "n_taxa": "1",
+                    "total_unique_kmers": "50",
+                    "total_positive_sequences": "20",
+                    "max_best_k": "151",
+                    "max_k_values_positive": "3",
+                    "top_unique_kmers": "50",
+                    "top_positive_sequences": "20",
+                    "top_best_k": "151",
+                    "top_score": "1.0",
+                },
+                {
+                    "sample_id": "s2",
+                    "lca_scope": "all_supported_evidence",
+                    "lca_taxid": "10",
+                    "lca_rank": "genus",
+                    "n_taxa": "2",
+                    "total_unique_kmers": "28",
+                    "total_positive_sequences": "73",
+                    "max_best_k": "151",
+                    "max_k_values_positive": "4",
+                    "top_unique_kmers": "28",
+                    "top_positive_sequences": "73",
+                    "top_best_k": "151",
+                    "top_score": "1.0",
+                },
+            ]
+            write_tsv(
+                records=CALL_ROWS,
+                output_path=calls_tsv,
+                fieldnames=list(CALL_ROWS[0].keys()),
+            )
+            write_tsv(
+                records=lca_rows,
+                output_path=lca_tsv,
+                fieldnames=list(lca_rows[0].keys()),
+            )
+            write_call_training_table_from_table(
+                calls_table=calls_tsv,
+                output_table=training_tsv,
+                lca_table=lca_tsv,
+            )
+            observed = read_records_table(input_path=training_tsv)
+        s1 = next(row for row in observed if row["sample_id"] == "s1")
+        s2 = next(row for row in observed if row["sample_id"] == "s2")
+        self.assertEqual(float(s1["lca_dominant_lineage_rank_depth"]), 7.0)
+        self.assertEqual(float(s1["lca_dominant_lineage_is_species"]), 1.0)
+        self.assertEqual(float(s2["lca_all_supported_evidence_rank_depth"]), 6.0)
+
+    def test_train_calibrator_infers_lca_feature_columns(self) -> None:
+        """Default training should include lca_* features when present."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            training_tsv = root / "training.tsv"
+            model_json = root / "model.json"
+            summary_tsv = root / "summary.tsv"
+            evaluation_tsv = root / "evaluation.tsv"
+            records = build_call_training_table(records=CALL_ROWS * 4)
+            for index, row in enumerate(records):
+                row["sample_id"] = f"{row['sample_id']}_{index}"
+                row["lca_dominant_lineage_rank_depth"] = 7.0 if index % 2 else 6.0
+            write_tsv(
+                records=records,
+                output_path=training_tsv,
+                fieldnames=list(records[0].keys()),
+            )
+            model, _predictions, _metrics = train_evaluate_call_calibrator(
+                training_table=training_tsv,
+                model_json=model_json,
+                summary_table=summary_tsv,
+                evaluation_table=evaluation_tsv,
+                test_fraction=0.25,
+                distance_quantile=1.0,
+            )
+        self.assertIn("lca_dominant_lineage_rank_depth", model.feature_columns)

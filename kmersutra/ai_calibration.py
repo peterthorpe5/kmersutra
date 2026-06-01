@@ -43,6 +43,33 @@ CALL_FEATURE_COLUMNS = [
 
 DEFAULT_LABEL_COLUMN = "ml_report_label"
 DEFAULT_UNKNOWN_LABEL = "unknown_or_unresolved"
+LCA_RANK_DEPTH = {
+    "superkingdom": 1.0,
+    "phylum": 2.0,
+    "class": 3.0,
+    "order": 4.0,
+    "family": 5.0,
+    "genus": 6.0,
+    "species": 7.0,
+}
+LCA_NUMERIC_SOURCE_COLUMNS = [
+    "n_taxa",
+    "total_unique_kmers",
+    "total_positive_sequences",
+    "max_best_k",
+    "max_k_values_positive",
+    "top_unique_kmers",
+    "top_positive_sequences",
+    "top_best_k",
+    "top_score",
+]
+LCA_DEFAULT_SCOPES = [
+    "dominant_lineage",
+    "all_supported_evidence",
+    "background_candidate",
+    "neighbour_lineage",
+    "reportable_positive",
+]
 
 
 def normalise_bool(value: object) -> bool:
@@ -127,6 +154,170 @@ def infer_report_label(*, record: dict[str, object]) -> str:
     if call in {"observed_below_threshold", "low_evidence"}:
         return "observed_below_threshold"
     return "not_detected"
+
+
+def normalise_feature_prefix(*, value: object) -> str:
+    """Return a safe feature-name prefix.
+
+    Parameters
+    ----------
+    value : object
+        Raw scope or column label.
+
+    Returns
+    -------
+    str
+        Lower-case feature-safe label.
+    """
+    text = str(value or "").strip().lower()
+    cleaned = []
+    previous_was_separator = False
+    for char in text:
+        if char.isalnum():
+            cleaned.append(char)
+            previous_was_separator = False
+        elif not previous_was_separator:
+            cleaned.append("_")
+            previous_was_separator = True
+    return "".join(cleaned).strip("_") or "unknown"
+
+
+def lca_rank_depth(*, rank: object) -> float:
+    """Return numeric depth for a taxonomic rank.
+
+    Parameters
+    ----------
+    rank : object
+        Taxonomic rank label.
+
+    Returns
+    -------
+    float
+        Rank depth where species is deepest among the configured core ranks.
+    """
+    return float(LCA_RANK_DEPTH.get(str(rank or "").strip().lower(), 0.0))
+
+
+def build_lca_feature_map(
+    *,
+    lca_records: Iterable[dict[str, object]],
+    sample_column: str = "sample_id",
+) -> dict[str, dict[str, float]]:
+    """Build per-sample numeric AI features from LCA summary rows.
+
+    Parameters
+    ----------
+    lca_records : iterable of dict
+        Rows produced by ``kmersutra-summarise-lca``.
+    sample_column : str, optional
+        Sample identifier column.
+
+    Returns
+    -------
+    dict[str, dict[str, float]]
+        Mapping from sample id to LCA-derived numeric features.
+    """
+    feature_map: dict[str, dict[str, float]] = defaultdict(dict)
+    for record in lca_records:
+        sample_id = str(record.get(sample_column, "")).strip()
+        if not sample_id:
+            continue
+        scope = normalise_feature_prefix(value=record.get("lca_scope", "unknown"))
+        prefix = f"lca_{scope}"
+        rank = str(record.get("lca_rank", "")).strip().lower()
+        features = feature_map[sample_id]
+        features[f"{prefix}_rank_depth"] = lca_rank_depth(rank=rank)
+        features[f"{prefix}_is_species"] = 1.0 if rank == "species" else 0.0
+        features[f"{prefix}_is_genus"] = 1.0 if rank == "genus" else 0.0
+        features[f"{prefix}_is_higher_rank"] = (
+            1.0 if rank and rank not in {"species", "genus"} else 0.0
+        )
+        features[f"{prefix}_has_assignment"] = 1.0 if record.get("lca_taxid") else 0.0
+        for column in LCA_NUMERIC_SOURCE_COLUMNS:
+            features[f"{prefix}_{column}"] = normalise_float(record.get(column, 0.0))
+    return feature_map
+
+
+def add_lca_features_to_training_records(
+    *,
+    training_records: Iterable[dict[str, object]],
+    lca_records: Iterable[dict[str, object]],
+    sample_column: str = "sample_id",
+    logger: logging.Logger | None = None,
+) -> list[dict[str, object]]:
+    """Merge LCA-derived numeric features into AI training records.
+
+    Parameters
+    ----------
+    training_records : iterable of dict
+        AI training records generated from KmerSutra call rows.
+    lca_records : iterable of dict
+        Rows from the LCA summary table.
+    sample_column : str, optional
+        Sample identifier column used for joining.
+    lca_table : str or pathlib.Path or None, optional
+        Optional LCA summary table from ``kmersutra-summarise-lca``. When
+        supplied, numeric LCA-derived features are merged by sample id.
+    lca_sample_column : str, optional
+        Sample identifier column used for LCA feature joins.
+    logger : logging.Logger or None, optional
+        Logger.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        Training records with additional LCA features.
+    """
+    rows = [dict(record) for record in training_records]
+    lca_features = build_lca_feature_map(
+        lca_records=lca_records,
+        sample_column=sample_column,
+    )
+    all_feature_columns = sorted(
+        {column for features in lca_features.values() for column in features}
+    )
+    matched = 0
+    for row in rows:
+        sample_id = str(row.get(sample_column, "")).strip()
+        features = lca_features.get(sample_id, {})
+        if features:
+            matched += 1
+        for column in all_feature_columns:
+            row[column] = float(features.get(column, 0.0))
+    if logger:
+        logger.info(
+            "Merged LCA features for %d/%d AI training records using %d feature columns",
+            matched,
+            len(rows),
+            len(all_feature_columns),
+        )
+    return rows
+
+
+def infer_numeric_feature_columns(*, records: list[dict[str, object]]) -> list[str]:
+    """Infer numeric feature columns for AI training.
+
+    Parameters
+    ----------
+    records : list of dict
+        Training records.
+
+    Returns
+    -------
+    list[str]
+        Numeric feature columns including optional LCA-derived features.
+    """
+    if not records:
+        return []
+    base_features = [
+        column for column in CALL_FEATURE_COLUMNS
+        if column in records[0]
+    ] + ["has_long_k_support", "has_multi_k_support", "exact_hit_fraction"]
+    lca_features = sorted(
+        column for column in records[0]
+        if column.startswith("lca_")
+    )
+    return base_features + lca_features
 
 
 def build_call_feature_record(
@@ -377,6 +568,8 @@ def write_call_training_table_from_table(
     label_column: str = DEFAULT_LABEL_COLUMN,
     include_not_detected: bool = True,
     max_not_detected: int | None = None,
+    lca_table: str | Path | None = None,
+    lca_sample_column: str = "sample_id",
     logger: logging.Logger | None = None,
 ) -> list[dict[str, object]]:
     """Read calls and write an AI-ready training table.
@@ -411,6 +604,14 @@ def write_call_training_table_from_table(
         max_not_detected_per_label=max_not_detected,
         logger=logger,
     )
+    if lca_table is not None:
+        lca_records = read_records_table(input_path=lca_table, logger=logger)
+        feature_records = add_lca_features_to_training_records(
+            training_records=feature_records,
+            lca_records=lca_records,
+            sample_column=lca_sample_column,
+            logger=logger,
+        )
     if not feature_records:
         raise ValueError("No AI training records were generated")
     fieldnames = list(feature_records[0].keys())
@@ -430,6 +631,8 @@ def write_call_training_table_from_tsv(
     label_column: str = DEFAULT_LABEL_COLUMN,
     include_not_detected: bool = True,
     max_not_detected: int | None = None,
+    lca_table: str | Path | None = None,
+    lca_sample_column: str = "sample_id",
     logger: logging.Logger | None = None,
 ) -> list[dict[str, object]]:
     """Backward-compatible wrapper for TSV-style call-training output.
@@ -462,6 +665,8 @@ def write_call_training_table_from_tsv(
         label_column=label_column,
         include_not_detected=include_not_detected,
         max_not_detected=max_not_detected,
+        lca_table=lca_table,
+        lca_sample_column=lca_sample_column,
         logger=logger,
     )
 
@@ -534,10 +739,7 @@ def train_evaluate_call_calibrator(
     records = read_records_table(input_path=resolved_training_table, logger=logger)
     if not records:
         raise ValueError("Cannot train call calibrator from zero records")
-    features = feature_columns or [
-        column for column in CALL_FEATURE_COLUMNS
-        if column in records[0]
-    ] + ["has_long_k_support", "has_multi_k_support", "exact_hit_fraction"]
+    features = feature_columns or infer_numeric_feature_columns(records=records)
     train_records, test_records = split_records_by_group(
         records=records,
         group_columns=group_columns,

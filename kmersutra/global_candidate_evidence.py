@@ -136,7 +136,11 @@ def _cross_k_candidate_available(
     Parameters
     ----------
     selected_positions : list[tuple[str, int, int]]
-        Selected candidates as contig, position and k.
+        Selected candidates as contig, position and k. This compatibility
+        helper is intentionally simple and is retained for direct unit tests.
+        Production candidate-universe sampling uses
+        :class:`_CrossKPositionIndex` to avoid an O(N) scan for each attempted
+        k-mer.
     contig_id : str
         Candidate contig identifier.
     position : int
@@ -163,6 +167,83 @@ def _cross_k_candidate_available(
         if abs(int(selected_position) - int(position)) < min_cross_k_marker_distance:
             return False
     return True
+
+
+class _CrossKPositionIndex:
+    """Spatial index for fast cross-k marker de-correlation.
+
+    The v0.31/v0.32 independent multi-k sampler avoided selecting markers from
+    the same local interval across different k values. A naïve implementation
+    checked every previously selected marker for every attempted k-mer, which
+    can become prohibitively slow for large assemblies. This index stores
+    selected positions in distance-sized bins per contig, so each candidate only
+    checks nearby bins.
+    """
+
+    def __init__(self, *, min_distance: int) -> None:
+        """Initialise the position index.
+
+        Parameters
+        ----------
+        min_distance : int
+            Minimum allowed distance between markers selected at different k
+            values. Zero disables indexing and permits all candidates.
+        """
+        if min_distance < 0:
+            raise ValueError("min_distance must be non-negative")
+        self.min_distance = int(min_distance)
+        self._bucket_width = max(1, self.min_distance)
+        self._positions: dict[str, dict[int, list[tuple[int, int]]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
+
+    def is_available(self, *, contig_id: str, position: int, k: int) -> bool:
+        """Return whether a candidate is distant from different-k markers.
+
+        Parameters
+        ----------
+        contig_id : str
+            Contig identifier.
+        position : int
+            Candidate start position.
+        k : int
+            Candidate k value.
+
+        Returns
+        -------
+        bool
+            True if the candidate can be retained.
+        """
+        if self.min_distance == 0:
+            return True
+        bucket_id = int(position) // self._bucket_width
+        contig_buckets = self._positions.get(contig_id)
+        if not contig_buckets:
+            return True
+        for neighbour_bucket in range(bucket_id - 1, bucket_id + 2):
+            for selected_position, selected_k in contig_buckets.get(neighbour_bucket, []):
+                if int(selected_k) == int(k):
+                    continue
+                if abs(int(selected_position) - int(position)) < self.min_distance:
+                    return False
+        return True
+
+    def add(self, *, contig_id: str, position: int, k: int) -> None:
+        """Add a selected candidate marker to the index.
+
+        Parameters
+        ----------
+        contig_id : str
+            Contig identifier.
+        position : int
+            Selected start position.
+        k : int
+            Selected k value.
+        """
+        if self.min_distance == 0:
+            return
+        bucket_id = int(position) // self._bucket_width
+        self._positions[contig_id][bucket_id].append((int(position), int(k)))
 
 
 @dataclass(frozen=True)
@@ -1006,6 +1087,9 @@ def collect_candidate_universe_sqlite(
             source_buffer: list[tuple[object, ...]] = []
             bin_counts: dict[tuple[int, str, int], int] = defaultdict(int)
             selected_positions: list[tuple[str, int, int]] = []
+            cross_k_index = _CrossKPositionIndex(
+                min_distance=min_cross_k_marker_distance
+            )
             ordered_k_values = sorted((int(value) for value in k_values), reverse=True)
             contig_offsets: dict[str, int] = {}
             assembly_stats = None
@@ -1070,18 +1154,21 @@ def collect_candidate_universe_sqlite(
                         bin_key = (int(k), bin_scope, bin_id)
                         if bin_counts[bin_key] >= max_per_genome_bin:
                             pass
-                        elif not _cross_k_candidate_available(
-                            selected_positions=selected_positions,
+                        elif not cross_k_index.is_available(
                             contig_id=record.identifier,
                             position=int(position),
                             k=int(k),
-                            min_cross_k_marker_distance=min_cross_k_marker_distance,
                         ):
                             pass
                         else:
                             bin_counts[bin_key] += 1
                             selected += 1
                             selected_positions.append((record.identifier, int(position), int(k)))
+                            cross_k_index.add(
+                                contig_id=record.identifier,
+                                position=int(position),
+                                k=int(k),
+                            )
                             candidate_buffer.append(
                                 _candidate_row_tuple(
                                     k=k,

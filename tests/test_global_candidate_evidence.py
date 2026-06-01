@@ -747,3 +747,25 @@ class TestGlobalCandidateAssemblyAwareSampling(unittest.TestCase):
         self.assertEqual(sampling["effective_genome_bin_size"], 10000)
         self.assertLessEqual(int(sampling["sampled_candidate_kmers"]), 2)
         self.assertEqual(sampling["sampling_bin_phase"], "shifted_by_k_global_assembly")
+
+class TestFastCrossKPositionIndex(unittest.TestCase):
+    """Test the fast cross-k marker distance index."""
+
+    def test_position_index_blocks_nearby_different_k(self) -> None:
+        """Nearby markers at different k values should be rejected quickly."""
+        from kmersutra.global_candidate_evidence import _CrossKPositionIndex
+
+        index = _CrossKPositionIndex(min_distance=5000)
+        index.add(contig_id="ctg1", position=10000, k=151)
+        self.assertFalse(index.is_available(contig_id="ctg1", position=12000, k=101))
+        self.assertTrue(index.is_available(contig_id="ctg1", position=12000, k=151))
+        self.assertTrue(index.is_available(contig_id="ctg2", position=12000, k=101))
+        self.assertTrue(index.is_available(contig_id="ctg1", position=20000, k=101))
+
+    def test_position_index_allows_zero_distance_mode(self) -> None:
+        """Zero minimum distance should disable cross-k filtering."""
+        from kmersutra.global_candidate_evidence import _CrossKPositionIndex
+
+        index = _CrossKPositionIndex(min_distance=0)
+        index.add(contig_id="ctg1", position=10000, k=151)
+        self.assertTrue(index.is_available(contig_id="ctg1", position=10001, k=101))

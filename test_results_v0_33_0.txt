@@ -1,0 +1,582 @@
+test_build_call_feature_record_adds_derived_features (test_ai_calibration.TestAICalibration.test_build_call_feature_record_adds_derived_features)
+Feature records should include numeric and derived AI features. ... ok
+test_build_call_training_table_can_drop_not_detected (test_ai_calibration.TestAICalibration.test_build_call_training_table_can_drop_not_detected)
+Training construction should optionally remove not-detected rows. ... ok
+test_evaluate_predictions_outputs_overall_metric (test_ai_calibration.TestAICalibration.test_evaluate_predictions_outputs_overall_metric)
+Evaluation should include per-label and overall rows. ... ok
+test_infer_report_label_uses_report_layers (test_ai_calibration.TestAICalibration.test_infer_report_label_uses_report_layers)
+Training labels should follow report-layer categories. ... ok
+test_split_records_by_group_is_deterministic (test_ai_calibration.TestAICalibration.test_split_records_by_group_is_deterministic)
+Grouped splitting should be repeatable. ... ok
+test_train_calibrator_accepts_compressed_tables (test_ai_calibration.TestAICalibration.test_train_calibrator_accepts_compressed_tables)
+Call-calibrator training should support compressed table paths. ... ok
+test_write_training_table_accepts_compressed_tsv (test_ai_calibration.TestAICalibration.test_write_training_table_accepts_compressed_tsv)
+AI table construction should support TSV.GZ inputs and outputs. ... ok
+test_write_training_table_and_train_calibrator (test_ai_calibration.TestAICalibration.test_write_training_table_and_train_calibrator)
+CLI-facing helper functions should write model and evaluation files. ... ok
+test_all_candidate_build_applies_global_limit (test_all_candidate_evidence.TestAllCandidateEvidenceBuild.test_all_candidate_build_applies_global_limit)
+Per-evidence limits should be applied across candidate rounds. ... ok
+test_all_candidate_build_retains_multiple_species (test_all_candidate_evidence.TestAllCandidateEvidenceBuild.test_all_candidate_build_retains_multiple_species)
+All-candidate mode should retain reportable evidence for each species. ... ok
+test_select_candidate_genomes_excludes_background_by_default (test_all_candidate_evidence.TestAllCandidateEvidenceBuild.test_select_candidate_genomes_excludes_background_by_default)
+Default candidate selection should exclude background roles. ... ok
+test_calculate_n50_uses_length_weighted_threshold (test_assembly_stats.TestAssemblyStats.test_calculate_n50_uses_length_weighted_threshold)
+N50 should be calculated from sorted cumulative contig lengths. ... ok
+test_collect_fasta_contig_lengths_reads_all_records (test_assembly_stats.TestAssemblyStats.test_collect_fasta_contig_lengths_reads_all_records)
+FASTA length collection should report all contigs. ... ok
+test_contig_offsets_skip_too_short_contigs (test_assembly_stats.TestAssemblyStats.test_contig_offsets_skip_too_short_contigs)
+Contigs shorter than the minimum k should not receive offsets. ... ok
+test_fragmented_assembly_uses_global_cumulative_bins (test_assembly_stats.TestAssemblyStats.test_fragmented_assembly_uses_global_cumulative_bins)
+Fragmented assemblies should use an effective global bin plan. ... ok
+test_small_viral_like_assembly_uses_larger_bin_size (test_assembly_stats.TestAssemblyStats.test_small_viral_like_assembly_uses_larger_bin_size)
+Small assemblies should not be over-binned with tiny requested bins. ... ok
+test_background_candidate_is_not_neighbour (test_benchmark_reporting.TestBenchmarkReporting.test_background_candidate_is_not_neighbour)
+Background candidates should keep the background reporting layer. ... ok
+test_expected_genera_from_targets_handles_multiple_targets (test_benchmark_reporting.TestBenchmarkReporting.test_expected_genera_from_targets_handles_multiple_targets)
+Expected target genera should be inferred from all target labels. ... ok
+test_extract_genus_returns_first_token (test_benchmark_reporting.TestBenchmarkReporting.test_extract_genus_returns_first_token)
+Genus extraction should return the first normalised token. ... ok
+test_negative_same_genus_non_target_is_not_demoted (test_benchmark_reporting.TestBenchmarkReporting.test_negative_same_genus_non_target_is_not_demoted)
+No-spike negatives should not demote unexpected same-genus signal. ... ok
+test_normalise_taxa_drops_empty_values (test_benchmark_reporting.TestBenchmarkReporting.test_normalise_taxa_drops_empty_values)
+A taxon set should not retain blank labels. ... ok
+test_normalise_taxon_name_handles_case_underscores_and_spaces (test_benchmark_reporting.TestBenchmarkReporting.test_normalise_taxon_name_handles_case_underscores_and_spaces)
+Taxon names should be normalised before comparison. ... ok
+test_positive_same_genus_non_target_is_neighbour (test_benchmark_reporting.TestBenchmarkReporting.test_positive_same_genus_non_target_is_neighbour)
+A non-target same-genus species in a positive sample is neighbour evidence. ... ok
+test_reporting_layer_priority (test_benchmark_reporting.TestBenchmarkReporting.test_reporting_layer_priority)
+Report layer assignment should follow expected priority order. ... ok
+test_build_cli_writes_all_candidate_outputs (test_build_cli_target_evidence.TestBuildCliAllCandidateEvidence.test_build_cli_writes_all_candidate_outputs)
+CLI should produce all-candidate panel and SQLite outputs. ... ok
+test_build_cli_writes_global_candidate_outputs (test_build_cli_target_evidence.TestBuildCliGlobalCandidateEvidence.test_build_cli_writes_global_candidate_outputs)
+CLI should produce global candidate panel and SQLite outputs. ... ok
+test_build_cli_writes_target_evidence_outputs_and_ram_log (test_build_cli_target_evidence.TestBuildCliTargetEvidence.test_build_cli_writes_target_evidence_outputs_and_ram_log)
+CLI should produce panel, SQLite, profile and RAM outputs. ... ok
+test_build_panel_clade_core_kmers (test_build_panel.TestBuildPanel.test_build_panel_clade_core_kmers)
+Panel builder should optionally include clade-core k-mers. ... ok
+test_build_panel_species_unique (test_build_panel.TestBuildPanel.test_build_panel_species_unique)
+Panel builder should remove k-mers found in outgroups. ... ok
+test_build_panel_thinning_limit (test_build_panel.TestBuildPanel.test_build_panel_thinning_limit)
+Panel thinning should limit retained k-mers per species and k. ... ok
+test_build_panel_threads_matches_single_worker (test_build_panel.TestBuildPanel.test_build_panel_threads_matches_single_worker)
+Parallel panel building should match single-worker output. ... ok
+test_taxonomy_aware_panel_builds_genus_evidence (test_build_panel.TestTaxonomicBuildPanel.test_taxonomy_aware_panel_builds_genus_evidence)
+Shared species k-mers should become genus-level evidence. ... ok
+test_taxonomy_aware_panel_filters_outside_target_taxid (test_build_panel.TestTaxonomicBuildPanel.test_taxonomy_aware_panel_filters_outside_target_taxid)
+Target taxid filtering should remove unrelated outgroup evidence. ... ok
+test_background_candidate_taxon_is_relabelled_not_dropped (test_call_consolidation.TestCallConsolidation.test_background_candidate_taxon_is_relabelled_not_dropped)
+A plausible background taxon should be retained in a separate layer. ... ok
+test_co_dominant_same_genus_species_is_not_demoted (test_call_consolidation.TestCallConsolidation.test_co_dominant_same_genus_species_is_not_demoted)
+Possible true mixed species should survive if support is co-dominant. ... ok
+test_consolidation_can_be_disabled (test_call_consolidation.TestCallConsolidation.test_consolidation_can_be_disabled)
+Same-genus demotion should be optional for reproducible old runs. ... ok
+test_dominated_same_genus_species_is_demoted_to_neighbour_lineage (test_call_consolidation.TestCallConsolidation.test_dominated_same_genus_species_is_demoted_to_neighbour_lineage)
+A weak same-genus species should be demoted when dominated by a primary. ... ok
+test_extract_genus_returns_first_token (test_call_consolidation.TestCallConsolidation.test_extract_genus_returns_first_token)
+Genus extraction should return the normalised first word. ... ok
+test_merge_background_taxa_reads_direct_and_file_values (test_call_consolidation.TestCallConsolidation.test_merge_background_taxa_reads_direct_and_file_values)
+Background taxa should merge direct CLI labels and text-file labels. ... ok
+test_normalise_taxon_name_handles_underscores_and_whitespace (test_call_consolidation.TestCallConsolidation.test_normalise_taxon_name_handles_underscores_and_whitespace)
+Taxon-name normalisation should support robust matching. ... ok
+test_marker_selection_defaults_to_independent_multik_genome_spread (test_cli.TestBuildPanelCliDefaults.test_marker_selection_defaults_to_independent_multik_genome_spread)
+Independent multi-k marker selection should be the default build behaviour. ... ok
+test_build_call_training_cli_imports (test_cli.TestCliModules.test_build_call_training_cli_imports)
+AI call-training CLI module should expose a main function. ... ok
+test_build_panel_cli_imports (test_cli.TestCliModules.test_build_panel_cli_imports)
+Build-panel CLI module should expose a main function. ... ok
+test_download_genomes_cli_imports (test_cli.TestCliModules.test_download_genomes_cli_imports)
+KmerSutra genome downloader CLI module should expose a main function. ... ok
+test_download_taxonomy_cli_imports (test_cli.TestCliModules.test_download_taxonomy_cli_imports)
+Taxonomy downloader CLI module should expose a main function. ... ok
+test_extract_features_cli_imports (test_cli.TestCliModules.test_extract_features_cli_imports)
+Feature-extraction CLI module should expose a main function. ... ok
+test_merge_modules_cli_imports (test_cli.TestCliModules.test_merge_modules_cli_imports)
+Parquet module-merge CLI should expose a main function. ... ok
+test_merge_panels_cli_imports (test_cli.TestCliModules.test_merge_panels_cli_imports)
+Panel-merge CLI module should expose a main function. ... ok
+test_ncbi_cli_imports (test_cli.TestCliModules.test_ncbi_cli_imports)
+Legacy NCBI downloader CLI module should expose a main function. ... ok
+test_predict_classifier_cli_imports (test_cli.TestCliModules.test_predict_classifier_cli_imports)
+Classifier-prediction CLI module should expose a main function. ... ok
+test_screen_cli_imports (test_cli.TestCliModules.test_screen_cli_imports)
+Screening CLI module should expose a main function. ... ok
+test_summarise_lca_cli_imports (test_cli.TestCliModules.test_summarise_lca_cli_imports)
+LCA summary CLI module should expose a main function. ... ok
+test_summarise_run_cli_imports (test_cli.TestCliModules.test_summarise_run_cli_imports)
+Run-summary CLI module should expose a main function. ... ok
+test_summarise_spikeins_cli_imports (test_cli.TestCliModules.test_summarise_spikeins_cli_imports)
+Multi-run spike-in summary CLI module should expose a main function. ... ok
+test_train_call_calibrator_cli_imports (test_cli.TestCliModules.test_train_call_calibrator_cli_imports)
+AI call-calibrator CLI module should expose a main function. ... ok
+test_train_classifier_cli_imports (test_cli.TestCliModules.test_train_classifier_cli_imports)
+Classifier-training CLI module should expose a main function. ... ok
+test_validate_panel_cli_imports (test_cli.TestCliModules.test_validate_panel_cli_imports)
+Panel-validation CLI module should expose a main function. ... ok
+test_collect_compact_groups_merges_repeated_kmers (test_compact_build.TestCompactBuild.test_collect_compact_groups_merges_repeated_kmers)
+Compact collection should store one group per distinct k-mer key. ... ok
+test_compact_group_identifies_clade_core (test_compact_build.TestCompactBuild.test_compact_group_identifies_clade_core)
+Compact clade-core detection should retain k-mers restricted to a clade. ... ok
+test_compact_species_unique_function_returns_targets_only (test_compact_build.TestCompactBuild.test_compact_species_unique_function_returns_targets_only)
+Compact species-unique detection should not retain outgroup-only k-mers. ... ok
+test_compact_species_unique_matches_legacy_builder (test_compact_build.TestCompactBuild.test_compact_species_unique_matches_legacy_builder)
+Compact and legacy builders should retain the same species-level keys. ... ok
+test_compact_taxonomic_build_retains_genus_evidence (test_compact_build.TestCompactBuild.test_compact_taxonomic_build_retains_genus_evidence)
+Compact taxonomy-aware build should classify shared k-mers by genus. ... ok
+test_merge_compact_groups_combines_species_metadata (test_compact_build.TestCompactBuild.test_merge_compact_groups_combines_species_metadata)
+Merging compact groups should preserve source species metadata. ... ok
+test_build_panel_cli_writes_profile_file (test_compact_build.TestCompactBuildCli.test_build_panel_cli_writes_profile_file)
+Build CLI should write profile timings when requested. ... 2026-05-31 19:17:55 WARNING [kmersutra] pyarrow is not available; keeping TSV.GZ screen panels only
+2026-05-31 19:17:55 WARNING [kmersutra] Skipping hierarchical module export because the final panel has no diagnostic records: /tmp/tmpp8wpa8cy/panel/species_kmer_panel.tsv.gz
+ok
+test_add_call_metadata_demotes_positive_expected_genus_neighbour (test_comparable_summary_neighbour_reporting.TestComparableSummaryNeighbourReporting.test_add_call_metadata_demotes_positive_expected_genus_neighbour)
+A same-genus non-target in a positive sample should not be off-target. ... ok
+test_negative_sample_does_not_demote_same_genus_signal (test_comparable_summary_neighbour_reporting.TestComparableSummaryNeighbourReporting.test_negative_sample_does_not_demote_same_genus_signal)
+Unexpected same-genus signal in a no-spike sample remains off-target. ... ok
+test_sample_summary_counts_neighbour_lineage_separately (test_comparable_summary_neighbour_reporting.TestComparableSummaryNeighbourReporting.test_sample_summary_counts_neighbour_lineage_separately)
+Sample summaries should include neighbour-lineage labels and counts. ... ok
+test_load_genome_config (test_config.TestConfig.test_load_genome_config)
+Genome config parser should retain required metadata. ... ok
+test_load_genome_config_accepts_downloaded_role_when_target_present (test_config.TestConfig.test_load_genome_config_accepts_downloaded_role_when_target_present)
+Genome config parser should accept generic downloaded non-target rows. ... ok
+test_load_genome_config_accepts_specialised_outgroup_roles (test_config.TestConfig.test_load_genome_config_accepts_specialised_outgroup_roles)
+Genome config parser should accept biologically useful outgroup roles. ... ok
+test_load_genome_config_rejects_invalid_role (test_config.TestConfig.test_load_genome_config_rejects_invalid_role)
+Genome config parser should reject unsupported roles. ... ok
+test_load_genome_config_rejects_missing_required_column (test_config.TestConfig.test_load_genome_config_rejects_missing_required_column)
+Genome config parser should reject missing required columns. ... ok
+test_load_genome_config_requires_target (test_config.TestConfig.test_load_genome_config_requires_target)
+Genome config parser should require at least one target species. ... ok
+test_load_genome_config_skips_excluded_records (test_config.TestConfig.test_load_genome_config_skips_excluded_records)
+Genome config parser should skip records with role exclude. ... ok
+test_panel_screen_summary_and_report_outputs (test_end_to_end.TestEndToEnd.test_panel_screen_summary_and_report_outputs)
+Workflow should produce valid TSV and HTML outputs. ... ok
+test_normalise_sequence_removes_whitespace_and_converts_u (test_fasta.TestFasta.test_normalise_sequence_removes_whitespace_and_converts_u)
+Normalisation should uppercase, remove whitespace and convert U. ... ok
+test_read_fasta_records_multiline (test_fasta.TestFasta.test_read_fasta_records_multiline)
+FASTA parser should join multi-line records. ... ok
+test_read_fastq_records (test_fasta.TestFasta.test_read_fastq_records)
+FASTQ parser should return identifiers and normalised sequences. ... ok
+test_hit_from_record_converts_types (test_features.TestFeatures.test_hit_from_record_converts_types)
+Convert a read-level TSV row into a typed KmerHit object. ... ok
+test_infer_numeric_feature_columns_excludes_labels (test_features.TestFeatures.test_infer_numeric_feature_columns_excludes_labels)
+Infer numeric feature columns while excluding metadata and labels. ... ok
+test_load_hits_as_features_from_gzip_tsv (test_features.TestFeatures.test_load_hits_as_features_from_gzip_tsv)
+Load gzipped read-level hits and write feature output. ... ok
+test_summarise_sequence_features_best_species (test_features.TestFeatures.test_summarise_sequence_features_best_species)
+Summarise one read and identify the strongest species support. ... ok
+test_summarise_sequence_features_unresolved_clade (test_features.TestFeatures.test_summarise_sequence_features_unresolved_clade)
+Mark clade-only evidence as unresolved at species level. ... ok
+test_candidate_audit_rejects_bad_batch_size (test_global_candidate_evidence.TestCandidateUniverseAudit.test_candidate_audit_rejects_bad_batch_size)
+Audit should reject non-positive batch sizes defensively. ... ok
+test_candidate_audit_reports_species_and_genus_downgrade (test_global_candidate_evidence.TestCandidateUniverseAudit.test_candidate_audit_reports_species_and_genus_downgrade)
+Audit should report globally validated and shared candidates. ... ok
+test_candidate_universe_rejects_bad_cross_k_distance (test_global_candidate_evidence.TestCandidateUniverseIndependentSampling.test_candidate_universe_rejects_bad_cross_k_distance)
+Negative cross-k marker distances should fail defensively. ... ok
+test_candidate_universe_uses_shifted_cross_k_sampling (test_global_candidate_evidence.TestCandidateUniverseIndependentSampling.test_candidate_universe_uses_shifted_cross_k_sampling)
+Candidate mode should avoid selecting every k from the same local region. ... ok
+test_candidate_universe_uses_global_bins_for_fragmented_small_assembly (test_global_candidate_evidence.TestGlobalCandidateAssemblyAwareSampling.test_candidate_universe_uses_global_bins_for_fragmented_small_assembly)
+Fragmented viral-like assemblies should not get one full bin set per contig. ... ok
+test_assignment_reuses_taxonomy_result_for_repeated_taxid_sets (test_global_candidate_evidence.TestGlobalCandidateEvidenceAssignmentOptimisation.test_assignment_reuses_taxonomy_result_for_repeated_taxid_sets)
+Repeated taxid sets should use the cached evidence assignment. ... ok
+test_global_builder_applies_evidence_limit (test_global_candidate_evidence.TestGlobalCandidateEvidenceBuild.test_global_builder_applies_evidence_limit)
+Per-evidence caps should be enforced during global assignment. ... ok
+test_global_builder_indexes_each_genome_once (test_global_candidate_evidence.TestGlobalCandidateEvidenceBuild.test_global_builder_indexes_each_genome_once)
+Global collection should make one collection record per genome. ... ok
+test_global_builder_retains_species_genus_and_outgroup_evidence (test_global_candidate_evidence.TestGlobalCandidateEvidenceBuild.test_global_builder_retains_species_genus_and_outgroup_evidence)
+Global mode should retain evidence for all reportable taxa. ... ok
+test_candidate_universe_rejects_bad_bin_settings (test_global_candidate_evidence.TestGlobalCandidateEvidenceCandidateUniverse.test_candidate_universe_rejects_bad_bin_settings)
+Candidate mode should reject invalid genome-spread parameters. ... ok
+test_candidate_universe_retains_species_and_genus_evidence (test_global_candidate_evidence.TestGlobalCandidateEvidenceCandidateUniverse.test_candidate_universe_retains_species_and_genus_evidence)
+Candidate mode should globally validate sampled k-mers. ... ok
+test_candidate_universe_samples_bounded_candidates (test_global_candidate_evidence.TestGlobalCandidateEvidenceCandidateUniverse.test_candidate_universe_samples_bounded_candidates)
+Candidate mode should sample far fewer rows than exhaustive source mode. ... ok
+test_global_builder_rejects_bad_source_index_mode (test_global_candidate_evidence.TestGlobalCandidateEvidenceSourceRows.test_global_builder_rejects_bad_source_index_mode)
+Invalid source-index mode values should fail clearly. ... ok
+test_source_row_and_aggregated_modes_retain_same_evidence (test_global_candidate_evidence.TestGlobalCandidateEvidenceSourceRows.test_source_row_and_aggregated_modes_retain_same_evidence)
+The faster source-row mode should preserve retained evidence calls. ... ok
+test_source_row_mode_materialises_global_kmers (test_global_candidate_evidence.TestGlobalCandidateEvidenceSourceRows.test_source_row_mode_materialises_global_kmers)
+Source-row mode should build source rows and aggregated keys. ... ok
+test_combined_gate_index_tracks_module_membership (test_hierarchical.TestHierarchicalScreening.test_combined_gate_index_tracks_module_membership)
+One combined gate index should still map hits back to modules. ... ok
+test_gate_summary_thresholds (test_hierarchical.TestHierarchicalScreening.test_gate_summary_thresholds)
+Gate summaries should pass only when all thresholds are met. ... ok
+test_hierarchical_fail_open_screens_weak_gate_modules (test_hierarchical.TestHierarchicalScreening.test_hierarchical_fail_open_screens_weak_gate_modules)
+Fail-open mode should screen modules with weak gate evidence. ... ok
+test_hierarchical_screen_activates_module_after_gate_hit (test_hierarchical.TestHierarchicalScreening.test_hierarchical_screen_activates_module_after_gate_hit)
+A passing gate should activate the detailed module panel. ... ok
+test_hierarchical_screen_skips_module_without_gate_hit (test_hierarchical.TestHierarchicalScreening.test_hierarchical_screen_skips_module_without_gate_hit)
+A module panel should not be screened when its gate is absent. ... ok
+test_load_module_manifest_resolves_modules (test_hierarchical.TestHierarchicalScreening.test_load_module_manifest_resolves_modules)
+The module manifest should resolve gate and module panels. ... ok
+test_merge_panel_indices_deduplicates_shared_records (test_hierarchical.TestHierarchicalScreening.test_merge_panel_indices_deduplicates_shared_records)
+Merged hierarchical indices should collapse duplicate diagnostics. ... ok
+test_parent_child_order_is_independent_of_manifest_order (test_hierarchical.TestHierarchicalScreening.test_parent_child_order_is_independent_of_manifest_order)
+Hierarchical screening should process parents before children. ... ok
+test_screen_cli_flat_mode_requires_panel (test_hierarchical.TestHierarchicalScreening.test_screen_cli_flat_mode_requires_panel)
+Flat mode should fail clearly without a panel. ... ok
+test_screen_cli_hierarchical_writes_activation_report (test_hierarchical.TestHierarchicalScreening.test_screen_cli_hierarchical_writes_activation_report)
+The CLI should write module activation records in hierarchical mode. ... ok
+test_two_pass_hierarchical_screens_input_only_twice (test_hierarchical.TestHierarchicalScreening.test_two_pass_hierarchical_screens_input_only_twice)
+Hierarchical mode should use one gate pass and one module pass. ... ok
+test_read_tsv_pads_missing_values (test_io.TestIo.test_read_tsv_pads_missing_values)
+TSV reader should pad missing trailing values with blanks. ... ok
+test_read_tsv_truncates_extra_values (test_io.TestIo.test_read_tsv_truncates_extra_values)
+TSV reader should ignore extra fields beyond the header. ... ok
+test_write_tsv_empty_records_with_fieldnames (test_io.TestIo.test_write_tsv_empty_records_with_fieldnames)
+TSV writer should allow header-only files when columns are known. ... ok
+test_write_tsv_gzip_output (test_io.TestIo.test_write_tsv_gzip_output)
+TSV writer should support gzip-compressed output. ... ok
+test_canonical_kmer (test_kmers.TestKmers.test_canonical_kmer)
+Canonical k-mer should be lexicographically minimal strand. ... ok
+test_hamming_distance (test_kmers.TestKmers.test_hamming_distance)
+Hamming distance should count mismatches. ... ok
+test_hamming_distance_rejects_unequal_lengths (test_kmers.TestKmers.test_hamming_distance_rejects_unequal_lengths)
+Hamming distance should require equal-length strings. ... ok
+test_is_valid_kmer (test_kmers.TestKmers.test_is_valid_kmer)
+K-mer validator should reject ambiguous and empty k-mers. ... ok
+test_iter_kmers_positions (test_kmers.TestKmers.test_iter_kmers_positions)
+K-mer iteration should preserve positions. ... ok
+test_iter_kmers_rejects_non_positive_k (test_kmers.TestKmers.test_iter_kmers_rejects_non_positive_k)
+K-mer iteration should reject non-positive k values. ... ok
+test_iter_kmers_skips_ambiguous (test_kmers.TestKmers.test_iter_kmers_skips_ambiguous)
+Ambiguous k-mers should be skipped by default. ... ok
+test_reverse_complement (test_kmers.TestKmers.test_reverse_complement)
+Reverse complement should be correct. ... ok
+test_background_candidate_scope_reports_background_lca (test_lca_reporting.TestLcaReporting.test_background_candidate_scope_reports_background_lca)
+Background-candidate scope should use only background rows. ... ok
+test_dominant_lca_avoids_weak_distant_background_collapse (test_lca_reporting.TestLcaReporting.test_dominant_lca_avoids_weak_distant_background_collapse)
+Dominant-lineage LCA should not collapse because of weak background. ... ok
+test_name_map_detects_conflicting_taxids (test_lca_reporting.TestLcaReporting.test_name_map_detects_conflicting_taxids)
+Name mapping should fail when one name has conflicting taxids. ... ok
+test_sample_without_supported_rows_is_retained (test_lca_reporting.TestLcaReporting.test_sample_without_supported_rows_is_retained)
+A sample with no supported rows should still be reported. ... ok
+test_table_lca_round_trip_with_taxdump_and_mapping (test_lca_reporting.TestLcaReporting.test_table_lca_round_trip_with_taxdump_and_mapping)
+LCA table writer should work with taxdump and name mapping inputs. ... ok
+test_neighbour_lineage_evidence_can_support_possible_novelty (test_lineage_interpretation.TestLineageAwareNeighbourEvidence.test_neighbour_lineage_evidence_can_support_possible_novelty)
+Strong genus evidence plus demoted neighbours should flag novelty. ... ok
+test_neighbour_lineage_evidence_is_not_reportable_species (test_lineage_interpretation.TestLineageAwareNeighbourEvidence.test_neighbour_lineage_evidence_is_not_reportable_species)
+Demoted neighbours should not count as reportable species. ... ok
+test_best_species_context_reports_margin_and_ratio (test_lineage_interpretation.TestLineageInterpretation.test_best_species_context_reports_margin_and_ratio)
+Lineage output should include best and second-best species context. ... ok
+test_family_level_evidence_can_be_reported_when_genus_absent (test_lineage_interpretation.TestLineageInterpretation.test_family_level_evidence_can_be_reported_when_genus_absent)
+Family-level evidence can support unresolved broader lineage calls. ... ok
+test_multiple_reportable_species_are_mixed_not_novel (test_lineage_interpretation.TestLineageInterpretation.test_multiple_reportable_species_are_mixed_not_novel)
+True mixed-species evidence should not be flagged as novel. ... ok
+test_no_evidence_reports_no_supported_signal (test_lineage_interpretation.TestLineageInterpretation.test_no_evidence_reports_no_supported_signal)
+Zero-evidence samples should report no supported signal. ... ok
+test_single_reportable_species_is_not_novel (test_lineage_interpretation.TestLineageInterpretation.test_single_reportable_species_is_not_novel)
+A confident species call should remain a species-level report. ... ok
+test_species_rank_taxonomic_evidence_is_not_used_for_unresolved_report (test_lineage_interpretation.TestLineageInterpretation.test_species_rank_taxonomic_evidence_is_not_used_for_unresolved_report)
+Weak species-level rows should not be promoted to unresolved reports. ... ok
+test_strong_genus_signal_with_weak_neighbours_flags_possible_novelty (test_lineage_interpretation.TestLineageInterpretation.test_strong_genus_signal_with_weak_neighbours_flags_possible_novelty)
+Strong genus signal plus weak species-neighbour evidence should flag novelty. ... ok
+test_strong_genus_signal_without_multiple_neighbours_is_unresolved (test_lineage_interpretation.TestLineageInterpretation.test_strong_genus_signal_without_multiple_neighbours_is_unresolved)
+Strong taxonomic evidence alone should be unresolved rather than novel. ... ok
+test_taxonomic_confidence_score_is_bounded (test_lineage_interpretation.TestLineageInterpretation.test_taxonomic_confidence_score_is_bounded)
+Taxonomic confidence scores should be bounded between zero and one. ... ok
+test_weak_neighbour_evidence_below_taxonomic_threshold_stays_weak (test_lineage_interpretation.TestLineageInterpretation.test_weak_neighbour_evidence_below_taxonomic_threshold_stays_weak)
+Weak species evidence should not become a novel-lineage call by itself. ... ok
+test_independent_mode_allows_distant_cross_k_regions (test_marker_selection.TestIndependentMultiKMarkerSelection.test_independent_mode_allows_distant_cross_k_regions)
+Different k values should be retained when they come from distant regions. ... ok
+test_independent_mode_is_default_strategy (test_marker_selection.TestIndependentMultiKMarkerSelection.test_independent_mode_is_default_strategy)
+The v0.31 default should use independent multi-k sampling. ... ok
+test_independent_mode_reduces_cross_k_same_region_selection (test_marker_selection.TestIndependentMultiKMarkerSelection.test_independent_mode_reduces_cross_k_same_region_selection)
+Nested cross-k markers from one region should be de-correlated. ... ok
+test_shifted_bins_differ_between_k_values (test_marker_selection.TestIndependentMultiKMarkerSelection.test_shifted_bins_differ_between_k_values)
+Different k values should use different bin phases by default. ... ok
+test_config_rejects_invalid_values (test_marker_selection.TestMarkerSelection.test_config_rejects_invalid_values)
+MarkerSelectionConfig should reject unsafe parameters. ... ok
+test_diagnostic_retention_key_groups_by_evidence_bucket (test_marker_selection.TestMarkerSelection.test_diagnostic_retention_key_groups_by_evidence_bucket)
+Species and genus evidence should have distinct retention buckets. ... ok
+test_first_semicolon_value_returns_first_non_empty_value (test_marker_selection.TestMarkerSelection.test_first_semicolon_value_returns_first_non_empty_value)
+The helper should parse semicolon-separated metadata. ... ok
+test_genome_bin_key_uses_position_bins (test_marker_selection.TestMarkerSelection.test_genome_bin_key_uses_position_bins)
+Genome bins should be based on source genome, contig and position. ... ok
+test_genome_spread_is_deterministic (test_marker_selection.TestMarkerSelection.test_genome_spread_is_deterministic)
+Repeated selection over the same markers should be reproducible. ... ok
+test_genome_spread_keeps_buckets_separate (test_marker_selection.TestMarkerSelection.test_genome_spread_keeps_buckets_separate)
+Caps should be applied independently to each evidence bucket. ... ok
+test_genome_spread_limits_dense_same_bin_markers (test_marker_selection.TestMarkerSelection.test_genome_spread_limits_dense_same_bin_markers)
+Selection should not retain many adjacent markers from one bin. ... ok
+test_genome_spread_selects_across_multiple_bins (test_marker_selection.TestMarkerSelection.test_genome_spread_selects_across_multiple_bins)
+Selection should retain markers from several genomic bins. ... ok
+test_large_bucket_respects_bucket_and_bin_limits (test_marker_selection.TestMarkerSelectionScalability.test_large_bucket_respects_bucket_and_bin_limits)
+Large buckets should be thinned without violating caps. ... ok
+test_calculate_global_scaling_outputs_nonzero_stds (test_ml.TestMachineLearning.test_calculate_global_scaling_outputs_nonzero_stds)
+Calculate scaling parameters with protected non-zero standard deviations. ... ok
+test_euclidean_distance_is_zero_for_identical_vectors (test_ml.TestMachineLearning.test_euclidean_distance_is_zero_for_identical_vectors)
+Return zero distance when feature vectors are identical. ... ok
+test_predict_known_like_record (test_ml.TestMachineLearning.test_predict_known_like_record)
+Predict a training-like record as the closest known species. ... ok
+test_predict_records_counts_multiple_rows (test_ml.TestMachineLearning.test_predict_records_counts_multiple_rows)
+Predict multiple feature rows in one call. ... ok
+test_predict_rejects_bad_novelty_scale (test_ml.TestMachineLearning.test_predict_rejects_bad_novelty_scale)
+Reject non-positive novelty scale values. ... ok
+test_predict_tsv_writes_predictions (test_ml.TestMachineLearning.test_predict_tsv_writes_predictions)
+Predict from a TSV feature table and write prediction output. ... ok
+test_predict_unknown_record (test_ml.TestMachineLearning.test_predict_unknown_record)
+Flag a distant record as unknown or unresolved. ... ok
+test_save_and_load_model_round_trip (test_ml.TestMachineLearning.test_save_and_load_model_round_trip)
+Save a trained model to JSON and load it back. ... ok
+test_standardise_record_centres_values (test_ml.TestMachineLearning.test_standardise_record_centres_values)
+Standardise a feature record using supplied means and standard deviations. ... ok
+test_train_classifier_rejects_missing_label (test_ml.TestMachineLearning.test_train_classifier_rejects_missing_label)
+Raise a useful error when the requested label column is absent. ... ok
+test_train_model_from_tsv_writes_model_and_summary (test_ml.TestMachineLearning.test_train_model_from_tsv_writes_model_and_summary)
+Train from TSV and write both model JSON and summary TSV. ... ok
+test_train_prototype_classifier_learns_labels (test_ml.TestMachineLearning.test_train_prototype_classifier_learns_labels)
+Train a prototype classifier and retain class counts. ... ok
+test_export_auto_falls_back_to_tsv_when_pyarrow_absent (test_module_export.TestAutomaticModuleExport.test_export_auto_falls_back_to_tsv_when_pyarrow_absent)
+Auto module export should remain usable without pyarrow. ... ok
+test_export_hierarchical_modules_writes_loadable_manifest (test_module_export.TestAutomaticModuleExport.test_export_hierarchical_modules_writes_loadable_manifest)
+Export should write gate/detail panels and a loadable manifest. ... ok
+test_export_rejects_bad_gate_thresholds (test_module_export.TestAutomaticModuleExport.test_export_rejects_bad_gate_thresholds)
+Invalid module export thresholds should fail before writing output. ... ok
+test_export_rejects_forced_parquet_without_pyarrow (test_module_export.TestAutomaticModuleExport.test_export_rejects_forced_parquet_without_pyarrow)
+Forced Parquet export should require the optional dependency. ... ok
+test_infer_genus_from_record_uses_taxonomic_context (test_module_export.TestAutomaticModuleExport.test_infer_genus_from_record_uses_taxonomic_context)
+Genus inference should use genus evidence before species labels. ... ok
+test_safe_module_id_normalises_labels (test_module_export.TestAutomaticModuleExport.test_safe_module_id_normalises_labels)
+Module identifiers should be stable and shell/path safe. ... ok
+test_build_taxon_plan_reads_quality_filters (test_ncbi_genomes.TestNcbiGenomeDownloader.test_build_taxon_plan_reads_quality_filters)
+Taxid plan files should parse per-taxon assembly quality filters. ... ok
+test_build_taxon_plan_reads_tsv (test_ncbi_genomes.TestNcbiGenomeDownloader.test_build_taxon_plan_reads_tsv)
+Taxid plan files should produce per-taxon download plans. ... ok
+test_filter_records_applies_length_and_n50_filters (test_ncbi_genomes.TestNcbiGenomeDownloader.test_filter_records_applies_length_and_n50_filters)
+Assembly filters should remove very small or fragmented records. ... ok
+test_filter_records_applies_max_total_length (test_ncbi_genomes.TestNcbiGenomeDownloader.test_filter_records_applies_max_total_length)
+Assembly filters should optionally exclude unexpectedly large records. ... ok
+test_ftp_url_to_file_url_uses_assembly_stem (test_ncbi_genomes.TestNcbiGenomeDownloader.test_ftp_url_to_file_url_uses_assembly_stem)
+Downloader should construct the expected NCBI assembly file URL. ... ok
+test_metadata_to_kmersutra_config_rows_keeps_downloaded_fastas (test_ncbi_genomes.TestNcbiGenomeDownloader.test_metadata_to_kmersutra_config_rows_keeps_downloaded_fastas)
+KmerSutra config rows should include records with usable genome FASTA paths. ... ok
+test_module_import_does_not_require_biopython_configuration (test_ncbi_genomes.TestNcbiGenomeDownloader.test_module_import_does_not_require_biopython_configuration)
+Importing the downloader helpers should not require live Entrez access. ... ok
+test_parse_optional_int_handles_empty_values (test_ncbi_genomes.TestNcbiGenomeDownloader.test_parse_optional_int_handles_empty_values)
+Optional integer parser should keep blank config fields as None. ... ok
+test_safe_name_removes_spaces_and_symbols (test_ncbi_genomes.TestNcbiGenomeDownloader.test_safe_name_removes_spaces_and_symbols)
+Filesystem labels should be safe and deterministic. ... ok
+test_select_best_per_species_uses_quality_order (test_ncbi_genomes.TestNcbiGenomeDownloader.test_select_best_per_species_uses_quality_order)
+Best-per-species selection should retain the highest-quality assembly. ... ok
+test_default_panel_cache_path_appends_suffix (test_panel_cache.TestPanelCache.test_default_panel_cache_path_appends_suffix)
+Default cache path should append .index.pkl to the panel path. ... ok
+test_load_panel_with_cache_creates_cache_when_requested (test_panel_cache.TestPanelCache.test_load_panel_with_cache_creates_cache_when_requested)
+Panel loader should create a cache when use_cache is requested. ... ok
+test_stale_cache_is_rejected (test_panel_cache.TestPanelCache.test_stale_cache_is_rejected)
+Panel cache should be rejected if the panel file changes. ... ok
+test_write_and_load_panel_index_cache (test_panel_cache.TestPanelCache.test_write_and_load_panel_index_cache)
+Panel cache should round-trip a plain diagnostic index. ... ok
+test_load_panel_records_adds_source_panel (test_panel_merge.TestPanelMerge.test_load_panel_records_adds_source_panel)
+Panel loading should record which source panel each row came from. ... ok
+test_merge_panel_files_writes_expected_outputs (test_panel_merge.TestPanelMerge.test_merge_panel_files_writes_expected_outputs)
+File-level merge should write master, removed, downgraded and summary files. ... ok
+test_merge_without_taxonomy_downgrades_same_clade_kmer (test_panel_merge.TestPanelMerge.test_merge_without_taxonomy_downgrades_same_clade_kmer)
+Label-only merge should downgrade shared same-clade k-mers. ... ok
+test_merge_without_taxonomy_keeps_single_species_kmer (test_panel_merge.TestPanelMerge.test_merge_without_taxonomy_keeps_single_species_kmer)
+Label-only merge should retain k-mers unique to one species. ... ok
+test_taxonomy_merge_downgrades_species_to_genus (test_panel_merge.TestPanelMerge.test_taxonomy_merge_downgrades_species_to_genus)
+Taxonomy-aware merge should assign shared species k-mers to genus. ... ok
+test_taxonomy_merge_removes_root_only_kmer (test_panel_merge.TestPanelMerge.test_taxonomy_merge_removes_root_only_kmer)
+Taxonomy-aware merge should remove k-mers with no useful evidence rank. ... ok
+test_validate_panel_file_writes_validation_tables (test_panel_merge.TestPanelMerge.test_validate_panel_file_writes_validation_tables)
+File-level validation should write summary, issue and level tables. ... ok
+test_validate_panel_records_detects_conflicting_duplicates (test_panel_merge.TestPanelMerge.test_validate_panel_records_detects_conflicting_duplicates)
+Validation should report duplicate k-mers with conflicting evidence. ... ok
+test_derive_panel_parquet_path_from_tsv_gz (test_panel_parquet.TestPanelParquetHelpers.test_derive_panel_parquet_path_from_tsv_gz)
+Default companion path should replace TSV suffixes cleanly. ... ok
+test_is_parquet_path_identifies_suffix (test_panel_parquet.TestPanelParquetHelpers.test_is_parquet_path_identifies_suffix)
+Parquet suffix detection should be explicit and case-insensitive. ... ok
+test_parquet_read_write_requires_optional_dependency_when_missing (test_panel_parquet.TestPanelParquetHelpers.test_parquet_read_write_requires_optional_dependency_when_missing)
+Parquet I/O should fail clearly when pyarrow is unavailable. ... ok
+test_select_screen_panel_path_prefers_existing_parquet_for_auto (test_panel_parquet.TestPanelParquetHelpers.test_select_screen_panel_path_prefers_existing_parquet_for_auto)
+Auto selection should use Parquet when the companion exists. ... ok
+test_select_screen_panel_path_rejects_missing_required_parquet (test_panel_parquet.TestPanelParquetHelpers.test_select_screen_panel_path_rejects_missing_required_parquet)
+A forced Parquet selection should fail when the file is absent. ... ok
+test_select_screen_panel_path_uses_tsv_without_parquet (test_panel_parquet.TestPanelParquetHelpers.test_select_screen_panel_path_uses_tsv_without_parquet)
+Auto selection should remain TSV-compatible when Parquet is absent. ... ok
+test_join_semicolon_is_sorted_and_unique (test_parquet_modules.TestParquetModuleHelpers.test_join_semicolon_is_sorted_and_unique)
+Semicolon joining should be deterministic. ... ok
+test_merge_global_kmer_record_group_rejects_mixed_keys (test_parquet_modules.TestParquetModuleHelpers.test_merge_global_kmer_record_group_rejects_mixed_keys)
+A record group should not silently merge different k-mers. ... ok
+test_merge_global_kmer_record_group_unions_source_metadata (test_parquet_modules.TestParquetModuleHelpers.test_merge_global_kmer_record_group_unions_source_metadata)
+Duplicate k-mer records should be merged by source metadata. ... ok
+test_merge_global_kmer_records_groups_duplicate_keys (test_parquet_modules.TestParquetModuleHelpers.test_merge_global_kmer_records_groups_duplicate_keys)
+In-memory merging should group by k and kmer. ... ok
+test_normalise_global_kmer_record_fills_schema (test_parquet_modules.TestParquetModuleHelpers.test_normalise_global_kmer_record_fills_schema)
+Global-kmer records should be normalised to the source schema. ... ok
+test_resolve_global_kmer_parquet_paths_checks_missing_files (test_parquet_modules.TestParquetModuleHelpers.test_resolve_global_kmer_parquet_paths_checks_missing_files)
+Missing module parquet files should fail loudly. ... ok
+test_resolve_global_kmer_parquet_paths_requires_input (test_parquet_modules.TestParquetModuleHelpers.test_resolve_global_kmer_parquet_paths_requires_input)
+Module path resolution should require at least one input. ... ok
+test_split_semicolon_removes_empty_values (test_parquet_modules.TestParquetModuleHelpers.test_split_semicolon_removes_empty_values)
+Semicolon splitting should trim values and remove blanks. ... ok
+test_upsert_global_kmer_record_merges_in_sqlite (test_parquet_modules.TestParquetModuleHelpers.test_upsert_global_kmer_record_merges_in_sqlite)
+SQLite upsert should merge duplicate module source metadata. ... ok
+test_export_table_without_pyarrow_gives_clear_error (test_parquet_modules.TestParquetOptionalDependency.test_export_table_without_pyarrow_gives_clear_error)
+Parquet export should fail clearly when pyarrow is unavailable. ... ok
+test_import_without_pyarrow_gives_clear_error (test_parquet_modules.TestParquetOptionalDependency.test_import_without_pyarrow_gives_clear_error)
+Parquet import should fail clearly when pyarrow is unavailable. ... ok
+test_require_pyarrow_returns_modules_or_clear_error (test_parquet_modules.TestParquetOptionalDependency.test_require_pyarrow_returns_modules_or_clear_error)
+The optional dependency helper should either import or explain. ... ok
+test_profiler_records_named_stage (test_profiling.TestProfiling.test_profiler_records_named_stage)
+Profiler should record stage name, elapsed seconds and detail. ... ok
+test_resource_monitor_rejects_bad_interval (test_resource_monitor.TestResourceMonitor.test_resource_monitor_rejects_bad_interval)
+ResourceMonitor should reject non-positive sampling intervals. ... ok
+test_resource_monitor_writes_header_and_rows (test_resource_monitor.TestResourceMonitor.test_resource_monitor_writes_header_and_rows)
+ResourceMonitor should write a parseable TSV file. ... ok
+test_rss_helpers_return_non_negative_integers (test_resource_monitor.TestResourceMonitor.test_rss_helpers_return_non_negative_integers)
+RSS helpers should return non-negative integer values. ... ok
+test_build_run_summary_reports_writes_html_and_xlsx (test_run_summary.TestRunSummary.test_build_run_summary_reports_writes_html_and_xlsx)
+Run summary builder should write formatted HTML and Excel outputs. ... ok
+test_build_species_long_summary (test_run_summary.TestRunSummary.test_build_species_long_summary)
+Wide summary should convert to one row per species and spike. ... ok
+test_find_species_labels (test_run_summary.TestRunSummary.test_find_species_labels)
+Wide summary parsing should find KmerSutra species columns. ... ok
+test_species_from_call_column (test_run_summary.TestRunSummary.test_species_from_call_column)
+Species label should be recovered from a wide call column name. ... ok
+test_summarise_by_spike (test_run_summary.TestRunSummary.test_summarise_by_spike)
+Spike summary should calculate present-call rate by spike level. ... ok
+test_summarise_call_counts (test_run_summary.TestRunSummary.test_summarise_call_counts)
+Call count summary should count labels by species. ... ok
+test_summary_tsv_roundtrip (test_run_summary.TestRunSummary.test_summary_tsv_roundtrip)
+Summary records should remain parseable after TSV roundtrip. ... ok
+test_screen_cli_can_consolidate_background_candidate_call (test_screen_cli_outputs.TestScreenCliConsolidationOutputs.test_screen_cli_can_consolidate_background_candidate_call)
+CLI should write raw and consolidated calls when consolidation is enabled. ... ok
+test_screen_cli_can_skip_read_level_hits (test_screen_cli_outputs.TestScreenCliConsolidationOutputs.test_screen_cli_can_skip_read_level_hits)
+CLI should skip large read-level hit output when requested. ... ok
+test_screen_cli_parquet_flag_warns_without_pyarrow (test_screen_cli_outputs.TestScreenCliConsolidationOutputs.test_screen_cli_parquet_flag_warns_without_pyarrow)
+Parquet output should not make screening fail without pyarrow. ... 2026-05-31 19:17:56 WARNING [kmersutra] Could not write Parquet output /tmp/tmp2ypvftbr/out/sample_taxonomic_kmer_evidence.parquet because pyarrow is unavailable: Parquet module storage requires the optional pyarrow dependency. Install KmerSutra with the parquet extra, for example: pip install '.[parquet]', or install pyarrow in the active environment.
+2026-05-31 19:17:56 WARNING [kmersutra] Could not write Parquet output /tmp/tmp2ypvftbr/out/species_detection_calls.parquet because pyarrow is unavailable: Parquet module storage requires the optional pyarrow dependency. Install KmerSutra with the parquet extra, for example: pip install '.[parquet]', or install pyarrow in the active environment.
+2026-05-31 19:17:56 WARNING [kmersutra] Could not write Parquet output /tmp/tmp2ypvftbr/out/sample_lineage_interpretation.parquet because pyarrow is unavailable: Parquet module storage requires the optional pyarrow dependency. Install KmerSutra with the parquet extra, for example: pip install '.[parquet]', or install pyarrow in the active environment.
+ok
+test_screen_cli_writes_profile_and_cache (test_screen_cli_outputs.TestScreenCliConsolidationOutputs.test_screen_cli_writes_profile_and_cache)
+CLI should write profile timings and a reusable panel cache. ... ok
+test_screen_cli_can_skip_read_level_hits (test_screen_cli_outputs.TestScreenCliOutputs.test_screen_cli_can_skip_read_level_hits)
+CLI should skip large read-level hit output when requested. ... ok
+test_screen_cli_writes_profile_and_cache (test_screen_cli_outputs.TestScreenCliOutputs.test_screen_cli_writes_profile_and_cache)
+CLI should write profile timings and a reusable panel cache. ... ok
+test_fast_exact_orientation_matches_reverse_complement_read (test_screen_reads.TestScreenReads.test_fast_exact_orientation_matches_reverse_complement_read)
+Fast exact screening should find reverse-complement panel matches. ... ok
+test_fast_exact_orientation_rejects_fuzzy_matching (test_screen_reads.TestScreenReads.test_fast_exact_orientation_rejects_fuzzy_matching)
+Orientation-aware exact mode should reject fuzzy matching. ... ok
+test_mismatch_neighbourhood_one_mismatch (test_screen_reads.TestScreenReads.test_mismatch_neighbourhood_one_mismatch)
+One-mismatch neighbourhood should generate expected substitutions. ... ok
+test_mismatch_neighbourhood_rejects_above_two (test_screen_reads.TestScreenReads.test_mismatch_neighbourhood_rejects_above_two)
+Mismatch neighbourhood should reject settings above two mismatches. ... ok
+test_orientation_aware_index_adds_reverse_complement_key (test_screen_reads.TestScreenReads.test_orientation_aware_index_adds_reverse_complement_key)
+Orientation-aware exact index should include reverse complements. ... ok
+test_parallel_screening_matches_single_worker (test_screen_reads.TestScreenReads.test_parallel_screening_matches_single_worker)
+Parallel screening should match single-worker screening. ... ok
+test_parallel_screening_rejects_bad_chunk_size (test_screen_reads.TestScreenReads.test_parallel_screening_rejects_bad_chunk_size)
+Parallel screening should reject non-positive chunk sizes. ... ok
+test_parallel_screening_rejects_bad_thread_count (test_screen_reads.TestScreenReads.test_parallel_screening_rejects_bad_thread_count)
+Parallel screening should reject non-positive thread counts. ... ok
+test_screen_sequence_exact_hit (test_screen_reads.TestScreenReads.test_screen_sequence_exact_hit)
+Screening should identify exact species-unique k-mer hits. ... ok
+test_screen_sequence_fuzzy_hit (test_screen_reads.TestScreenReads.test_screen_sequence_fuzzy_hit)
+Screening should optionally identify fuzzy long-k hits. ... ok
+test_screen_sequence_fuzzy_respects_min_k (test_screen_reads.TestScreenReads.test_screen_sequence_fuzzy_respects_min_k)
+Fuzzy matching should not run below the configured minimum k. ... ok
+test_screen_sequence_rejects_unsupported_mismatches (test_screen_reads.TestScreenReads.test_screen_sequence_rejects_unsupported_mismatches)
+Screening should reject fuzzy settings above two mismatches. ... ok
+test_streaming_parallel_screening_matches_single_worker (test_screen_reads.TestScreenReads.test_streaming_parallel_screening_matches_single_worker)
+Streaming scheduler should preserve hits when pending chunks are limited. ... ok
+test_streaming_parallel_screening_rejects_bad_pending_count (test_screen_reads.TestScreenReads.test_streaming_parallel_screening_rejects_bad_pending_count)
+Streaming scheduler should reject non-positive pending chunk limits. ... ok
+test_unambiguous_windows_skip_ambiguous_segments (test_screen_reads.TestScreenReads.test_unambiguous_windows_skip_ambiguous_segments)
+Fast exact windows should skip ambiguous bases without losing offsets. ... ok
+test_build_species_long_from_wide_extracts_shell_columns (test_spikein_summary_full.TestSpikeinSummaryWorkflow.test_build_species_long_from_wide_extracts_shell_columns)
+Wide shell summaries should become one row per species and sample. ... ok
+test_classify_call_state_groups_expected_calls (test_spikein_summary_full.TestSpikeinSummaryWorkflow.test_classify_call_state_groups_expected_calls)
+Call classifier should identify positive, ambiguous, and negative states. ... ok
+test_parse_expected_spike_levels (test_spikein_summary_full.TestSpikeinSummaryWorkflow.test_parse_expected_spike_levels)
+Expected spike levels should be parsed from space-separated text. ... ok
+test_run_summary_workflow_writes_tsv_excel_and_html (test_spikein_summary_full.TestSpikeinSummaryWorkflow.test_run_summary_workflow_writes_tsv_excel_and_html)
+Summary workflow should write combined TSV, Excel, and HTML outputs. ... ok
+test_complete_sample_species_evidence_adds_zero_rows (test_summarise_hits.TestSummariseHits.test_complete_sample_species_evidence_adds_zero_rows)
+Completed evidence should include not-observed expected species. ... ok
+test_load_panel_species_metadata (test_summarise_hits.TestSummariseHits.test_load_panel_species_metadata)
+Panel metadata loader should recover expected species labels. ... ok
+test_summarise_sample_species_evidence_collapses_k_values (test_summarise_hits.TestSummariseHits.test_summarise_sample_species_evidence_collapses_k_values)
+Species evidence should collapse k-specific rows into one record. ... ok
+test_summarise_species_hits_groups_by_species_and_k (test_summarise_hits.TestSummariseHits.test_summarise_species_hits_groups_by_species_and_k)
+Hit summary should aggregate hits by species, panel type and k. ... ok
+test_summarise_sample_taxonomic_evidence_collapses_k_values (test_summarise_hits.TestTaxonomicEvidenceSummaries.test_summarise_sample_taxonomic_evidence_collapses_k_values)
+Taxonomic evidence should collapse across k values. ... ok
+test_summarise_taxonomic_hits_keeps_genus_evidence (test_summarise_hits.TestTaxonomicEvidenceSummaries.test_summarise_taxonomic_hits_keeps_genus_evidence)
+Genus-level hits should be summarised without forcing species. ... ok
+test_infer_table_format_handles_supported_suffixes (test_table_io.TestGenericTableIo.test_infer_table_format_handles_supported_suffixes)
+Format inference should support TSV, TSV.GZ and Parquet paths. ... ok
+test_infer_table_format_rejects_unsupported_suffix (test_table_io.TestGenericTableIo.test_infer_table_format_rejects_unsupported_suffix)
+Unsupported table suffixes should fail clearly. ... ok
+test_parquet_missing_dependency_fails_clearly (test_table_io.TestGenericTableIo.test_parquet_missing_dependency_fails_clearly)
+Parquet output should request the optional dependency when unavailable. ... ok
+test_required_column_validation_reports_missing_columns (test_table_io.TestGenericTableIo.test_required_column_validation_reports_missing_columns)
+Required-column validation should identify missing fields. ... ok
+test_tsv_gz_round_trip_preserves_records (test_table_io.TestGenericTableIo.test_tsv_gz_round_trip_preserves_records)
+Compressed TSV output should round-trip through generic I/O. ... ok
+test_infer_fieldnames_preserves_first_seen_order (test_table_parquet.TestTableParquetHelpers.test_infer_fieldnames_preserves_first_seen_order)
+Fieldnames should be inferred in deterministic first-seen order. ... ok
+test_read_write_requires_pyarrow_when_missing (test_table_parquet.TestTableParquetHelpers.test_read_write_requires_pyarrow_when_missing)
+Parquet I/O should fail clearly without the optional dependency. ... ok
+test_records_to_string_columns_uses_explicit_fieldnames (test_table_parquet.TestTableParquetHelpers.test_records_to_string_columns_uses_explicit_fieldnames)
+Record conversion should preserve explicit output columns. ... ok
+test_sqlite_build_marks_non_target_overlap (test_target_evidence.TestTargetEvidenceBuild.test_sqlite_build_marks_non_target_overlap)
+Non-target genomes should mark matching target candidates only. ... ok
+test_sqlite_build_yields_species_and_genus_evidence (test_target_evidence.TestTargetEvidenceBuild.test_sqlite_build_yields_species_and_genus_evidence)
+Target-only and shared target-neighbour k-mers should be ranked. ... ok
+test_summarise_diagnostics_stream_applies_limit (test_target_evidence.TestTargetEvidenceBuild.test_summarise_diagnostics_stream_applies_limit)
+Diagnostic stream summarisation should enforce retention limits. ... ok
+test_best_named_ancestor_prefers_core_ranks (test_taxonomy.TestTaxonomy.test_best_named_ancestor_prefers_core_ranks)
+Best named ancestor should report a useful evidence rank. ... ok
+test_descendant_check (test_taxonomy.TestTaxonomy.test_descendant_check)
+Descendant checks should find taxids inside an ancestor lineage. ... ok
+test_ensure_taxdump_files_reports_missing_files (test_taxonomy.TestTaxonomy.test_ensure_taxdump_files_reports_missing_files)
+Missing taxdump files should raise a clear error. ... ok
+test_load_taxonomy_and_lineage (test_taxonomy.TestTaxonomy.test_load_taxonomy_and_lineage)
+Taxonomy parser should load names, ranks and lineages. ... ok
+test_lowest_common_ancestor (test_taxonomy.TestTaxonomy.test_lowest_common_ancestor)
+Lowest common ancestor should identify shared genus-level support. ... ok
+test_merged_and_deleted_taxids_are_handled (test_taxonomy.TestTaxonomy.test_merged_and_deleted_taxids_are_handled)
+Taxonomy parser should map merged taxids and reject deleted taxids. ... ok
+test_call_preset_returns_conservative_settings (test_thresholds.TestConservativeThresholds.test_call_preset_returns_conservative_settings)
+Conservative preset should require multi-k and long-k evidence. ... ok
+test_conservative_threshold_accepts_strong_multi_k_signal (test_thresholds.TestConservativeThresholds.test_conservative_threshold_accepts_strong_multi_k_signal)
+Strong exact evidence across long k values should pass. ... ok
+test_conservative_threshold_labels_weak_signal_below_threshold (test_thresholds.TestConservativeThresholds.test_conservative_threshold_labels_weak_signal_below_threshold)
+Weak off-target-like evidence should not become low-confidence presence. ... ok
+test_relative_margin_can_filter_second_best_neighbour (test_thresholds.TestConservativeThresholds.test_relative_margin_can_filter_second_best_neighbour)
+A required margin should prevent near-tied neighbour calls. ... ok
+test_co_dominant_species_remain_reportable_mixed_species (test_thresholds.TestLineageAwareMixedSpeciesPolicy.test_co_dominant_species_remain_reportable_mixed_species)
+Co-dominant passing species should still be called as a real mixture. ... ok
+test_lineage_aware_outputs_reportable_conflict_columns (test_thresholds.TestLineageAwareMixedSpeciesPolicy.test_lineage_aware_outputs_reportable_conflict_columns)
+Lineage-aware calls should expose raw and reportable conflict metrics. ... ok
+test_lineage_aware_preset_has_mixed_fraction (test_thresholds.TestLineageAwareMixedSpeciesPolicy.test_lineage_aware_preset_has_mixed_fraction)
+The lineage-aware preset should require co-dominance in mixtures. ... ok
+test_weak_neighbour_is_not_reportable_mixed_species (test_thresholds.TestLineageAwareMixedSpeciesPolicy.test_weak_neighbour_is_not_reportable_mixed_species)
+Weak passing neighbours should be retained but not over-reported. ... ok
+test_calculate_conflict_ratio (test_thresholds.TestThresholds.test_calculate_conflict_ratio)
+Conflict ratio should use target plus conflict evidence. ... ok
+test_calculate_conflict_ratio_handles_zero_total (test_thresholds.TestThresholds.test_calculate_conflict_ratio_handles_zero_total)
+Conflict ratio should be zero when no evidence is present. ... ok
+test_call_species_presence_can_disallow_mixed_samples (test_thresholds.TestThresholds.test_call_species_presence_can_disallow_mixed_samples)
+Mixed evidence can still be treated as conflicting when requested. ... ok
+test_call_species_presence_handles_empty_evidence (test_thresholds.TestThresholds.test_call_species_presence_handles_empty_evidence)
+Empty evidence should produce no calls. ... ok
+test_call_species_presence_high_confidence (test_thresholds.TestThresholds.test_call_species_presence_high_confidence)
+Sufficient clean evidence should call high-confidence presence. ... ok
+test_call_species_presence_identifies_true_mixed_samples (test_thresholds.TestThresholds.test_call_species_presence_identifies_true_mixed_samples)
+Multiple independently supported species should be mixed-present calls. ... ok
+test_call_species_presence_low_confidence (test_thresholds.TestThresholds.test_call_species_presence_low_confidence)
+Sub-threshold evidence should call low-confidence presence. ... ok
+test_call_species_presence_reports_not_detected (test_thresholds.TestThresholds.test_call_species_presence_reports_not_detected)
+Explicit zero-evidence rows should be called not detected. ... ok
+test_confidence_score_decreases_with_conflict (test_thresholds.TestThresholds.test_confidence_score_decreases_with_conflict)
+Confidence score should decrease when conflict ratio increases. ... ok
+test_confidence_score_is_bounded (test_thresholds.TestThresholds.test_confidence_score_is_bounded)
+Confidence score should be bounded between zero and one. ... ok
+
+----------------------------------------------------------------------
+Ran 286 tests in 11.590s
+
+OK
