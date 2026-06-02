@@ -1038,6 +1038,7 @@ def collect_candidate_universe_sqlite(
     assembly_fragmented_n50_multiplier: float = 2.0,
     assembly_fragmented_max_global_bins: int = 1000,
     progress_interval: int = 1000000,
+    skip_lowercase_regions: bool = False,
     logger: logging.Logger | None = None,
 ) -> list[dict[str, object]]:
     """Collect a bounded genome-spread candidate k-mer universe.
@@ -1185,7 +1186,10 @@ def collect_candidate_universe_sqlite(
                         assembly_bin_plan.estimated_global_bins,
                         assembly_bin_plan.reason,
                     )
-            for record in read_fasta_records(fasta_path=config.genome_fasta):
+            for record in read_fasta_records(
+                fasta_path=config.genome_fasta,
+                mask_lowercase=skip_lowercase_regions,
+            ):
                 record_offset = contig_offsets.get(record.identifier, 0)
                 for k in ordered_k_values:
                     for position, kmer in iter_kmers(sequence=record.sequence, k=k):
@@ -1326,6 +1330,7 @@ def annotate_candidate_universe_sources_sqlite(
     sqlite_path: str | Path,
     batch_size: int = 50000,
     progress_interval: int = 1000000,
+    skip_lowercase_regions: bool = False,
     logger: logging.Logger | None = None,
 ) -> list[dict[str, object]]:
     """Annotate candidate-universe k-mers against all source genomes.
@@ -1394,7 +1399,10 @@ def annotate_candidate_universe_sources_sqlite(
             last_logged_at = 0
             last_logged_matched = -1
             source_buffer: list[tuple[object, ...]] = []
-            for record in read_fasta_records(fasta_path=config.genome_fasta):
+            for record in read_fasta_records(
+                fasta_path=config.genome_fasta,
+                mask_lowercase=skip_lowercase_regions,
+            ):
                 for k in k_values:
                     candidate_set = candidates_by_k.get(int(k))
                     if not candidate_set:
@@ -1496,6 +1504,7 @@ def collect_global_kmer_sources_sqlite(
     assembly_fragmented_contig_count: int = 500,
     assembly_fragmented_n50_multiplier: float = 2.0,
     assembly_fragmented_max_global_bins: int = 1000,
+    skip_lowercase_regions: bool = False,
     logger: logging.Logger | None = None,
 ) -> list[dict[str, object]]:
     """Collect source metadata for all genomes in one global SQLite index.
@@ -1552,6 +1561,7 @@ def collect_global_kmer_sources_sqlite(
             assembly_fragmented_n50_multiplier=assembly_fragmented_n50_multiplier,
             assembly_fragmented_max_global_bins=assembly_fragmented_max_global_bins,
             progress_interval=progress_interval,
+            skip_lowercase_regions=skip_lowercase_regions,
             logger=logger,
         )
         summaries.extend(
@@ -1561,6 +1571,7 @@ def collect_global_kmer_sources_sqlite(
                 sqlite_path=sqlite_path,
                 batch_size=batch_size,
                 progress_interval=progress_interval,
+                skip_lowercase_regions=skip_lowercase_regions,
                 logger=logger,
             )
         )
@@ -1602,7 +1613,10 @@ def collect_global_kmer_sources_sqlite(
             committed_at = 0
             last_logged_at = 0
             buffer: list[tuple[object, ...]] = []
-            for record in read_fasta_records(fasta_path=config.genome_fasta):
+            for record in read_fasta_records(
+                fasta_path=config.genome_fasta,
+                mask_lowercase=skip_lowercase_regions,
+            ):
                 for k in k_values:
                     for position, kmer in iter_kmers(sequence=record.sequence, k=k):
                         if source_index_mode == "source_rows":
@@ -2672,6 +2686,7 @@ def build_global_candidate_evidence_sqlite(
     assembly_fragmented_contig_count: int = 500,
     assembly_fragmented_n50_multiplier: float = 2.0,
     assembly_fragmented_max_global_bins: int = 1000,
+    skip_lowercase_regions: bool = False,
     logger: logging.Logger | None = None,
 ) -> GlobalCandidateEvidenceBuildResult:
     """Build a global query-agnostic evidence database.
@@ -2758,6 +2773,7 @@ def build_global_candidate_evidence_sqlite(
         assembly_fragmented_contig_count=assembly_fragmented_contig_count,
         assembly_fragmented_n50_multiplier=assembly_fragmented_n50_multiplier,
         assembly_fragmented_max_global_bins=assembly_fragmented_max_global_bins,
+        skip_lowercase_regions=skip_lowercase_regions,
         logger=logger,
     )
     assignment_summary = assign_global_candidate_evidence_sqlite(

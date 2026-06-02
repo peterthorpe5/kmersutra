@@ -180,6 +180,16 @@ def parse_args() -> argparse.Namespace:
         help="Approximate maximum cumulative bins targeted for fragmented assemblies.",
     )
     parser.add_argument(
+        "--skip_lowercase_regions",
+        action="store_true",
+        help=(
+            "Skip k-mers that overlap lowercase repeat-masked FASTA bases. "
+            "This is disabled by default because not all assemblies use "
+            "lowercase consistently, but it can reduce repetitive-marker "
+            "burden in very large repeat-masked genomes."
+        ),
+    )
+    parser.add_argument(
         "--write_module_parquet",
         action="store_true",
         help=(
@@ -684,6 +694,7 @@ def main() -> None:
     logger.info("Max per genome bin: %d", args.max_per_genome_bin)
     logger.info("Minimum cross-k marker distance: %d", args.min_cross_k_marker_distance)
     logger.info("Assembly-aware candidate binning: %s", args.assembly_aware_binning)
+    logger.info("Skip lowercase repeat-masked regions: %s", args.skip_lowercase_regions)
     logger.info("Small assembly length threshold: %d", args.assembly_small_length)
     logger.info("Small assembly minimum bin size: %d", args.assembly_small_min_bin_size)
     logger.info("Small assembly target bins: %d", args.assembly_small_target_bins)
@@ -811,6 +822,7 @@ def main() -> None:
                     assembly_fragmented_contig_count=args.assembly_fragmented_contig_count,
                     assembly_fragmented_n50_multiplier=args.assembly_fragmented_n50_multiplier,
                     assembly_fragmented_max_global_bins=args.assembly_fragmented_max_global_bins,
+                    skip_lowercase_regions=args.skip_lowercase_regions,
                     logger=logger,
                 )
             with profiler.time_stage(stage="write_panel", detail=str(panel_path)):
@@ -1058,6 +1070,7 @@ def main() -> None:
                     target_taxid=args.target_taxid,
                     preferred_ranks=args.evidence_ranks,
                     compact_build=args.compact_build,
+                    skip_lowercase_regions=args.skip_lowercase_regions,
                     logger=logger,
                 )
             logger.info("Retained %d diagnostic k-mers", len(diagnostic_kmers))
@@ -1150,6 +1163,7 @@ def main() -> None:
                 "max_per_genome_bin": args.max_per_genome_bin,
                 "min_cross_k_marker_distance": args.min_cross_k_marker_distance,
                 "assembly_aware_binning": args.assembly_aware_binning,
+                "skip_lowercase_regions": args.skip_lowercase_regions,
                 "assembly_small_length": args.assembly_small_length,
                 "assembly_small_min_bin_size": args.assembly_small_min_bin_size,
                 "assembly_small_target_bins": args.assembly_small_target_bins,

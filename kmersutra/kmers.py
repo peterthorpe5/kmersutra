@@ -65,6 +65,7 @@ def iter_kmers(
     k: int,
     canonical: bool = True,
     skip_ambiguous: bool = True,
+    skip_lowercase: bool = False,
 ) -> Iterator[tuple[int, str]]:
     """Yield k-mers from a sequence.
 
@@ -78,6 +79,9 @@ def iter_kmers(
         If true, return canonical k-mers.
     skip_ambiguous : bool, optional
         If true, skip k-mers containing non-ACGT bases.
+    skip_lowercase : bool, optional
+        If true, skip k-mers containing lowercase bases. This is useful for
+        repeat-masked FASTA files when case has been preserved.
 
     Yields
     ------
@@ -89,7 +93,10 @@ def iter_kmers(
     if len(sequence) < k:
         return
     for start in range(0, len(sequence) - k + 1):
-        kmer = sequence[start : start + k]
+        raw_kmer = sequence[start : start + k]
+        if skip_lowercase and any(base.islower() for base in raw_kmer):
+            continue
+        kmer = raw_kmer.upper().replace("U", "T")
         if skip_ambiguous and not is_valid_kmer(kmer):
             continue
         yield start, canonical_kmer(kmer) if canonical else kmer

@@ -31,6 +31,18 @@ class TestKmers(unittest.TestCase):
         observed = list(iter_kmers(sequence="AACCG", k=3, canonical=False))
         self.assertEqual(observed, [(0, "AAC"), (1, "ACC"), (2, "CCG")])
 
+    def test_iter_kmers_can_skip_lowercase_masked_regions(self) -> None:
+        """Lowercase repeat-masked windows should be optional to skip."""
+        observed = list(
+            iter_kmers(
+                sequence="AACccGTT",
+                k=3,
+                canonical=False,
+                skip_lowercase=True,
+            )
+        )
+        self.assertEqual(observed, [(0, "AAC"), (5, "GTT")])
+
     def test_iter_kmers_rejects_non_positive_k(self) -> None:
         """K-mer iteration should reject non-positive k values."""
         with self.assertRaises(ValueError):

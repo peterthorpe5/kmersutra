@@ -232,6 +232,7 @@ class CompactKmerGroup:
 def _collect_for_genome(
     genome_config: GenomeConfig,
     k_values: tuple[int, ...],
+    skip_lowercase_regions: bool = False,
 ) -> tuple[list[KmerObservation], dict[str, object]]:
     """Collect k-mer observations for one genome.
 
@@ -241,6 +242,9 @@ def _collect_for_genome(
         Genome metadata record.
     k_values : tuple[int, ...]
         K-mer lengths to collect.
+    skip_lowercase_regions : bool, optional
+        If true, lowercase repeat-masked FASTA bases are converted to N and
+        k-mers overlapping those regions are skipped.
 
     Returns
     -------
@@ -252,7 +256,10 @@ def _collect_for_genome(
     total_bases = 0
     per_k_counts = {k: 0 for k in k_values}
 
-    for fasta_record in read_fasta_records(fasta_path=genome_config.genome_fasta):
+    for fasta_record in read_fasta_records(
+        fasta_path=genome_config.genome_fasta,
+        mask_lowercase=skip_lowercase_regions,
+    ):
         contigs += 1
         total_bases += len(fasta_record.sequence)
         for k in k_values:
@@ -294,6 +301,7 @@ def collect_kmer_observations(
     genome_configs: Iterable[GenomeConfig],
     k_values: Iterable[int],
     threads: int = 1,
+    skip_lowercase_regions: bool = False,
     logger: logging.Logger | None = None,
 ) -> tuple[list[KmerObservation], list[dict[str, object]]]:
     """Collect reference k-mer observations from configured genomes.
@@ -306,6 +314,8 @@ def collect_kmer_observations(
         K-mer lengths to process.
     threads : int, optional
         Number of worker processes for per-genome collection.
+    skip_lowercase_regions : bool, optional
+        If true, skip k-mers that overlap lowercase repeat-masked FASTA bases.
     logger : logging.Logger | None, optional
         Logger for progress messages.
 
@@ -341,7 +351,11 @@ def collect_kmer_observations(
                     genome_config.species_name,
                     genome_config.taxid or "NA",
                 )
-            genome_observations, summary = _collect_for_genome(genome_config, k_tuple)
+            genome_observations, summary = _collect_for_genome(
+                    genome_config,
+                    k_tuple,
+                    skip_lowercase_regions=skip_lowercase_regions,
+                )
             observations.extend(genome_observations)
             summaries.append(summary)
             if logger:
@@ -355,7 +369,12 @@ def collect_kmer_observations(
     max_workers = min(threads, len(configs))
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_config = {
-            executor.submit(_collect_for_genome, genome_config, k_tuple): genome_config
+            executor.submit(
+                _collect_for_genome,
+                genome_config,
+                k_tuple,
+                skip_lowercase_regions,
+            ): genome_config
             for genome_config in configs
         }
         for future in as_completed(future_to_config):
@@ -402,6 +421,7 @@ def _add_to_compact_groups(
 def _collect_compact_for_genome(
     genome_config: GenomeConfig,
     k_values: tuple[int, ...],
+    skip_lowercase_regions: bool = False,
 ) -> tuple[dict[tuple[int, str], CompactKmerGroup], dict[str, object]]:
     """Collect compact k-mer groups for one genome.
 
@@ -422,7 +442,10 @@ def _collect_compact_for_genome(
     total_bases = 0
     per_k_counts = {k: 0 for k in k_values}
 
-    for fasta_record in read_fasta_records(fasta_path=genome_config.genome_fasta):
+    for fasta_record in read_fasta_records(
+        fasta_path=genome_config.genome_fasta,
+        mask_lowercase=skip_lowercase_regions,
+    ):
         contigs += 1
         total_bases += len(fasta_record.sequence)
         for k in k_values:
@@ -497,6 +520,7 @@ def collect_compact_kmer_groups(
     genome_configs: Iterable[GenomeConfig],
     k_values: Iterable[int],
     threads: int = 1,
+    skip_lowercase_regions: bool = False,
     logger: logging.Logger | None = None,
 ) -> tuple[dict[tuple[int, str], CompactKmerGroup], list[dict[str, object]]]:
     """Collect compact reference k-mer groups from configured genomes.
@@ -547,7 +571,11 @@ def collect_compact_kmer_groups(
                     genome_config.species_name,
                     genome_config.taxid or "NA",
                 )
-            genome_groups, summary = _collect_compact_for_genome(genome_config, k_tuple)
+            genome_groups, summary = _collect_compact_for_genome(
+                    genome_config,
+                    k_tuple,
+                    skip_lowercase_regions=skip_lowercase_regions,
+                )
             merge_compact_kmer_groups(left=compact_groups, right=genome_groups)
             summaries.append(summary)
             if logger:
@@ -561,7 +589,12 @@ def collect_compact_kmer_groups(
     max_workers = min(threads, len(configs))
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_config = {
-            executor.submit(_collect_compact_for_genome, genome_config, k_tuple): genome_config
+            executor.submit(
+                _collect_compact_for_genome,
+                genome_config,
+                k_tuple,
+                skip_lowercase_regions,
+            ): genome_config
             for genome_config in configs
         }
         for future in as_completed(future_to_config):
@@ -1158,6 +1191,7 @@ def build_panel(
     target_taxid: str = "",
     preferred_ranks: list[str] | None = None,
     compact_build: bool = False,
+    skip_lowercase_regions: bool = False,
     logger: logging.Logger | None = None,
 ) -> tuple[list[DiagnosticKmer], list[dict[str, object]], list[dict[str, object]]]:
     """Build diagnostic k-mer panels.
@@ -1183,6 +1217,8 @@ def build_panel(
     compact_build : bool, optional
         If true, use the scalable compact grouping builder. This avoids storing
         every k-mer occurrence in memory and is recommended for larger panels.
+    skip_lowercase_regions : bool, optional
+        If true, skip k-mers overlapping lowercase repeat-masked bases.
     logger : logging.Logger | None, optional
         Logger for progress messages.
 
@@ -1196,6 +1232,7 @@ def build_panel(
             genome_configs=genome_configs,
             k_values=k_values,
             threads=threads,
+            skip_lowercase_regions=skip_lowercase_regions,
             logger=logger,
         )
         if logger:
@@ -1229,6 +1266,7 @@ def build_panel(
             genome_configs=genome_configs,
             k_values=k_values,
             threads=threads,
+            skip_lowercase_regions=skip_lowercase_regions,
             logger=logger,
         )
         if logger:

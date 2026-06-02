@@ -1,0 +1,105 @@
+KmerSutra v0.37.0 release notes
+=================================
+
+Purpose
+-------
+This release patches the NCBI genome downloader and adds defensive options
+needed for the first public Zymo D6300 ONT/Q20 benchmark preparation. It is a
+robustness/auditability release rather than a change to the core taxonomic
+fingerprint evidence model.
+
+Main changes
+------------
+1. Robust Entrez retry/backoff
+   - Entrez request-and-read operations now retry the whole operation, not only
+     handle creation.
+   - This specifically covers truncated chunked responses such as
+     http.client.IncompleteRead raised while Bio.Entrez.read() parses assembly
+     summary XML.
+   - Transient HTTPError, URLError, TimeoutError, OSError, IncompleteRead,
+     ExpatError and ValueError failures are retried.
+   - Error messages include useful context such as taxid, query, retstart,
+     retmax, batch range and attempt count.
+   - --batch_size, --retries, --sleep_seconds and
+     --max_entrez_records_per_taxid are available as defensive controls.
+
+2. HTTPS normalisation of NCBI FTP paths
+   - Original NCBI metadata fields are retained as ftp_path_refseq and
+     ftp_path_genbank.
+   - Actual download URLs are normalised from ftp://ftp.ncbi.nlm.nih.gov/... to
+     https://ftp.ncbi.nlm.nih.gov/...
+   - This avoids failures on clusters where direct FTP is blocked or unreliable.
+
+3. Case-insensitive assembly-level filtering
+   - Assembly-level comparisons now normalise case and whitespace.
+   - Values such as Complete Genome, complete genome, Chromosome, chromosome,
+     Scaffold and scaffold are treated consistently.
+   - The --assembly_levels argument no longer relies on argparse choices that
+     reject differently cased NCBI values.
+
+4. Candidate assembly audit table
+   - The downloader now writes ncbi_assembly_candidate_audit.tsv.
+   - This table is written even when zero assemblies are retained.
+   - Rows include query/taxid, accession, organism/species labels, assembly
+     level, source FTP paths, selected source, selected path, normalised HTTPS
+     download URL, quality metrics, filter_status and filter_reason.
+   - Filter reasons include retained, excluded_by_assembly_level,
+     excluded_missing_download_path, excluded_by_assembly_quality,
+     excluded_by_best_per_species, excluded_by_max_assemblies and
+     download_failed.
+   - Per-taxid filter reason counts are logged and summarised in
+     query_summary.tsv.
+
+5. Custom genome-config support
+   - --custom_genome_config can append local/user-supplied genomes without
+     querying Entrez.
+   - The custom config must be tab-separated and use the normal KmerSutra
+     genome_config columns.
+   - By default custom FASTA files must exist and be non-empty; this can be
+     bypassed for dry-run/planning with --allow_missing_custom_fastas.
+
+6. Optional lowercase/repeat-masked k-mer skipping
+   - The package now supports skipping lowercase/repeat-masked sequence regions
+     during panel building via --skip_lowercase_regions.
+   - This is not the default, because for microbial assemblies lowercase may not
+     always mean low-confidence sequence.
+   - It is useful for very large repeat-masked genomes such as plant or other
+     eukaryotic assemblies when users deliberately want to avoid masked regions.
+
+Testing
+-------
+The unittest suite was run with:
+
+    python -m unittest discover -s tests -v
+
+Result:
+
+    Ran 308 tests in 14.910s
+    OK
+
+No nose2 tests were run.
+
+Immediate recommended command pattern for the Zymo D6300 panel
+-------------------------------------------------------------
+Use a narrow, strain-aware taxid plan wherever possible, with defensive Entrez
+settings and metadata/audit output retained:
+
+    kmersutra-download-genomes \
+      --taxid_plan kmersutra_zymo_d6300_neighbour_taxid_plan.tsv \
+      --out_dir ncbi_genomes_zymo_d6300_v037 \
+      --email YOUR_EMAIL \
+      --source prefer_refseq \
+      --assembly_levels "complete genome" chromosome scaffold \
+      --best_per_species 1 \
+      --batch_size 100 \
+      --retries 8 \
+      --sleep_seconds 1.0 \
+      --metadata_only \
+      --verbose
+
+Inspect first:
+
+    column -t -s $'\t' ncbi_genomes_zymo_d6300_v037/query_summary.tsv | less -S
+    column -t -s $'\t' ncbi_genomes_zymo_d6300_v037/ncbi_assembly_candidate_audit.tsv | less -S
+
+Then rerun without --metadata_only once the retained candidates look correct.

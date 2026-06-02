@@ -28,29 +28,50 @@ class SequenceRecord:
     sequence: str
 
 
-def normalise_sequence(sequence: str) -> str:
+def normalise_sequence(sequence: str, mask_lowercase: bool = False) -> str:
     """Normalise a nucleotide sequence for k-mer processing.
 
     Parameters
     ----------
     sequence : str
         Input nucleotide sequence.
+    mask_lowercase : bool, optional
+        If true, lowercase ``a/c/g/t/u`` bases are converted to ``N`` before
+        uppercasing. This allows repeat-masked FASTA regions to be excluded
+        by the usual ambiguous-base k-mer filter without changing default
+        behaviour.
 
     Returns
     -------
     str
         Uppercase sequence with whitespace removed and U converted to T.
     """
-    return "".join(sequence.upper().replace("U", "T").split())
+    normalised: list[str] = []
+    for character in sequence:
+        if character.isspace():
+            continue
+        if mask_lowercase and character in {"a", "c", "g", "t", "u"}:
+            normalised.append("N")
+            continue
+        base = character.upper()
+        normalised.append("T" if base == "U" else base)
+    return "".join(normalised)
 
 
-def read_fasta_records(*, fasta_path: str | Path) -> Iterator[SequenceRecord]:
+def read_fasta_records(
+    *,
+    fasta_path: str | Path,
+    mask_lowercase: bool = False,
+) -> Iterator[SequenceRecord]:
     """Yield records from a FASTA or FASTA.GZ file.
 
     Parameters
     ----------
     fasta_path : str or pathlib.Path
         Path to the FASTA file.
+    mask_lowercase : bool, optional
+        If true, lowercase repeat-masked bases are converted to ``N`` before
+        sequence records are yielded.
 
     Yields
     ------
@@ -71,7 +92,10 @@ def read_fasta_records(*, fasta_path: str | Path) -> Iterator[SequenceRecord]:
                     yield SequenceRecord(
                         identifier=identifier,
                         description=header,
-                        sequence=normalise_sequence("".join(sequence_parts)),
+                        sequence=normalise_sequence(
+                            "".join(sequence_parts),
+                            mask_lowercase=mask_lowercase,
+                        ),
                     )
                 header = line[1:].strip()
                 sequence_parts = []
@@ -83,7 +107,10 @@ def read_fasta_records(*, fasta_path: str | Path) -> Iterator[SequenceRecord]:
         yield SequenceRecord(
             identifier=identifier,
             description=header,
-            sequence=normalise_sequence("".join(sequence_parts)),
+            sequence=normalise_sequence(
+                            "".join(sequence_parts),
+                            mask_lowercase=mask_lowercase,
+                        ),
         )
 
 

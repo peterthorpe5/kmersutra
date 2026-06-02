@@ -15,12 +15,14 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import http.client
 import json
 import logging
 import re
 import shutil
 import sys
 import time
+from xml.parsers.expat import ExpatError
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -48,6 +50,30 @@ FORMAT_SUFFIXES = {
     "assembly_report": "assembly_report.txt",
     "assembly_stats": "assembly_stats.txt",
 }
+
+TRANSIENT_ENTREZ_ERRORS = (
+    HTTPError,
+    URLError,
+    TimeoutError,
+    OSError,
+    http.client.IncompleteRead,
+    ExpatError,
+    ValueError,
+)
+
+KMERSUTRA_CONFIG_HEADER = [
+    "genome_fasta",
+    "species_name",
+    "strain_name",
+    "taxid",
+    "role",
+    "clade",
+    "assembly_accession",
+    "query_taxid",
+    "assembly_level",
+    "scaffold_n50",
+    "contig_n50",
+]
 
 
 @dataclass(frozen=True)
@@ -118,14 +144,34 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--custom_genome_config",
+        default=None,
+        help=(
+            "Optional user-supplied KmerSutra genome_config TSV to append to "
+            "downloaded NCBI assemblies. This allows local/custom genomes to be "
+            "included without going through Entrez."
+        ),
+    )
+    parser.add_argument(
+        "--allow_missing_custom_fastas",
+        action="store_true",
+        help=(
+            "Allow custom genome-config rows whose genome_fasta paths are missing "
+            "or empty. By default these are rejected defensively."
+        ),
+    )
+    parser.add_argument(
         "--out_dir",
         required=True,
         help="Output directory for organised genome downloads and metadata.",
     )
     parser.add_argument(
         "--email",
-        required=True,
-        help="Email address supplied to NCBI Entrez.",
+        default=None,
+        help=(
+            "Email address supplied to NCBI Entrez. Required when downloading "
+            "from NCBI, but not needed when only normalising a custom genome config."
+        ),
     )
     parser.add_argument(
         "--api_key",
@@ -149,8 +195,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--assembly_levels",
         nargs="+",
         default=None,
-        choices=("complete genome", "chromosome", "scaffold", "contig"),
-        help="Optional assembly-level filter. If omitted, all levels are kept.",
+        help=(
+            "Optional assembly-level filter. Matching is case-insensitive "
+            "and whitespace-normalised, e.g. 'complete genome', "
+            "'Complete Genome', 'chromosome' or 'Scaffold'. If omitted, "
+            "all levels are kept."
+        ),
     )
     parser.add_argument(
         "--min_total_length",
@@ -255,8 +305,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=500,
-        help="Number of assembly records retrieved per Entrez summary batch.",
+        default=200,
+        help=(
+            "Number of assembly records retrieved per Entrez summary batch. "
+            "Default: 200, chosen to reduce truncated chunked Entrez responses."
+        ),
+    )
+    parser.add_argument(
+        "--max_entrez_records_per_taxid",
+        type=int,
+        default=None,
+        help=(
+            "Optional cap on assembly UIDs fetched from Entrez for each queried "
+            "taxid before summary retrieval. This is a safety valve for very broad "
+            "taxa that return many thousands of assemblies."
+        ),
     )
     parser.add_argument(
         "--log_file",
@@ -278,7 +341,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def configure_logging(log_file: Path, verbose: bool = False) -> None:
     """Configure console and file logging."""
-    LOGGER.handlers.clear()
+    for handler in list(LOGGER.handlers):
+        LOGGER.removeHandler(handler)
+        handler.close()
     LOGGER.setLevel(logging.DEBUG)
     log_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -398,8 +463,11 @@ def build_taxon_plan(args: argparse.Namespace) -> list[TaxonPlan]:
                     min_contig_n50=args.min_contig_n50,
                 )
             )
-    if not plans:
-        raise ValueError("At least one taxid must be supplied via --taxids or --taxid_plan")
+    if not plans and not getattr(args, "custom_genome_config", None):
+        raise ValueError(
+            "At least one taxid must be supplied via --taxids/--taxid_plan "
+            "or provide --custom_genome_config"
+        )
     return plans
 
 
@@ -408,6 +476,70 @@ def parse_optional_int(value: Any) -> int | None:
     if value in (None, ""):
         return None
     return parse_int(value, default=0)
+
+
+def normalise_assembly_level(value: Any) -> str:
+    """Return a case-insensitive normal form for an NCBI assembly level.
+
+    Parameters
+    ----------
+    value : object
+        Raw assembly level from NCBI, such as ``Complete Genome`` or
+        ``Scaffold``.
+
+    Returns
+    -------
+    str
+        Lowercase, whitespace-normalised assembly level.
+    """
+    return " ".join(str(value or "").strip().lower().split())
+
+
+def normalise_assembly_level_set(levels: list[str] | None) -> set[str]:
+    """Normalise requested assembly levels for robust filtering."""
+    return {
+        normalise_assembly_level(level)
+        for level in (levels or [])
+        if normalise_assembly_level(level)
+    }
+
+
+def normalise_download_url(path_or_url: str, suffix: str | None = None) -> str:
+    """Normalise an NCBI FTP/HTTPS assembly path to a download URL.
+
+    Parameters
+    ----------
+    path_or_url : str
+        NCBI assembly directory or file URL. Historical NCBI metadata fields
+        are named ``ftp_path`` and may contain ``ftp://`` URLs.
+    suffix : str | None, optional
+        Filename suffix such as ``genomic.fna.gz``. When supplied, the final
+        filename is derived from the assembly directory basename.
+
+    Returns
+    -------
+    str
+        HTTPS download URL, or an empty string for blank input.
+    """
+    raw = str(path_or_url or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("ftp://"):
+        raw = "https://" + raw[len("ftp://") :]
+    if suffix is None:
+        return raw
+    base_url = raw.rstrip("/")
+    base_name = base_url.split("/")[-1]
+    return f"{base_url}/{base_name}_{suffix}"
+
+
+def count_values(rows: list[dict[str, Any]], column: str) -> dict[str, int]:
+    """Count string values from a list of dictionaries."""
+    counts: dict[str, int] = {}
+    for row in rows:
+        key = str(row.get(column, "") or "")
+        counts[key] = counts.get(key, 0) + 1
+    return counts
 
 
 def configure_entrez(email: str, api_key: str | None = None) -> None:
@@ -456,15 +588,98 @@ def entrez_retry(
             handle = func(*args, **kwargs)
             time.sleep(sleep_seconds)
             return handle
-        except (HTTPError, URLError, TimeoutError, OSError) as exc:
+        except TRANSIENT_ENTREZ_ERRORS as exc:
             last_error = exc
             wait_time = sleep_seconds * attempt
             LOGGER.warning(
-                "Entrez request failed on attempt %s/%s: %s", attempt, retries, exc
+                "Entrez request failed on attempt %s/%s: %s",
+                attempt,
+                retries,
+                exc,
             )
             time.sleep(wait_time)
     raise RuntimeError(f"Entrez request failed after {retries} attempts") from last_error
 
+
+
+def entrez_read_retry(
+    func: Any,
+    *args: Any,
+    retries: int = 5,
+    sleep_seconds: float = 0.34,
+    validate: bool = False,
+    context: str = "Entrez request",
+    **kwargs: Any,
+) -> Any:
+    """Run an Entrez request and parse the response with retries.
+
+    Parameters
+    ----------
+    func : callable
+        Entrez function such as ``esearch`` or ``esummary``.
+    *args : object
+        Positional arguments passed to ``func``.
+    retries : int, optional
+        Maximum number of attempts.
+    sleep_seconds : float, optional
+        Polite base delay between attempts. Backoff is linear by attempt.
+    validate : bool, optional
+        Value passed to ``Entrez.read``.
+    context : str, optional
+        Human-readable context included in warning/error messages, such as a
+        taxid, query or summary batch range.
+    **kwargs : object
+        Keyword arguments passed to ``func``.
+
+    Returns
+    -------
+    object
+        Parsed Entrez record.
+
+    Raises
+    ------
+    RuntimeError
+        Raised after all attempts fail.
+
+    Notes
+    -----
+    Biopython can raise ``http.client.IncompleteRead`` while parsing a
+    truncated chunked Entrez response. Retrying only handle creation is not
+    sufficient in that case because the failure occurs during ``Entrez.read``.
+    This helper retries the complete request-plus-parse operation.
+    """
+    entrez = require_entrez()
+    last_error: Exception | None = None
+    retries = max(1, int(retries))
+    for attempt in range(1, retries + 1):
+        handle = None
+        try:
+            LOGGER.debug("Starting %s, attempt %s/%s", context, attempt, retries)
+            handle = func(*args, **kwargs)
+            record = entrez.read(handle, validate=validate)
+            time.sleep(sleep_seconds)
+            return record
+        except TRANSIENT_ENTREZ_ERRORS as exc:
+            last_error = exc
+            wait_time = max(0.0, sleep_seconds) * attempt
+            LOGGER.warning(
+                "%s failed on attempt %s/%s: %s",
+                context,
+                attempt,
+                retries,
+                exc,
+            )
+            if attempt < retries:
+                time.sleep(wait_time)
+        finally:
+            if handle is not None:
+                try:
+                    handle.close()
+                except Exception:  # pragma: no cover - defensive close only
+                    pass
+    raise RuntimeError(
+        f"{context} failed after {retries} attempt(s): {last_error!r}"
+    ) from last_error
 
 def require_entrez() -> object:
     """Return the configured Entrez module.
@@ -483,16 +698,37 @@ def require_entrez() -> object:
         raise RuntimeError("Entrez has not been configured. Call configure_entrez() first.")
     return Entrez
 
+
 def search_assembly_uids(
     taxid: str,
     retries: int,
     sleep_seconds: float,
+    max_records: int | None = None,
 ) -> list[str]:
-    """Search NCBI Assembly for all assemblies under a taxonomy subtree."""
+    """Search NCBI Assembly for all assemblies under a taxonomy subtree.
+
+    Parameters
+    ----------
+    taxid : str
+        NCBI taxonomy ID to search using the organism-expansion query.
+    retries : int
+        Maximum Entrez retry attempts.
+    sleep_seconds : float
+        Polite delay and retry backoff base in seconds.
+    max_records : int | None, optional
+        Optional cap on the number of assembly UIDs returned for very broad
+        taxid searches.
+
+    Returns
+    -------
+    list[str]
+        Assembly UIDs returned by Entrez.
+    """
     query = f"txid{taxid}[Organism:exp]"
     LOGGER.info("Searching NCBI Assembly with query: %s", query)
     entrez = require_entrez()
-    handle = entrez_retry(
+    count_context = f"Entrez esearch count taxid={taxid} query={query!r}"
+    count_record = entrez_read_retry(
         entrez.esearch,
         db="assembly",
         term=query,
@@ -500,23 +736,35 @@ def search_assembly_uids(
         usehistory="y",
         retries=retries,
         sleep_seconds=sleep_seconds,
+        context=count_context,
     )
-    record = entrez.read(handle, validate=False)
-    count = int(record.get("Count", 0))
+    count = int(count_record.get("Count", 0))
     LOGGER.info("Taxid %s returned %s assembly records", taxid, count)
     if count == 0:
         return []
-    entrez = require_entrez()
-    handle = entrez_retry(
+    retmax = count
+    if max_records is not None and max_records > 0 and count > max_records:
+        LOGGER.warning(
+            "Taxid %s returned %s records; capping Entrez UID retrieval to %s",
+            taxid,
+            count,
+            max_records,
+        )
+        retmax = max_records
+    fetch_context = (
+        f"Entrez esearch UIDs taxid={taxid} query={query!r} "
+        f"retmax={retmax} count={count}"
+    )
+    uid_record = entrez_read_retry(
         entrez.esearch,
         db="assembly",
         term=query,
-        retmax=count,
+        retmax=retmax,
         retries=retries,
         sleep_seconds=sleep_seconds,
+        context=fetch_context,
     )
-    record = entrez.read(handle, validate=False)
-    return list(record.get("IdList", []))
+    return list(uid_record.get("IdList", []))
 
 
 def fetch_assembly_summaries(
@@ -524,26 +772,57 @@ def fetch_assembly_summaries(
     batch_size: int,
     retries: int,
     sleep_seconds: float,
+    taxid: str = "",
+    query: str = "",
 ) -> list[dict[str, Any]]:
-    """Fetch full NCBI Assembly summaries in batches."""
+    """Fetch full NCBI Assembly summaries in retryable batches.
+
+    Parameters
+    ----------
+    assembly_uids : list[str]
+        Assembly UIDs to fetch.
+    batch_size : int
+        Number of UIDs per Entrez summary request.
+    retries : int
+        Maximum Entrez retry attempts per batch.
+    sleep_seconds : float
+        Polite delay and retry backoff base in seconds.
+    taxid : str, optional
+        Query taxid for log/error context.
+    query : str, optional
+        Original Entrez query for log/error context.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        NCBI Assembly document summaries.
+    """
+    if batch_size <= 0:
+        raise ValueError("batch_size must be a positive integer")
     summaries: list[dict[str, Any]] = []
+    entrez = require_entrez()
     for start in range(0, len(assembly_uids), batch_size):
         batch = assembly_uids[start : start + batch_size]
-        LOGGER.info("Fetching assembly summaries %s-%s", start + 1, start + len(batch))
-        entrez = require_entrez()
-        handle = entrez_retry(
+        end = start + len(batch)
+        LOGGER.info("Fetching assembly summaries %s-%s", start + 1, end)
+        context = (
+            "Entrez esummary "
+            f"taxid={taxid or 'unknown'} query={query!r} "
+            f"retstart={start} retmax={len(batch)} "
+            f"batch_range={start + 1}-{end}"
+        )
+        record = entrez_read_retry(
             entrez.esummary,
             db="assembly",
             id=",".join(batch),
             report="full",
             retries=retries,
             sleep_seconds=sleep_seconds,
+            context=context,
         )
-        record = entrez.read(handle, validate=False)
         document_set = record.get("DocumentSummarySet", {})
         summaries.extend(document_set.get("DocumentSummary", []))
     return summaries
-
 
 def extract_strain_name(summary: dict[str, Any]) -> str:
     """Extract a strain or isolate label from an Assembly summary."""
@@ -609,6 +888,132 @@ def summary_to_record(
     )
 
 
+
+def record_to_candidate_audit_row(
+    record: AssemblyRecord,
+    filter_status: str,
+    filter_reason: str,
+) -> dict[str, Any]:
+    """Convert an assembly record to a pre-filter audit row.
+
+    Parameters
+    ----------
+    record : AssemblyRecord
+        Candidate assembly record.
+    filter_status : str
+        ``retained`` or ``excluded``.
+    filter_reason : str
+        Explicit reason for the final candidate decision.
+
+    Returns
+    -------
+    dict[str, Any]
+        TSV-ready candidate audit row.
+    """
+    suffix = FORMAT_SUFFIXES["genomic_fna"]
+    return {
+        "taxid": record.query_taxid,
+        "query": f"txid{record.query_taxid}[Organism:exp]",
+        "assembly_uid": record.assembly_uid,
+        "assembly_accession": record.assembly_accession,
+        "organism_name": record.organism_name,
+        "species_name": record.species_name,
+        "species_taxid": record.species_taxid,
+        "assembly_level": record.assembly_level,
+        "normalised_assembly_level": normalise_assembly_level(record.assembly_level),
+        "refseq_category": record.refseq_category,
+        "assembly_status": record.assembly_level,
+        "ftp_path_refseq": record.ftp_path_refseq,
+        "ftp_path_genbank": record.ftp_path_genbank,
+        "selected_source": record.selected_source,
+        "selected_path": record.selected_ftp_path,
+        "normalised_download_url": normalise_download_url(
+            record.selected_ftp_path,
+            suffix=suffix,
+        ),
+        "scaffold_n50": record.scaffold_n50,
+        "contig_n50": record.contig_n50,
+        "total_length": record.total_length,
+        "filter_status": filter_status,
+        "filter_reason": filter_reason,
+        "role": record.role,
+        "clade": record.clade,
+        "group_label": record.group_label,
+    }
+
+
+def evaluate_record_filter_reason(
+    record: AssemblyRecord,
+    assembly_levels: list[str] | None = None,
+    include_unplaced: bool = False,
+    min_total_length: int | None = None,
+    max_total_length: int | None = None,
+    min_scaffold_n50: int | None = None,
+    min_contig_n50: int | None = None,
+) -> str:
+    """Return the first basic filter reason for an assembly record.
+
+    A return value of ``retained`` means the record passes basic filtering.
+    Later selection steps may still exclude it by best-per-species or maximum
+    assembly caps.
+    """
+    allowed_levels = normalise_assembly_level_set(assembly_levels)
+    record_level = normalise_assembly_level(record.assembly_level)
+    if allowed_levels and record_level not in allowed_levels:
+        return "excluded_by_assembly_level"
+    if not include_unplaced and not record.selected_ftp_path:
+        return "excluded_missing_download_path"
+    if min_total_length is not None and record.total_length < min_total_length:
+        return "excluded_by_assembly_quality"
+    if max_total_length is not None and record.total_length > max_total_length:
+        return "excluded_by_assembly_quality"
+    if min_scaffold_n50 is not None and record.scaffold_n50 < min_scaffold_n50:
+        return "excluded_by_assembly_quality"
+    if min_contig_n50 is not None and record.contig_n50 < min_contig_n50:
+        return "excluded_by_assembly_quality"
+    return "retained"
+
+
+def filter_records_with_audit(
+    records: list[AssemblyRecord],
+    assembly_levels: list[str] | None = None,
+    include_unplaced: bool = False,
+    min_total_length: int | None = None,
+    max_total_length: int | None = None,
+    min_scaffold_n50: int | None = None,
+    min_contig_n50: int | None = None,
+) -> tuple[list[AssemblyRecord], list[dict[str, Any]]]:
+    """Filter assembly records and build candidate-audit rows.
+
+    Parameters are equivalent to :func:`filter_records`. The audit table is
+    written before download so zero-retained taxids still explain why records
+    were excluded.
+    """
+    retained: list[AssemblyRecord] = []
+    audit_rows: list[dict[str, Any]] = []
+    for record in records:
+        reason = evaluate_record_filter_reason(
+            record=record,
+            assembly_levels=assembly_levels,
+            include_unplaced=include_unplaced,
+            min_total_length=min_total_length,
+            max_total_length=max_total_length,
+            min_scaffold_n50=min_scaffold_n50,
+            min_contig_n50=min_contig_n50,
+        )
+        status = "retained" if reason == "retained" else "excluded"
+        audit_rows.append(
+            record_to_candidate_audit_row(
+                record=record,
+                filter_status=status,
+                filter_reason=reason,
+            )
+        )
+        if reason == "retained":
+            retained.append(record)
+    return retained, audit_rows
+
+
 def filter_records(
     records: list[AssemblyRecord],
     assembly_levels: list[str] | None = None,
@@ -618,55 +1023,24 @@ def filter_records(
     min_scaffold_n50: int | None = None,
     min_contig_n50: int | None = None,
 ) -> list[AssemblyRecord]:
-    """Filter assembly records by level, downloadability, and quality.
-
-    Parameters
-    ----------
-    records : list[AssemblyRecord]
-        Candidate assembly records.
-    assembly_levels : list[str] | None
-        Optional retained assembly levels.
-    include_unplaced : bool
-        Whether to retain records without a selected FTP path.
-    min_total_length : int | None
-        Optional minimum total assembly length.
-    max_total_length : int | None
-        Optional maximum total assembly length.
-    min_scaffold_n50 : int | None
-        Optional minimum scaffold N50.
-    min_contig_n50 : int | None
-        Optional minimum contig N50.
-
-    Returns
-    -------
-    list[AssemblyRecord]
-        Records passing all filters.
-    """
-    filtered: list[AssemblyRecord] = []
-    allowed_levels = {level.lower() for level in assembly_levels or []}
-    for record in records:
-        if allowed_levels and record.assembly_level.lower() not in allowed_levels:
-            continue
-        if not include_unplaced and not record.selected_ftp_path:
-            continue
-        if min_total_length is not None and record.total_length < min_total_length:
-            continue
-        if max_total_length is not None and record.total_length > max_total_length:
-            continue
-        if min_scaffold_n50 is not None and record.scaffold_n50 < min_scaffold_n50:
-            continue
-        if min_contig_n50 is not None and record.contig_n50 < min_contig_n50:
-            continue
-        filtered.append(record)
-    return filtered
-
+    """Filter assembly records by level, downloadability, and quality."""
+    retained, _audit_rows = filter_records_with_audit(
+        records=records,
+        assembly_levels=assembly_levels,
+        include_unplaced=include_unplaced,
+        min_total_length=min_total_length,
+        max_total_length=max_total_length,
+        min_scaffold_n50=min_scaffold_n50,
+        min_contig_n50=min_contig_n50,
+    )
+    return retained
 
 def sort_records_by_quality(records: list[AssemblyRecord]) -> list[AssemblyRecord]:
     """Sort records from highest to lowest assembly quality."""
     return sorted(
         records,
         key=lambda rec: (
-            ASSEMBLY_LEVEL_RANK.get(rec.assembly_level.lower(), 0),
+            ASSEMBLY_LEVEL_RANK.get(normalise_assembly_level(rec.assembly_level), 0),
             rec.scaffold_n50,
             rec.contig_n50,
             rec.total_length,
@@ -704,14 +1078,10 @@ def limit_records(
     return sorted_records[:max_assemblies]
 
 
-def ftp_url_to_file_url(ftp_path: str, suffix: str) -> str:
-    """Convert an NCBI assembly FTP directory to a downloadable file URL."""
-    if not ftp_path:
-        return ""
-    base_url = ftp_path.replace("ftp://", "https://")
-    base_name = base_url.rstrip("/").split("/")[-1]
-    return f"{base_url}/{base_name}_{suffix}"
 
+def ftp_url_to_file_url(ftp_path: str, suffix: str) -> str:
+    """Convert an NCBI assembly FTP directory to a downloadable HTTPS URL."""
+    return normalise_download_url(ftp_path, suffix=suffix)
 
 def assembly_output_dir(out_dir: Path, record: AssemblyRecord) -> Path:
     """Return the organised output directory for one assembly."""
@@ -817,6 +1187,12 @@ def download_record_files(
         )
         result[f"{fmt}_status"] = status
         if fmt == "genomic_fna":
+            if status.startswith("failed"):
+                result["download_status"] = status
+                result["genome_fasta_gz"] = ""
+                result["genome_fasta"] = ""
+                continue
+            result["download_status"] = status
             result["genome_fasta_gz"] = str(archive_path)
             fasta_path = archive_path.with_suffix("")
             if decompress and archive_path.exists() and archive_path.stat().st_size > 0:
@@ -902,24 +1278,124 @@ def write_run_config(path: Path, args: argparse.Namespace, plans: list[TaxonPlan
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def load_custom_genome_config_rows(
+    path: Path,
+    allow_missing_fastas: bool = False,
+) -> list[dict[str, Any]]:
+    """Load and validate user-supplied KmerSutra genome-config rows.
+
+    Parameters
+    ----------
+    path : Path
+        TSV file with KmerSutra genome-config columns.
+    allow_missing_fastas : bool, optional
+        If true, keep rows whose FASTA paths do not exist. This is intended
+        only for dry-run/planning workflows.
+
+    Returns
+    -------
+    list[dict[str, Any]]
+        Normalised genome-config rows ready to append to downloaded rows.
+
+    Raises
+    ------
+    ValueError
+        Raised if required columns are missing or FASTA paths are unusable.
+    """
+    required = set(KMERSUTRA_CONFIG_HEADER[:4])
+    rows = read_tsv(path)
+    if not rows:
+        LOGGER.warning("Custom genome config %s contains no rows", path)
+        return []
+    missing = required.difference(rows[0])
+    if missing:
+        raise ValueError(
+            f"Custom genome config {path} is missing required columns: "
+            f"{', '.join(sorted(missing))}"
+        )
+    normalised_rows: list[dict[str, Any]] = []
+    for index, row in enumerate(rows, start=2):
+        fasta = Path(str(row.get("genome_fasta", "") or "")).expanduser()
+        if not str(fasta):
+            raise ValueError(f"Custom genome config {path} line {index} has blank genome_fasta")
+        if not allow_missing_fastas and (not fasta.exists() or fasta.stat().st_size <= 0):
+            raise ValueError(
+                f"Custom genome FASTA is missing or empty at line {index}: {fasta}"
+            )
+        normalised = {column: row.get(column, "") for column in KMERSUTRA_CONFIG_HEADER}
+        normalised["genome_fasta"] = str(fasta)
+        normalised.setdefault("role", "custom")
+        normalised_rows.append(normalised)
+    LOGGER.info("Loaded %s custom genome-config row(s) from %s", len(normalised_rows), path)
+    return normalised_rows
+
+
+def custom_rows_to_metadata_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Convert custom genome-config rows to metadata-like rows."""
+    metadata_rows: list[dict[str, Any]] = []
+    for row in rows:
+        metadata_rows.append(
+            {
+                "query_taxid": row.get("query_taxid", row.get("taxid", "")),
+                "assembly_uid": "custom",
+                "assembly_accession": row.get("assembly_accession", "custom"),
+                "assembly_name": row.get("strain_name", "custom"),
+                "organism_name": row.get("species_name", ""),
+                "species_name": row.get("species_name", ""),
+                "species_taxid": row.get("taxid", ""),
+                "taxid": row.get("taxid", ""),
+                "strain_name": row.get("strain_name", ""),
+                "assembly_level": row.get("assembly_level", "custom"),
+                "refseq_category": "custom",
+                "scaffold_n50": row.get("scaffold_n50", ""),
+                "contig_n50": row.get("contig_n50", ""),
+                "total_length": "",
+                "selected_source": "custom",
+                "selected_ftp_path": "",
+                "role": row.get("role", "custom"),
+                "clade": row.get("clade", ""),
+                "group_label": "custom",
+                "record_dir": str(Path(row.get("genome_fasta", "")).parent),
+                "genome_fasta": row.get("genome_fasta", ""),
+                "genome_fasta_gz": "",
+                "genomic_fna_url": "custom",
+                "genomic_fna_status": "custom",
+                "genomic_fna_decompress_status": "not_required",
+                "ftp_path_refseq": "",
+                "ftp_path_genbank": "",
+            }
+        )
+    return metadata_rows
+
+
+
 def collect_records_for_plan(
     plan: TaxonPlan,
     args: argparse.Namespace,
-) -> list[AssemblyRecord]:
-    """Search, fetch, convert, filter, and select records for one taxon plan."""
+) -> tuple[list[AssemblyRecord], list[dict[str, Any]]]:
+    """Search, fetch, convert, filter, and select records for one taxon plan.
+
+    Returns both retained records and a full candidate audit. The audit is
+    emitted even when no assemblies survive filtering, so broad NCBI searches
+    and source/quality filters can be diagnosed without rerunning Entrez.
+    """
+    query = f"txid{plan.taxid}[Organism:exp]"
     assembly_uids = search_assembly_uids(
         taxid=plan.taxid,
         retries=args.retries,
         sleep_seconds=args.sleep_seconds,
+        max_records=args.max_entrez_records_per_taxid,
     )
     if not assembly_uids:
         LOGGER.warning("No assemblies found for taxid %s", plan.taxid)
-        return []
+        return [], []
     summaries = fetch_assembly_summaries(
         assembly_uids=assembly_uids,
         batch_size=args.batch_size,
         retries=args.retries,
         sleep_seconds=args.sleep_seconds,
+        taxid=plan.taxid,
+        query=query,
     )
     records = [
         summary_to_record(
@@ -931,7 +1407,8 @@ def collect_records_for_plan(
         )
         for index, summary in enumerate(summaries)
     ]
-    records = filter_records(
+    LOGGER.info("Taxid %s converted %s assembly summary records", plan.taxid, len(records))
+    records, audit_rows = filter_records_with_audit(
         records=records,
         assembly_levels=args.assembly_levels,
         include_unplaced=args.include_unplaced,
@@ -941,11 +1418,27 @@ def collect_records_for_plan(
         min_contig_n50=plan.min_contig_n50 or args.min_contig_n50,
     )
     best_n = plan.best_per_species or args.best_per_species
-    records = select_best_per_species(records=records, best_per_species=best_n)
+    records_after_best = select_best_per_species(records=records, best_per_species=best_n)
+    best_selected = {record.assembly_accession for record in records_after_best}
+    for row in audit_rows:
+        if row.get("filter_reason") == "retained" and row.get("assembly_accession") not in best_selected:
+            row["filter_status"] = "excluded"
+            row["filter_reason"] = "excluded_by_best_per_species"
     max_n = plan.max_assemblies or args.max_assemblies_per_taxid
-    records = limit_records(records=records, max_assemblies=max_n)
-    LOGGER.info("Taxid %s retained %s assemblies", plan.taxid, len(records))
-    return records
+    final_records = limit_records(records=records_after_best, max_assemblies=max_n)
+    final_selected = {record.assembly_accession for record in final_records}
+    for row in audit_rows:
+        if row.get("filter_reason") == "retained" and row.get("assembly_accession") not in final_selected:
+            row["filter_status"] = "excluded"
+            row["filter_reason"] = "excluded_by_max_assemblies"
+    reason_counts = count_values(audit_rows, "filter_reason")
+    LOGGER.info("Taxid %s retained %s assemblies", plan.taxid, len(final_records))
+    LOGGER.info(
+        "Taxid %s filter reason counts: %s",
+        plan.taxid,
+        ", ".join(f"{key}={value}" for key, value in sorted(reason_counts.items())),
+    )
+    return final_records, audit_rows
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -954,17 +1447,50 @@ def main(argv: list[str] | None = None) -> int:
     out_dir = Path(args.out_dir).resolve()
     log_file = Path(args.log_file) if args.log_file else out_dir / "logs" / "download.log"
     configure_logging(log_file=log_file, verbose=args.verbose)
-    configure_entrez(email=args.email, api_key=args.api_key)
 
     plans = build_taxon_plan(args)
+    if plans:
+        if not args.email:
+            raise ValueError("--email is required when downloading/querying NCBI Entrez")
+        configure_entrez(email=args.email, api_key=args.api_key)
+
     out_dir.mkdir(parents=True, exist_ok=True)
     write_run_config(path=out_dir / "run_config.json", args=args, plans=plans)
 
     all_records: list[AssemblyRecord] = []
+    candidate_audit_rows: list[dict[str, Any]] = []
     for plan in plans:
         LOGGER.info("Processing taxid %s", plan.taxid)
-        all_records.extend(collect_records_for_plan(plan=plan, args=args))
+        retained_records, audit_rows = collect_records_for_plan(plan=plan, args=args)
+        all_records.extend(retained_records)
+        candidate_audit_rows.extend(audit_rows)
 
+    candidate_audit_header = [
+        "taxid",
+        "query",
+        "assembly_uid",
+        "assembly_accession",
+        "organism_name",
+        "species_name",
+        "species_taxid",
+        "assembly_level",
+        "normalised_assembly_level",
+        "refseq_category",
+        "assembly_status",
+        "ftp_path_refseq",
+        "ftp_path_genbank",
+        "selected_source",
+        "selected_path",
+        "normalised_download_url",
+        "scaffold_n50",
+        "contig_n50",
+        "total_length",
+        "filter_status",
+        "filter_reason",
+        "role",
+        "clade",
+        "group_label",
+    ]
     metadata_rows: list[dict[str, Any]] = []
     for record in all_records:
         file_info = download_record_files(
@@ -979,7 +1505,26 @@ def main(argv: list[str] | None = None) -> int:
             metadata_only=args.metadata_only,
             dry_run=args.dry_run,
         )
+        if str(file_info.get("genomic_fna_status", "")).startswith("failed"):
+            for audit_row in candidate_audit_rows:
+                if audit_row.get("assembly_accession") == record.assembly_accession:
+                    audit_row["filter_status"] = "excluded"
+                    audit_row["filter_reason"] = "download_failed"
         metadata_rows.append(record_to_metadata_row(record=record, file_info=file_info))
+
+    custom_config_rows: list[dict[str, Any]] = []
+    if args.custom_genome_config:
+        custom_config_rows = load_custom_genome_config_rows(
+            path=Path(args.custom_genome_config),
+            allow_missing_fastas=args.allow_missing_custom_fastas,
+        )
+        metadata_rows.extend(custom_rows_to_metadata_rows(custom_config_rows))
+
+    write_tsv(
+        path=out_dir / "ncbi_assembly_candidate_audit.tsv",
+        rows=candidate_audit_rows,
+        header=candidate_audit_header,
+    )
 
     metadata_header = [
         "query_taxid",
@@ -1017,36 +1562,44 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     kmersutra_rows = metadata_to_kmersutra_config_rows(metadata_rows)
-    kmersutra_header = [
-        "genome_fasta",
-        "species_name",
-        "strain_name",
-        "taxid",
-        "role",
-        "clade",
-        "assembly_accession",
-        "query_taxid",
-        "assembly_level",
-        "scaffold_n50",
-        "contig_n50",
-    ]
     write_tsv(
         path=out_dir / "kmersutra_genome_config.tsv",
         rows=kmersutra_rows,
-        header=kmersutra_header,
+        header=KMERSUTRA_CONFIG_HEADER,
     )
 
     query_summary_rows = []
     for plan in plans:
         retained = [row for row in metadata_rows if row.get("query_taxid") == plan.taxid]
+        audit_for_taxid = [
+            row for row in candidate_audit_rows if row.get("taxid") == plan.taxid
+        ]
+        reason_counts = count_values(audit_for_taxid, "filter_reason")
         query_summary_rows.append(
             {
                 "query_taxid": plan.taxid,
                 "role": plan.role,
                 "clade": plan.clade,
                 "group_label": plan.group_label,
+                "n_candidate_assemblies": len(audit_for_taxid),
                 "n_retained_assemblies": len(retained),
                 "n_species": len({row.get("species_taxid") for row in retained}),
+                "filter_reason_counts": ";".join(
+                    f"{key}={value}" for key, value in sorted(reason_counts.items())
+                ),
+            }
+        )
+    if custom_config_rows:
+        query_summary_rows.append(
+            {
+                "query_taxid": "custom",
+                "role": "custom",
+                "clade": "custom",
+                "group_label": "custom",
+                "n_candidate_assemblies": len(custom_config_rows),
+                "n_retained_assemblies": len(custom_config_rows),
+                "n_species": len({row.get("taxid") for row in custom_config_rows}),
+                "filter_reason_counts": f"custom={len(custom_config_rows)}",
             }
         )
     write_tsv(
@@ -1057,11 +1610,14 @@ def main(argv: list[str] | None = None) -> int:
             "role",
             "clade",
             "group_label",
+            "n_candidate_assemblies",
             "n_retained_assemblies",
             "n_species",
+            "filter_reason_counts",
         ],
     )
 
+    LOGGER.info("Wrote candidate audit rows: %s", len(candidate_audit_rows))
     LOGGER.info("Wrote metadata rows: %s", len(metadata_rows))
     LOGGER.info("Wrote KmerSutra config rows: %s", len(kmersutra_rows))
     LOGGER.info("Done")
