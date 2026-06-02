@@ -1,0 +1,61 @@
+KmerSutra v0.38.0 release notes
+=================================
+
+Purpose
+-------
+This release packages the corrected comparable-benchmark summary workflow that
+was validated on the v0.34 Plasmodium comparable benchmark after the cluster
+power interruption and resume workflow.
+
+Main changes
+------------
+1. Comparable benchmark summary now robustly resolves nested sample outputs in:
+
+       <out_root>/samples/<benchmark_family>/<sample_output_dir>/
+
+2. The summary script now supports historical manifest/output naming drift, for
+   example manifests containing kmersutra_v014_* sample IDs while newer array
+   workers write kmersutra_v015_* sample output directories.
+
+3. Sample directory matching uses benchmark_family plus exact source_relative_dir
+   suffixes, with optional source run name context, so mix_rep1_n1 is not
+   accidentally matched to mix_rep1_n10 or mix_rep1_n100.
+
+4. The summary now fails hard if zero detection-call rows are read. This prevents
+   invalid reports such as 0 / 532 completed samples from being mistaken for
+   valid partial benchmark summaries.
+
+5. Existing tab-separated outputs, gzip-compressed long tables, formatted Excel
+   workbook, and HTML report outputs are retained.
+
+6. The same fixed summary script is provided at both historical package locations:
+
+       summarise_kmersutra_comparable_benchmark.py
+       summary/summarise_kmersutra_comparable_benchmark.py
+
+   This preserves compatibility with existing wrappers and manual summary runs.
+
+Testing
+-------
+The release adds unittest coverage for:
+
+- resolving v014 manifest sample IDs to v015 nested output directories;
+- exact suffix matching, preventing n1/n10/n100 mismatches;
+- reading nested calls/evidence/timing outputs into long summary tables;
+- retaining missing samples in sample_status.tsv during allowed partial summaries;
+- failing when no detection-call rows are read.
+
+Test command used:
+
+       python -m unittest discover -s tests -p 'test*.py'
+
+Result:
+
+       Ran 312 tests in 12.234s
+       OK
+
+Operational note
+----------------
+Temporary rescue scripts should not be committed to the repository. This release
+turns the validated rescue behaviour into the main comparable summary script with
+unit tests and release notes, so future benchmarking can use the packaged code.

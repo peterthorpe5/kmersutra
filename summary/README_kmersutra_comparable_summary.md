@@ -179,3 +179,17 @@ MANIFEST_TSV="/path/to/run/kmersutra_v015_conservative_manifest.tsv" \
 ```
 
 This version also supports the v0.16 taxonomic evidence filename `sample_taxonomic_kmer_evidence.tsv` as a fallback when `sample_species_kmer_evidence.tsv` is not present.
+
+v0.38.0 nested-layout resolver note
+-----------------------------------
+The comparable summary script now supports resumed or version-mixed benchmark
+runs where the manifest sample IDs differ from the actual output directory names.
+For example, a manifest row with a `kmersutra_v014_*` sample ID can be matched to
+a nested output directory written by the v0.15 array worker under:
+
+    samples/<benchmark_family>/kmersutra_v015_..._<source_relative_dir>/
+
+Matching uses `benchmark_family` and exact `source_relative_dir` suffixes to
+avoid unsafe prefix matches such as `n1` to `n10` or `n100`. The summary fails
+with a clear error if no detection-call rows are read, because a zero-call report
+is not a valid benchmark summary.

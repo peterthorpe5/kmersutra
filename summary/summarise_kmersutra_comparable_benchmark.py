@@ -752,7 +752,16 @@ def expected_targets_for_row(
 
 
 def sample_output_dir(*, out_root: Path, row: Mapping[str, object]) -> Path:
-    """Resolve the sample output directory from a manifest row.
+    """Resolve a sample output directory from a manifest row.
+
+    The comparable benchmark has used more than one sample-directory naming
+    convention. Older manifests may contain ``kmersutra_v014_*`` sample IDs,
+    while newer array workers may write ``kmersutra_v015_*`` output folders
+    under ``samples/<benchmark_family>/``. This resolver therefore tries exact
+    historical layouts first, then falls back to a constrained fuzzy match using
+    the source run name and the exact ``source_relative_dir`` suffix, such as
+    ``mix_rep1_n100``. The suffix match is deliberately exact to avoid matching
+    ``n1`` to ``n10`` or ``n100``.
 
     Parameters
     ----------
@@ -764,17 +773,100 @@ def sample_output_dir(*, out_root: Path, row: Mapping[str, object]) -> Path:
     Returns
     -------
     Path
-        Sample output directory.
+        Resolved sample output directory, or the preferred nested path if no
+        existing output directory can be found.
     """
-    family = str(row.get("benchmark_family", "unclassified"))
-    sample_id = str(row.get("sample_id", "unknown_sample"))
-    nested = out_root / "samples" / family / sample_id
-    if nested.exists():
-        return nested
-    flat = out_root / "samples" / sample_id
-    if flat.exists():
-        return flat
-    return nested
+    family = str(row.get("benchmark_family", "unclassified")).strip()
+    sample_id = str(row.get("sample_id", "unknown_sample")).strip()
+    source_relative_dir = str(row.get("source_relative_dir", "")).strip()
+    input_fastq = str(row.get("input_fastq", "")).strip()
+
+    exact_candidates = [
+        out_root / "samples" / family / sample_id,
+        out_root / family / sample_id,
+        out_root / "samples" / sample_id,
+        out_root / sample_id,
+    ]
+    if source_relative_dir and source_relative_dir != sample_id:
+        exact_candidates.extend(
+            [
+                out_root / "samples" / family / source_relative_dir,
+                out_root / family / source_relative_dir,
+                out_root / "samples" / source_relative_dir,
+                out_root / source_relative_dir,
+            ]
+        )
+
+    for candidate in exact_candidates:
+        if (candidate / "species_detection_calls.tsv").exists():
+            return candidate
+    for candidate in exact_candidates:
+        if candidate.exists():
+            return candidate
+
+    family_dir = out_root / "samples" / family
+    if not family_dir.exists():
+        return exact_candidates[0]
+
+    source_run_name = ""
+    if input_fastq:
+        input_path = Path(input_fastq)
+        try:
+            source_run_name = input_path.parent.parent.name
+        except IndexError:
+            source_run_name = ""
+
+    suffixes: list[str] = []
+    if source_run_name and source_relative_dir:
+        suffixes.append(f"{source_run_name}_{source_relative_dir}")
+    if source_relative_dir:
+        suffixes.append(source_relative_dir)
+
+    for suffix in suffixes:
+        matches = sorted(
+            path for path in family_dir.iterdir()
+            if path.is_dir() and path.name.endswith(suffix)
+        )
+        call_matches = [
+            path for path in matches
+            if (path / "species_detection_calls.tsv").exists()
+        ]
+        if len(call_matches) == 1:
+            return call_matches[0]
+        if len(call_matches) > 1:
+            LOGGER.warning(
+                "Multiple sample-directory matches for sample_id=%s suffix=%s; "
+                "using first: %s",
+                sample_id,
+                suffix,
+                call_matches[0],
+            )
+            return call_matches[0]
+        if len(matches) == 1:
+            return matches[0]
+
+    if sample_id.startswith("kmersutra_v014_"):
+        versionless_suffix = sample_id.replace("kmersutra_v014_", "", 1)
+        matches = sorted(
+            path for path in family_dir.iterdir()
+            if path.is_dir() and path.name.endswith(versionless_suffix)
+        )
+        call_matches = [
+            path for path in matches
+            if (path / "species_detection_calls.tsv").exists()
+        ]
+        if len(call_matches) == 1:
+            return call_matches[0]
+        if len(call_matches) > 1:
+            LOGGER.warning(
+                "Multiple versionless sample-directory matches for sample_id=%s; "
+                "using first: %s",
+                sample_id,
+                call_matches[0],
+            )
+            return call_matches[0]
+
+    return exact_candidates[0]
 
 
 def coerce_numeric(*, dataframe: pd.DataFrame, columns: Iterable[str]) -> pd.DataFrame:
