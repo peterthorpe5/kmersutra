@@ -193,3 +193,39 @@ Matching uses `benchmark_family` and exact `source_relative_dir` suffixes to
 avoid unsafe prefix matches such as `n1` to `n10` or `n100`. The summary fails
 with a clear error if no detection-call rows are read, because a zero-call report
 is not a valid benchmark summary.
+
+v0.39.0 command-line update
+---------------------------
+The comparable benchmark summary is now available as an installed command:
+
+    kmersutra-summarise-comparable-benchmark \
+      --out_root "${RUN_ROOT}" \
+      --manifest "${RUN_ROOT}/kmersutra_comparable_manifest.tsv" \
+      --out_dir "${SUMMARY_DIR}" \
+      --panel1_targets "Plasmodium vivax" \
+      --panel2_tsv "/path/to/pathogen_panel_2.tsv" \
+      --panel3_tsv "/path/to/pathogen_panel_3.tsv" \
+      --background_candidate_taxa "Hammondia hammondi" \
+      --demote_expected_genus_neighbours \
+      --allow_partial \
+      --verbose
+
+For backwards compatibility, `kmersutra-summarise-run` still supports the older
+`--summary_tsv --out_xlsx --out_html` workflow. If comparable benchmark options
+such as `--out_root` are supplied, it now dispatches to the comparable summary
+workflow.
+
+v0.39.0 threshold sweep
+-----------------------
+The new threshold-sweep diagnostic reinterprets an existing long-call table
+under several candidate call-promotion thresholds without rerunning read
+screening:
+
+    kmersutra-threshold-sweep \
+      --calls_table "${SUMMARY_DIR}/kmersutra_detection_calls_long.tsv.gz" \
+      --out_dir "${SUMMARY_DIR}/threshold_sweep_v039" \
+      --verbose
+
+This writes TSV, Excel and HTML reports comparing target sensitivity,
+specificity, off-target behaviour, same-genus neighbour-lineage evidence and
+family/spike-level performance across threshold sets.
