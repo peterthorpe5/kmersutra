@@ -1,0 +1,61 @@
+KmerSutra v0.40.0 release notes
+=================================
+
+Purpose
+-------
+This release targets the v0.34 raw-read Plasmodium benchmark sensitivity problem.
+Threshold sweeps showed that further call-threshold relaxation produced only
+modest improvements and did not recover the older v0.30 LOD behaviour. The
+likely bottleneck is database-build policy: candidate-universe sampling selected
+long k values first, and the completed v0.34 panel was dominated by k=151
+records.
+
+Main change
+-----------
+Adds a raw-ONT balanced marker profile for global candidate builds:
+
+    --marker_profile raw_ont_balanced
+
+When used with the default:
+
+    --candidate_k_order auto
+
+this resolves candidate sampling order to:
+
+    short_to_long
+
+so k=51, k=77 and k=101 candidate markers can claim bin/cross-k slots before
+k=151 markers. The historical default profile preserves long_to_short sampling
+for reproducibility.
+
+New/updated CLI arguments
+-------------------------
+kmersutra-build-panel now accepts:
+
+    --marker_profile {default,raw_ont_balanced}
+    --candidate_k_order {auto,long_to_short,short_to_long,input}
+
+New production helper
+---------------------
+A new build wrapper is included:
+
+    run_kmersutra_build_global_candidate_v040_raw_ont_balanced_tmpdir.sh
+
+This uses the v4 Plasmodium/outgroup genome config, k=51 77 101 151,
+assembly-aware binning, candidate_universe source indexing, module Parquet
+output, and the raw_ont_balanced marker profile.
+
+Expected effect
+---------------
+The aim is not to relax specificity controls. The aim is to change the marker
+composition of the database so lower and intermediate k values are retained more
+effectively for noisy ONT raw reads. This should be benchmarked before updating
+manuscript claims.
+
+Testing
+-------
+Additional unittest coverage checks candidate k-order resolution and validation.
+Run tests with:
+
+    python -m unittest discover -s tests -p 'test*.py'
+

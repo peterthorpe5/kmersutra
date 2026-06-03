@@ -72,6 +72,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--genome_config", required=True)
     parser.add_argument("--out_dir", required=True)
     parser.add_argument("--k_values", nargs="+", type=int, default=[31, 51, 71, 101])
+    parser.add_argument(
+        "--marker_profile",
+        choices=["default", "raw_ont_balanced"],
+        default="default",
+        help=(
+            "High-level build profile. default preserves historical behaviour. "
+            "raw_ont_balanced uses short-to-long candidate sampling so lower-k, "
+            "more error-tolerant markers are not displaced by k=151 markers "
+            "before cross-k de-correlation is applied."
+        ),
+    )
+    parser.add_argument(
+        "--candidate_k_order",
+        choices=["auto", "long_to_short", "short_to_long", "input"],
+        default="auto",
+        help=(
+            "Order used while sampling candidate-universe k-mers. auto uses "
+            "long_to_short for the default profile and short_to_long for the "
+            "raw_ont_balanced profile."
+        ),
+    )
     parser.add_argument("--target_clade", default="")
     parser.add_argument("--target_taxid", default="")
     parser.add_argument("--taxonomy_dir", default="")
@@ -671,9 +692,50 @@ def _maybe_write_panel_parquet(
     return panel_parquet_path
 
 
+
+def resolve_candidate_k_order(*, marker_profile: str, candidate_k_order: str) -> str:
+    """Resolve the candidate k sampling order for the selected build profile.
+
+    Parameters
+    ----------
+    marker_profile : str
+        High-level marker profile.
+    candidate_k_order : str
+        User-specified order or ``auto``.
+
+    Returns
+    -------
+    str
+        Concrete candidate k sampling order.
+
+    Raises
+    ------
+    ValueError
+        If an unsupported profile or order is supplied.
+    """
+    valid_profiles = {"default", "raw_ont_balanced"}
+    valid_orders = {"auto", "long_to_short", "short_to_long", "input"}
+    if marker_profile not in valid_profiles:
+        raise ValueError(
+            "marker_profile must be one of: " + ", ".join(sorted(valid_profiles))
+        )
+    if candidate_k_order not in valid_orders:
+        raise ValueError(
+            "candidate_k_order must be one of: " + ", ".join(sorted(valid_orders))
+        )
+    if candidate_k_order != "auto":
+        return candidate_k_order
+    if marker_profile == "raw_ont_balanced":
+        return "short_to_long"
+    return "long_to_short"
+
 def main() -> None:
     """Run the panel builder."""
     args = parse_args()
+    candidate_k_order = resolve_candidate_k_order(
+        marker_profile=args.marker_profile,
+        candidate_k_order=args.candidate_k_order,
+    )
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     logger = configure_logging(log_file=out_dir / "build_panel.log", verbose=args.verbose)
@@ -686,6 +748,8 @@ def main() -> None:
     logger.info("All-candidate evidence build: %s", args.all_candidate_evidence)
     logger.info("Global candidate evidence build: %s", args.global_candidate_evidence)
     logger.info("Build profiling: %s", args.profile)
+    logger.info("Marker profile: %s", args.marker_profile)
+    logger.info("Candidate k sampling order: %s", candidate_k_order)
     logger.info("Marker selection: %s", args.marker_selection)
     logger.info("Write module Parquet: %s", args.write_module_parquet)
     logger.info("Write hierarchical module manifest: %s", args.write_module_manifest)
@@ -823,6 +887,7 @@ def main() -> None:
                     assembly_fragmented_n50_multiplier=args.assembly_fragmented_n50_multiplier,
                     assembly_fragmented_max_global_bins=args.assembly_fragmented_max_global_bins,
                     skip_lowercase_regions=args.skip_lowercase_regions,
+                    candidate_k_order=candidate_k_order,
                     logger=logger,
                 )
             with profiler.time_stage(stage="write_panel", detail=str(panel_path)):
@@ -922,6 +987,8 @@ def main() -> None:
                         metadata={
                             "genome_config": str(args.genome_config),
                             "k_values": ";".join(map(str, args.k_values)),
+                            "marker_profile": args.marker_profile,
+                            "candidate_k_order": candidate_k_order,
                             "marker_selection": args.marker_selection,
                             "global_source_index_mode": args.global_source_index_mode,
                             "global_index_progress_interval": args.global_index_progress_interval,

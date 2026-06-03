@@ -54,6 +54,46 @@ VALID_GLOBAL_SOURCE_INDEX_MODES = {
     "candidate_universe",
 }
 
+VALID_CANDIDATE_K_ORDERS = {"long_to_short", "short_to_long", "input"}
+
+
+def order_candidate_k_values(*, k_values: list[int], candidate_k_order: str) -> list[int]:
+    """Return candidate-sampling k values in the requested order.
+
+    Parameters
+    ----------
+    k_values : list[int]
+        Configured k-mer values.
+    candidate_k_order : str
+        Ordering policy. ``long_to_short`` preserves historical behaviour and
+        samples long markers first. ``short_to_long`` is intended for raw ONT
+        sensitivity builds because shorter, more error-tolerant markers are not
+        displaced by long-k anchors before cross-k spacing is applied. ``input``
+        preserves the user-supplied order.
+
+    Returns
+    -------
+    list[int]
+        Ordered k values.
+
+    Raises
+    ------
+    ValueError
+        If the ordering policy is unsupported.
+    """
+    if candidate_k_order not in VALID_CANDIDATE_K_ORDERS:
+        raise ValueError(
+            "candidate_k_order must be one of: "
+            + ", ".join(sorted(VALID_CANDIDATE_K_ORDERS))
+        )
+    values = [int(value) for value in k_values]
+    if candidate_k_order == "long_to_short":
+        return sorted(values, reverse=True)
+    if candidate_k_order == "short_to_long":
+        return sorted(values)
+    return values
+
+
 
 def _candidate_sampling_score(
     *,
@@ -1039,6 +1079,7 @@ def collect_candidate_universe_sqlite(
     assembly_fragmented_max_global_bins: int = 1000,
     progress_interval: int = 1000000,
     skip_lowercase_regions: bool = False,
+    candidate_k_order: str = "long_to_short",
     logger: logging.Logger | None = None,
 ) -> list[dict[str, object]]:
     """Collect a bounded genome-spread candidate k-mer universe.
@@ -1083,6 +1124,11 @@ def collect_candidate_universe_sqlite(
         Approximate maximum global bins for fragmented assemblies.
     progress_interval : int, optional
         Attempted k-mer interval for logging.
+    candidate_k_order : str, optional
+        Order used during candidate sampling. ``long_to_short`` preserves the
+        historical strict long-k-first behaviour. ``short_to_long`` favours raw
+        ONT sensitivity by allowing shorter k values to claim candidate slots
+        before cross-k de-correlation removes nearby markers.
     logger : logging.Logger or None, optional
         Logger for progress messages.
 
@@ -1101,6 +1147,10 @@ def collect_candidate_universe_sqlite(
         raise ValueError("min_cross_k_marker_distance must be non-negative")
     if progress_interval <= 0:
         raise ValueError("progress_interval must be positive")
+    ordered_k_values = order_candidate_k_values(
+        k_values=k_values,
+        candidate_k_order=candidate_k_order,
+    )
     if assembly_small_length <= 0:
         raise ValueError("assembly_small_length must be positive")
     if assembly_small_min_bin_size <= 0:
@@ -1141,7 +1191,6 @@ def collect_candidate_universe_sqlite(
             cross_k_index = _CrossKPositionIndex(
                 min_distance=min_cross_k_marker_distance
             )
-            ordered_k_values = sorted((int(value) for value in k_values), reverse=True)
             contig_offsets: dict[str, int] = {}
             assembly_stats = None
             assembly_bin_plan = None
@@ -1505,6 +1554,7 @@ def collect_global_kmer_sources_sqlite(
     assembly_fragmented_n50_multiplier: float = 2.0,
     assembly_fragmented_max_global_bins: int = 1000,
     skip_lowercase_regions: bool = False,
+    candidate_k_order: str = "long_to_short",
     logger: logging.Logger | None = None,
 ) -> list[dict[str, object]]:
     """Collect source metadata for all genomes in one global SQLite index.
@@ -1542,6 +1592,7 @@ def collect_global_kmer_sources_sqlite(
             "source_index_mode must be one of: "
             + ", ".join(sorted(VALID_GLOBAL_SOURCE_INDEX_MODES))
         )
+    order_candidate_k_values(k_values=k_values, candidate_k_order=candidate_k_order)
 
     configs = list(genome_configs)
     if source_index_mode == "candidate_universe":
@@ -1562,6 +1613,7 @@ def collect_global_kmer_sources_sqlite(
             assembly_fragmented_max_global_bins=assembly_fragmented_max_global_bins,
             progress_interval=progress_interval,
             skip_lowercase_regions=skip_lowercase_regions,
+            candidate_k_order=candidate_k_order,
             logger=logger,
         )
         summaries.extend(
@@ -2687,6 +2739,7 @@ def build_global_candidate_evidence_sqlite(
     assembly_fragmented_n50_multiplier: float = 2.0,
     assembly_fragmented_max_global_bins: int = 1000,
     skip_lowercase_regions: bool = False,
+    candidate_k_order: str = "long_to_short",
     logger: logging.Logger | None = None,
 ) -> GlobalCandidateEvidenceBuildResult:
     """Build a global query-agnostic evidence database.
@@ -2739,6 +2792,7 @@ def build_global_candidate_evidence_sqlite(
             "source_index_mode must be one of: "
             + ", ".join(sorted(VALID_GLOBAL_SOURCE_INDEX_MODES))
         )
+    order_candidate_k_values(k_values=k_values, candidate_k_order=candidate_k_order)
 
     db_path = Path(sqlite_path)
     if db_path.exists():
@@ -2755,6 +2809,7 @@ def build_global_candidate_evidence_sqlite(
             "Each genome will be indexed once before taxonomic evidence assignment"
         )
         logger.info("Global source-index mode: %s", source_index_mode)
+        logger.info("Candidate k sampling order: %s", candidate_k_order)
 
     collection_summary = collect_global_kmer_sources_sqlite(
         genome_configs=genome_configs,
@@ -2774,6 +2829,7 @@ def build_global_candidate_evidence_sqlite(
         assembly_fragmented_n50_multiplier=assembly_fragmented_n50_multiplier,
         assembly_fragmented_max_global_bins=assembly_fragmented_max_global_bins,
         skip_lowercase_regions=skip_lowercase_regions,
+        candidate_k_order=candidate_k_order,
         logger=logger,
     )
     assignment_summary = assign_global_candidate_evidence_sqlite(
@@ -2804,6 +2860,7 @@ def build_global_candidate_evidence_sqlite(
         {"summary_name": "genome_records", "summary_value": len(genome_configs)},
         {"summary_name": "k_values", "summary_value": ";".join(map(str, k_values))},
         {"summary_name": "global_source_index_mode", "summary_value": source_index_mode},
+        {"summary_name": "candidate_k_order", "summary_value": candidate_k_order},
         {"summary_name": "global_distinct_kmer_keys", "summary_value": int(global_kmer_count)},
         {"summary_name": "diagnostics_retained", "summary_value": int(retained_count)},
         {"summary_name": "sqlite_path", "summary_value": str(db_path)},
