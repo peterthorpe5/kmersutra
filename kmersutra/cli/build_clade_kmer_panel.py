@@ -76,13 +76,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--k_values", nargs="+", type=int, default=[31, 51, 71, 101])
     parser.add_argument(
         "--marker_profile",
-        choices=["default", "raw_ont_balanced", "raw_ont_multik_balanced"],
+        choices=[
+            "default",
+            "raw_ont_balanced",
+            "raw_ont_multik_balanced",
+            "raw_ont_multik_locus_balanced",
+        ],
         default="default",
         help=(
             "High-level build profile. default preserves historical behaviour. "
-            "raw_ont_balanced uses short-to-long candidate sampling so lower-k, "
-            "more error-tolerant markers are not displaced by k=151 markers "
-            "before cross-k de-correlation is applied."
+            "raw_ont_balanced uses short-to-long candidate sampling. "
+            "raw_ont_multik_balanced adds per-k bin quotas. "
+            "raw_ont_multik_locus_balanced adds per-k bin quotas plus "
+            "small cross-k interval separation so different k values are not "
+            "sampled as nested markers from the same local locus."
         ),
     )
     parser.add_argument(
@@ -91,8 +98,9 @@ def parse_args() -> argparse.Namespace:
         default="auto",
         help=(
             "Order used while sampling candidate-universe k-mers. auto uses "
-            "long_to_short for the default profile and short_to_long for the "
-            "raw_ont_balanced profile."
+            "long_to_short for the default profile, short_to_long for the "
+            "raw_ont_balanced profile, and input order for multi-k balanced "
+            "profiles."
         ),
     )
     parser.add_argument("--target_clade", default="")
@@ -157,9 +165,10 @@ def parse_args() -> argparse.Namespace:
             "Minimum distance in reference bases between retained markers from "
             "different k values within the same genome/contig/evidence bucket "
             "when using independent multi-k marker selection. If omitted, "
-            "default/raw_ont_balanced use 5000 and raw_ont_multik_balanced "
-            "uses 0 so per-k quotas, rather than cross-k blocking, control "
-            "local evidence density."
+            "default/raw_ont_balanced use 5000, raw_ont_multik_balanced uses 0, "
+            "and raw_ont_multik_locus_balanced uses 250. The distance is "
+            "interpreted as interval/locus separation between different k "
+            "values, not just start-position separation."
         ),
     )
     parser.add_argument(
@@ -732,7 +741,12 @@ def resolve_candidate_k_order(*, marker_profile: str, candidate_k_order: str) ->
     ValueError
         If an unsupported profile or order is supplied.
     """
-    valid_profiles = {"default", "raw_ont_balanced", "raw_ont_multik_balanced"}
+    valid_profiles = {
+        "default",
+        "raw_ont_balanced",
+        "raw_ont_multik_balanced",
+        "raw_ont_multik_locus_balanced",
+    }
     valid_orders = {"auto", "long_to_short", "short_to_long", "input"}
     if marker_profile not in valid_profiles:
         raise ValueError(
@@ -746,7 +760,7 @@ def resolve_candidate_k_order(*, marker_profile: str, candidate_k_order: str) ->
         return candidate_k_order
     if marker_profile == "raw_ont_balanced":
         return "short_to_long"
-    if marker_profile == "raw_ont_multik_balanced":
+    if marker_profile in {"raw_ont_multik_balanced", "raw_ont_multik_locus_balanced"}:
         return "input"
     return "long_to_short"
 
@@ -776,6 +790,8 @@ def resolve_min_cross_k_marker_distance(
         return int(min_cross_k_marker_distance)
     if marker_profile == "raw_ont_multik_balanced":
         return 0
+    if marker_profile == "raw_ont_multik_locus_balanced":
+        return 250
     return 5000
 
 
@@ -801,7 +817,7 @@ def resolve_max_per_genome_bin_by_k(
     )
     if explicit:
         return explicit
-    if marker_profile == "raw_ont_multik_balanced":
+    if marker_profile in {"raw_ont_multik_balanced", "raw_ont_multik_locus_balanced"}:
         return {51: 3, 77: 3, 101: 2, 151: 2}
     return {}
 

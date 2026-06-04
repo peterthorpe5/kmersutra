@@ -142,3 +142,100 @@ class TestRawOntMultikBalancedProfile(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRawOntMultikLocusBalancedProfile(unittest.TestCase):
+    """Test the raw ONT multi-k locus-balanced build controls."""
+
+    def test_locus_balanced_profile_defaults(self) -> None:
+        """The locus-balanced profile should avoid nested cross-k markers."""
+        self.assertEqual(
+            resolve_candidate_k_order(
+                marker_profile="raw_ont_multik_locus_balanced",
+                candidate_k_order="auto",
+            ),
+            "input",
+        )
+        self.assertEqual(
+            resolve_min_cross_k_marker_distance(
+                marker_profile="raw_ont_multik_locus_balanced",
+                min_cross_k_marker_distance=None,
+            ),
+            250,
+        )
+        self.assertEqual(
+            resolve_max_per_genome_bin_by_k(
+                marker_profile="raw_ont_multik_locus_balanced",
+                max_per_genome_bin_by_k="",
+            ),
+            {51: 3, 77: 3, 101: 2, 151: 2},
+        )
+
+    def test_candidate_universe_locus_separation_keeps_all_k_values(self) -> None:
+        """Per-k quotas plus small locus spacing should retain all k values."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fasta_path = tmp_path / "genome.fna"
+            sqlite_path = tmp_path / "candidates.sqlite"
+            fasta_path.write_text(
+                ">contig1\n" + "ACGT" * 300 + "\n",
+                encoding="utf-8",
+            )
+            config = GenomeConfig(
+                genome_fasta=fasta_path,
+                species_name="Example species",
+                strain_name="strain1",
+                taxid="12345",
+                role="target_species",
+                clade="example",
+                assembly_accession="ASM1",
+            )
+
+            collect_candidate_universe_sqlite(
+                genome_configs=[config],
+                k_values=[5, 7, 9, 11],
+                sqlite_path=sqlite_path,
+                batch_size=100,
+                genome_bin_size=100,
+                max_per_genome_bin=1,
+                max_per_genome_bin_by_k={5: 2, 7: 2, 9: 2, 11: 2},
+                min_cross_k_marker_distance=1,
+                assembly_aware_binning=False,
+                progress_interval=1000000,
+                candidate_k_order="input",
+            )
+
+            with sqlite3.connect(sqlite_path) as connection:
+                rows = connection.execute(
+                    """
+                    SELECT k, COUNT(*)
+                    FROM candidate_kmers
+                    GROUP BY k
+                    ORDER BY k
+                    """
+                ).fetchall()
+                positions = connection.execute(
+                    """
+                    SELECT first_contig_id, first_position, k
+                    FROM candidate_kmers
+                    ORDER BY first_position, k
+                    """
+                ).fetchall()
+
+            counts = dict(rows)
+            self.assertEqual(set(counts), {5, 7, 9, 11})
+            for count in counts.values():
+                self.assertGreater(count, 0)
+
+            for index, left in enumerate(positions):
+                for right in positions[index + 1:]:
+                    left_contig, left_pos, left_k = left
+                    right_contig, right_pos, right_k = right
+                    if left_contig != right_contig or int(left_k) == int(right_k):
+                        continue
+                    left_start = int(left_pos)
+                    left_end = left_start + int(left_k)
+                    right_start = int(right_pos)
+                    right_end = right_start + int(right_k)
+                    gap = max(0, max(left_start, right_start) - min(left_end, right_end))
+                    self.assertGreaterEqual(gap, 1)

@@ -71,3 +71,17 @@ class TestCandidateKOrder(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLocusBalancedCandidateKOrder(unittest.TestCase):
+    """Test candidate k-order behaviour for locus-balanced profile."""
+
+    def test_locus_balanced_profile_uses_input_order(self) -> None:
+        """The locus-balanced profile should preserve the requested k ladder."""
+        self.assertEqual(
+            resolve_candidate_k_order(
+                marker_profile="raw_ont_multik_locus_balanced",
+                candidate_k_order="auto",
+            ),
+            "input",
+        )

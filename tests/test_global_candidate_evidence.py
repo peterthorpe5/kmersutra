@@ -769,3 +769,35 @@ class TestFastCrossKPositionIndex(unittest.TestCase):
         index = _CrossKPositionIndex(min_distance=0)
         index.add(contig_id="ctg1", position=10000, k=151)
         self.assertTrue(index.is_available(contig_id="ctg1", position=10001, k=101))
+
+
+class TestCrossKIntervalSeparation(unittest.TestCase):
+    """Test interval-aware cross-k locus separation."""
+
+    def test_interval_gap_rejects_nested_cross_k_candidate(self) -> None:
+        """A shorter k-mer nested inside a longer k-mer should be rejected."""
+        from kmersutra.global_candidate_evidence import _cross_k_candidate_available
+
+        self.assertFalse(
+            _cross_k_candidate_available(
+                selected_positions=[("contig1", 1000, 77)],
+                contig_id="contig1",
+                position=1010,
+                k=51,
+                min_cross_k_marker_distance=1,
+            )
+        )
+
+    def test_interval_gap_allows_distant_cross_k_candidate(self) -> None:
+        """Different k values should be allowed when they are different loci."""
+        from kmersutra.global_candidate_evidence import _cross_k_candidate_available
+
+        self.assertTrue(
+            _cross_k_candidate_available(
+                selected_positions=[("contig1", 1000, 77)],
+                contig_id="contig1",
+                position=1200,
+                k=51,
+                min_cross_k_marker_distance=50,
+            )
+        )

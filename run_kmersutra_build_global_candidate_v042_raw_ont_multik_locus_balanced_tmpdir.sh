@@ -5,7 +5,7 @@
 #$ -jc long
 #$ -mods l_hard mfree 100G
 #$ -adds l_hard h_vmem 100G
-#$ -N KSbuild_global_v037
+#$ -N KSbuild_v042
 
 set -euo pipefail
 
@@ -67,13 +67,13 @@ run_command() {
     fi
 }
 
-DB_ROOT="${DB_ROOT:-/home/pthorpe001/data/databases/kmersutra_db}"
+DB_ROOT="${DB_ROOT:-/home/${USER}/data/databases/kmersutra_db}"
 SOURCE_CONFIG="${SOURCE_CONFIG:-${DB_ROOT}/ncbi_genomes_plasmodium_outgroups_v4/kmersutra_genome_config.tsv}"
 RUN_STAMP="${RUN_STAMP:-$(date +%Y%m%d_%H%M%S)}"
 BUILD_ROOT="${BUILD_ROOT:-${DB_ROOT}/kmersutra_builds}"
 K_VALUES="${K_VALUES:-51 77 101 151}"
 K_LABEL="$(printf '%s' "${K_VALUES}" | tr ' ' '_')"
-FINAL_OUT_DIR="${OUT_DIR:-${BUILD_ROOT}/kmersutra_plasmodium_outgroups_v4_global_candidate_k${K_LABEL}_assemblyaware_v037_${RUN_STAMP}}"
+FINAL_OUT_DIR="${OUT_DIR:-${BUILD_ROOT}/kmersutra_plasmodium_outgroups_v4_global_candidate_k${K_LABEL}_rawontmultiklocusbalanced_v042_${RUN_STAMP}}"
 TMP_PARENT="${TMPDIR:-/tmp}"
 WORK_OUT_DIR="${TMP_PARENT}/$(basename "${FINAL_OUT_DIR}")"
 TAXONOMY_DIR="${TAXONOMY_DIR:-${DB_ROOT}/ncbi_taxonomy}"
@@ -84,10 +84,13 @@ MAX_PER_SPECIES_PER_K="${MAX_PER_SPECIES_PER_K:-100000}"
 GLOBAL_SOURCE_INDEX_MODE="${GLOBAL_SOURCE_INDEX_MODE:-candidate_universe}"
 GLOBAL_INDEX_PROGRESS_INTERVAL="${GLOBAL_INDEX_PROGRESS_INTERVAL:-5000000}"
 SKIP_LOWERCASE_REGIONS="${SKIP_LOWERCASE_REGIONS:-false}"
+MARKER_PROFILE="${MARKER_PROFILE:-raw_ont_multik_locus_balanced}"
+CANDIDATE_K_ORDER="${CANDIDATE_K_ORDER:-auto}"
 MARKER_SELECTION="${MARKER_SELECTION:-independent_multik_genome_spread}"
-MIN_CROSS_K_MARKER_DISTANCE="${MIN_CROSS_K_MARKER_DISTANCE:-5000}"
+MIN_CROSS_K_MARKER_DISTANCE="${MIN_CROSS_K_MARKER_DISTANCE:-250}"
 GENOME_BIN_SIZE="${GENOME_BIN_SIZE:-10000}"
 MAX_PER_GENOME_BIN="${MAX_PER_GENOME_BIN:-10}"
+MAX_PER_GENOME_BIN_BY_K="${MAX_PER_GENOME_BIN_BY_K:-51:3,77:3,101:2,151:2}"
 ASSEMBLY_AWARE_BINNING="${ASSEMBLY_AWARE_BINNING:-true}"
 ASSEMBLY_SMALL_LENGTH="${ASSEMBLY_SMALL_LENGTH:-250000}"
 ASSEMBLY_SMALL_MIN_BIN_SIZE="${ASSEMBLY_SMALL_MIN_BIN_SIZE:-10000}"
@@ -151,7 +154,7 @@ trap sync_back_outputs EXIT
 rm -rf "${WORK_OUT_DIR}"
 mkdir -p "${INPUTS_DIR}" "${METRICS_DIR}" "${FINAL_OUT_DIR}"
 
-log_info "Starting KmerSutra global candidate panel build"
+log_info "Starting KmerSutra v0.42 raw ONT multi-k locus-balanced global candidate panel build"
 log_info "Host: $(hostname)"
 log_info "DB root: ${DB_ROOT}"
 log_info "Source config: ${SOURCE_CONFIG}"
@@ -164,10 +167,13 @@ log_info "Keep SQLite: ${KEEP_SQLITE}"
 log_info "Global source-index mode: ${GLOBAL_SOURCE_INDEX_MODE}"
 log_info "Candidate-universe mode samples genome-spread candidates before conflict annotation"
 log_info "Global index progress interval: ${GLOBAL_INDEX_PROGRESS_INTERVAL}"
+log_info "Marker profile: ${MARKER_PROFILE}"
+log_info "Candidate k order: ${CANDIDATE_K_ORDER}"
 log_info "Marker selection: ${MARKER_SELECTION}"
-log_info "Minimum cross-k marker distance: ${MIN_CROSS_K_MARKER_DISTANCE}"
+log_info "Minimum cross-k marker/locus distance: ${MIN_CROSS_K_MARKER_DISTANCE}"
 log_info "Genome bin size: ${GENOME_BIN_SIZE}"
 log_info "Max per genome bin: ${MAX_PER_GENOME_BIN}"
+log_info "Max per genome bin by k: ${MAX_PER_GENOME_BIN_BY_K}"
 log_info "Assembly-aware binning: ${ASSEMBLY_AWARE_BINNING}"
 log_info "Skip lowercase repeat-masked regions: ${SKIP_LOWERCASE_REGIONS}"
 log_info "Assembly small length threshold: ${ASSEMBLY_SMALL_LENGTH}"
@@ -202,10 +208,13 @@ command -v kmersutra-build-panel >/dev/null 2>&1 || fail "kmersutra-build-panel 
     printf 'max_per_species_per_k\t%s\n' "${MAX_PER_SPECIES_PER_K}"
     printf 'global_source_index_mode\t%s\n' "${GLOBAL_SOURCE_INDEX_MODE}"
     printf 'global_index_progress_interval\t%s\n' "${GLOBAL_INDEX_PROGRESS_INTERVAL}"
+    printf 'marker_profile\t%s\n' "${MARKER_PROFILE}"
+    printf 'candidate_k_order\t%s\n' "${CANDIDATE_K_ORDER}"
     printf 'marker_selection\t%s\n' "${MARKER_SELECTION}"
     printf 'min_cross_k_marker_distance\t%s\n' "${MIN_CROSS_K_MARKER_DISTANCE}"
     printf 'genome_bin_size\t%s\n' "${GENOME_BIN_SIZE}"
     printf 'max_per_genome_bin\t%s\n' "${MAX_PER_GENOME_BIN}"
+    printf 'max_per_genome_bin_by_k\t%s\n' "${MAX_PER_GENOME_BIN_BY_K}"
     printf 'assembly_aware_binning\t%s\n' "${ASSEMBLY_AWARE_BINNING}"
     printf 'skip_lowercase_regions\t%s\n' "${SKIP_LOWERCASE_REGIONS}"
     printf 'assembly_small_length\t%s\n' "${ASSEMBLY_SMALL_LENGTH}"
@@ -260,6 +269,8 @@ BUILD_COMMAND=(
     --evidence_ranks "${EVIDENCE_RANK_ARRAY[@]}"
     --threads "${KMERSUTRA_THREADS}"
     --global_candidate_evidence
+    --marker_profile "${MARKER_PROFILE}"
+    --candidate_k_order "${CANDIDATE_K_ORDER}"
     --sqlite_batch_size "${SQLITE_BATCH_SIZE}"
     --max_per_species_per_k "${MAX_PER_SPECIES_PER_K}"
     --global_source_index_mode "${GLOBAL_SOURCE_INDEX_MODE}"
@@ -268,6 +279,7 @@ BUILD_COMMAND=(
     --min_cross_k_marker_distance "${MIN_CROSS_K_MARKER_DISTANCE}"
     --genome_bin_size "${GENOME_BIN_SIZE}"
     --max_per_genome_bin "${MAX_PER_GENOME_BIN}"
+    --max_per_genome_bin_by_k "${MAX_PER_GENOME_BIN_BY_K}"
     "${ASSEMBLY_AWARE_ARG}"
     --assembly_small_length "${ASSEMBLY_SMALL_LENGTH}"
     --assembly_small_min_bin_size "${ASSEMBLY_SMALL_MIN_BIN_SIZE}"

@@ -253,6 +253,30 @@ def shifted_genome_bin_key(
     return (genome_id, contig_id, (position + offset) // genome_bin_size)
 
 
+def interval_gap(*, start_a: int, end_a: int, start_b: int, end_b: int) -> int:
+    """Return the distance between two half-open marker intervals.
+
+    Parameters
+    ----------
+    start_a : int
+        Start coordinate of interval A.
+    end_a : int
+        End coordinate of interval A.
+    start_b : int
+        Start coordinate of interval B.
+    end_b : int
+        End coordinate of interval B.
+
+    Returns
+    -------
+    int
+        Zero when intervals overlap or touch, otherwise the separating bases.
+    """
+    left_end = min(int(end_a), int(end_b))
+    right_start = max(int(start_a), int(start_b))
+    return max(0, right_start - left_end)
+
+
 def cross_k_region_is_available(
     *,
     selected_positions: list[tuple[str, str, int, int]],
@@ -290,12 +314,21 @@ def cross_k_region_is_available(
         return True
     candidate_position = int(position)
     candidate_k = int(k)
+    candidate_end = candidate_position + candidate_k
     for selected_genome, selected_contig, selected_position, selected_k in selected_positions:
+        selected_k = int(selected_k)
         if selected_k == candidate_k:
             continue
         if selected_genome != genome_id or selected_contig != contig_id:
             continue
-        if abs(int(selected_position) - candidate_position) < min_cross_k_marker_distance:
+        selected_start = int(selected_position)
+        selected_end = selected_start + selected_k
+        if interval_gap(
+            start_a=candidate_position,
+            end_a=candidate_end,
+            start_b=selected_start,
+            end_b=selected_end,
+        ) < min_cross_k_marker_distance:
             return False
     return True
 

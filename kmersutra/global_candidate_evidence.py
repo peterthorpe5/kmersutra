@@ -265,6 +265,31 @@ def _shifted_bin_id(
     return int(max(0, position) + offset) // genome_bin_size
 
 
+def interval_gap(*, start_a: int, end_a: int, start_b: int, end_b: int) -> int:
+    """Return the distance between two half-open genomic intervals.
+
+    Parameters
+    ----------
+    start_a : int
+        Start coordinate of interval A.
+    end_a : int
+        End coordinate of interval A.
+    start_b : int
+        Start coordinate of interval B.
+    end_b : int
+        End coordinate of interval B.
+
+    Returns
+    -------
+    int
+        Zero when intervals overlap or touch, otherwise the number of bases
+        separating them.
+    """
+    left_end = min(int(end_a), int(end_b))
+    right_start = max(int(start_a), int(start_b))
+    return max(0, right_start - left_end)
+
+
 def _cross_k_candidate_available(
     *,
     selected_positions: list[tuple[str, int, int]],
@@ -301,12 +326,21 @@ def _cross_k_candidate_available(
         raise ValueError("min_cross_k_marker_distance must be non-negative")
     if min_cross_k_marker_distance == 0:
         return True
+    candidate_start = int(position)
+    candidate_end = candidate_start + int(k)
     for selected_contig, selected_position, selected_k in selected_positions:
         if selected_k == int(k):
             continue
         if selected_contig != contig_id:
             continue
-        if abs(int(selected_position) - int(position)) < min_cross_k_marker_distance:
+        selected_start = int(selected_position)
+        selected_end = selected_start + int(selected_k)
+        if interval_gap(
+            start_a=candidate_start,
+            end_a=candidate_end,
+            start_b=selected_start,
+            end_b=selected_end,
+        ) < min_cross_k_marker_distance:
             return False
     return True
 
@@ -335,6 +369,7 @@ class _CrossKPositionIndex:
             raise ValueError("min_distance must be non-negative")
         self.min_distance = int(min_distance)
         self._bucket_width = max(1, self.min_distance)
+        self._max_k_seen = 0
         self._positions: dict[str, dict[int, list[tuple[int, int]]]] = defaultdict(
             lambda: defaultdict(list)
         )
@@ -362,11 +397,23 @@ class _CrossKPositionIndex:
         contig_buckets = self._positions.get(contig_id)
         if not contig_buckets:
             return True
-        for neighbour_bucket in range(bucket_id - 1, bucket_id + 2):
+        candidate_start = int(position)
+        candidate_end = candidate_start + int(k)
+        max_span = max(int(k), self._max_k_seen) + self.min_distance
+        bucket_radius = max(1, (max_span // self._bucket_width) + 2)
+        for neighbour_bucket in range(bucket_id - bucket_radius, bucket_id + bucket_radius + 1):
             for selected_position, selected_k in contig_buckets.get(neighbour_bucket, []):
-                if int(selected_k) == int(k):
+                selected_k = int(selected_k)
+                if selected_k == int(k):
                     continue
-                if abs(int(selected_position) - int(position)) < self.min_distance:
+                selected_start = int(selected_position)
+                selected_end = selected_start + selected_k
+                if interval_gap(
+                    start_a=candidate_start,
+                    end_a=candidate_end,
+                    start_b=selected_start,
+                    end_b=selected_end,
+                ) < self.min_distance:
                     return False
         return True
 
@@ -385,6 +432,7 @@ class _CrossKPositionIndex:
         if self.min_distance == 0:
             return
         bucket_id = int(position) // self._bucket_width
+        self._max_k_seen = max(self._max_k_seen, int(k))
         self._positions[contig_id][bucket_id].append((int(position), int(k)))
 
 

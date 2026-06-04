@@ -312,3 +312,37 @@ class TestIndependentMultiKMarkerSelection(unittest.TestCase):
             MarkerSelectionConfig().strategy,
             "independent_multik_genome_spread",
         )
+
+
+class TestMarkerSelectionIntervalSeparation(unittest.TestCase):
+    """Test interval-aware marker-selection de-correlation."""
+
+    def test_cross_k_region_rejects_nested_intervals(self) -> None:
+        """Nested k-mers should not be selected as independent loci."""
+        from kmersutra.marker_selection import cross_k_region_is_available
+
+        self.assertFalse(
+            cross_k_region_is_available(
+                selected_positions=[("genome1", "contig1", 1000, 77)],
+                genome_id="genome1",
+                contig_id="contig1",
+                position=1010,
+                k=51,
+                min_cross_k_marker_distance=1,
+            )
+        )
+
+    def test_cross_k_region_allows_distant_intervals(self) -> None:
+        """Distant k-mers should still be selectable across k values."""
+        from kmersutra.marker_selection import cross_k_region_is_available
+
+        self.assertTrue(
+            cross_k_region_is_available(
+                selected_positions=[("genome1", "contig1", 1000, 77)],
+                genome_id="genome1",
+                contig_id="contig1",
+                position=1200,
+                k=51,
+                min_cross_k_marker_distance=50,
+            )
+        )

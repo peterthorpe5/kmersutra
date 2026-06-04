@@ -1,0 +1,11 @@
+python -m unittest discover -s tests -p 'test*.py'
+
+Ran 335 tests in 20.369s
+
+OK
+
+Notes:
+- pyarrow was not available in the package-build environment, so Parquet-related
+  tests followed the existing optional-dependency warning path.
+- ResourceWarning messages from existing sqlite tests were observed but did not
+  fail the suite.
