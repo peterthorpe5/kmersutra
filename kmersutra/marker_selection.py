@@ -40,6 +40,7 @@ class MarkerSelectionConfig:
     max_per_bucket: int | None = None
     genome_bin_size: int = 10000
     max_per_genome_bin: int = 10
+    max_per_genome_bin_by_k: dict[int, int] | None = None
     min_cross_k_marker_distance: int = 5000
 
     def validate(self) -> None:
@@ -66,8 +67,38 @@ class MarkerSelectionConfig:
             raise ValueError("genome_bin_size must be positive")
         if self.max_per_genome_bin <= 0:
             raise ValueError("max_per_genome_bin must be positive")
+        if self.max_per_genome_bin_by_k:
+            for k_value, quota in self.max_per_genome_bin_by_k.items():
+                if int(k_value) <= 0:
+                    raise ValueError("max_per_genome_bin_by_k k values must be positive")
+                if int(quota) <= 0:
+                    raise ValueError("max_per_genome_bin_by_k quotas must be positive")
         if self.min_cross_k_marker_distance < 0:
             raise ValueError("min_cross_k_marker_distance must be non-negative")
+
+
+def max_per_genome_bin_for_k(*, config: MarkerSelectionConfig, k: int) -> int:
+    """Return the effective marker-selection bin quota for one k value.
+
+    Parameters
+    ----------
+    config : MarkerSelectionConfig
+        Marker-selection configuration.
+    k : int
+        Candidate k-mer length.
+
+    Returns
+    -------
+    int
+        Effective per-bin quota for this k value.
+    """
+    if config.max_per_genome_bin_by_k:
+        quota = int(config.max_per_genome_bin_by_k.get(int(k), config.max_per_genome_bin))
+    else:
+        quota = int(config.max_per_genome_bin)
+    if quota <= 0:
+        raise ValueError("effective max_per_genome_bin quota must be positive")
+    return quota
 
 
 @dataclass
@@ -594,7 +625,8 @@ def select_genome_spread_markers(
         heap = states[key][bin_key]
         entry = (-score, stable_order, item)
         stable_order += 1
-        if len(heap) < config.max_per_genome_bin:
+        effective_bin_quota = max_per_genome_bin_for_k(config=config, k=int(item.k))
+        if len(heap) < effective_bin_quota:
             heapq.heappush(heap, entry)
             continue
         if score < -heap[0][0]:
@@ -667,7 +699,8 @@ def _select_independent_multik_markers(
         heap = states[key][bin_key]
         entry = (-score, stable_order, item)
         stable_order += 1
-        if len(heap) < config.max_per_genome_bin:
+        effective_bin_quota = max_per_genome_bin_for_k(config=config, k=int(item.k))
+        if len(heap) < effective_bin_quota:
             heapq.heappush(heap, entry)
             continue
         if score < -heap[0][0]:

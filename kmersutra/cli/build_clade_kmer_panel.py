@@ -32,7 +32,9 @@ from kmersutra.all_candidate_evidence import (
 )
 from kmersutra.global_candidate_evidence import (
     build_global_candidate_evidence_sqlite,
+    format_max_per_genome_bin_by_k,
     iter_retained_global_candidate_diagnostics,
+    parse_max_per_genome_bin_by_k_spec,
     summarise_candidate_universe_audit_sqlite,
 )
 from kmersutra.target_evidence import (
@@ -74,7 +76,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--k_values", nargs="+", type=int, default=[31, 51, 71, 101])
     parser.add_argument(
         "--marker_profile",
-        choices=["default", "raw_ont_balanced"],
+        choices=["default", "raw_ont_balanced", "raw_ont_multik_balanced"],
         default="default",
         help=(
             "High-level build profile. default preserves historical behaviour. "
@@ -138,13 +140,26 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--max_per_genome_bin_by_k",
+        default="",
+        help=(
+            "Optional comma-separated per-k candidate/bin quotas, for example "
+            "51:3,77:3,101:2,151:2. These quotas override "
+            "--max_per_genome_bin for matching k values and are intended for "
+            "raw ONT multi-k balanced builds."
+        ),
+    )
+    parser.add_argument(
         "--min_cross_k_marker_distance",
         type=int,
-        default=5000,
+        default=None,
         help=(
             "Minimum distance in reference bases between retained markers from "
             "different k values within the same genome/contig/evidence bucket "
-            "when using independent multi-k marker selection."
+            "when using independent multi-k marker selection. If omitted, "
+            "default/raw_ont_balanced use 5000 and raw_ont_multik_balanced "
+            "uses 0 so per-k quotas, rather than cross-k blocking, control "
+            "local evidence density."
         ),
     )
     parser.add_argument(
@@ -528,6 +543,7 @@ def _write_panel_streaming(
     marker_selection: str = "first_seen",
     genome_bin_size: int = 10000,
     max_per_genome_bin: int = 10,
+    max_per_genome_bin_by_k: dict[int, int] | None = None,
     min_cross_k_marker_distance: int = 5000,
 ) -> tuple[int, list[dict[str, object]]]:
     """Write diagnostic k-mers to a panel file while summarising counts.
@@ -548,8 +564,9 @@ def _write_panel_streaming(
     genome_bin_size : int, optional
         Reference bases per genome bin for genome-spread selection.
     max_per_genome_bin : int, optional
-        Maximum retained markers per source genome/contig/bin within an evidence
-        bucket for genome-spread selection.
+        Global fallback maximum retained markers per source genome/contig/bin.
+    max_per_genome_bin_by_k : dict[int, int] or None, optional
+        Optional per-k marker-selection bin quotas.
     min_cross_k_marker_distance : int, optional
         Minimum reference distance between retained markers from different k
         values in independent multi-k marker selection.
@@ -568,6 +585,7 @@ def _write_panel_streaming(
         max_per_bucket=max_per_species_per_k,
         genome_bin_size=genome_bin_size,
         max_per_genome_bin=max_per_genome_bin,
+        max_per_genome_bin_by_k=max_per_genome_bin_by_k,
         min_cross_k_marker_distance=min_cross_k_marker_distance,
     )
     selection_config.validate()
@@ -576,11 +594,12 @@ def _write_panel_streaming(
         logger.info(
             "Selecting %s marker subset: max_per_bucket=%s; "
             "genome_bin_size=%s; max_per_genome_bin=%s; "
-            "min_cross_k_marker_distance=%s",
+            "max_per_genome_bin_by_k=%s; min_cross_k_marker_distance=%s",
             marker_selection,
             max_per_species_per_k,
             genome_bin_size,
             max_per_genome_bin,
+            format_max_per_genome_bin_by_k(quotas=max_per_genome_bin_by_k) or "none",
             min_cross_k_marker_distance,
         )
         diagnostic_kmers = select_genome_spread_markers(
@@ -713,7 +732,7 @@ def resolve_candidate_k_order(*, marker_profile: str, candidate_k_order: str) ->
     ValueError
         If an unsupported profile or order is supplied.
     """
-    valid_profiles = {"default", "raw_ont_balanced"}
+    valid_profiles = {"default", "raw_ont_balanced", "raw_ont_multik_balanced"}
     valid_orders = {"auto", "long_to_short", "short_to_long", "input"}
     if marker_profile not in valid_profiles:
         raise ValueError(
@@ -727,7 +746,64 @@ def resolve_candidate_k_order(*, marker_profile: str, candidate_k_order: str) ->
         return candidate_k_order
     if marker_profile == "raw_ont_balanced":
         return "short_to_long"
+    if marker_profile == "raw_ont_multik_balanced":
+        return "input"
     return "long_to_short"
+
+
+
+
+def resolve_min_cross_k_marker_distance(
+    *, marker_profile: str, min_cross_k_marker_distance: int | None
+) -> int:
+    """Resolve the profile-specific cross-k spacing default.
+
+    Parameters
+    ----------
+    marker_profile : str
+        Selected marker profile.
+    min_cross_k_marker_distance : int or None
+        User-specified distance, or ``None`` when omitted.
+
+    Returns
+    -------
+    int
+        Effective minimum cross-k spacing.
+    """
+    if min_cross_k_marker_distance is not None:
+        if min_cross_k_marker_distance < 0:
+            raise ValueError("min_cross_k_marker_distance must be non-negative")
+        return int(min_cross_k_marker_distance)
+    if marker_profile == "raw_ont_multik_balanced":
+        return 0
+    return 5000
+
+
+def resolve_max_per_genome_bin_by_k(
+    *, marker_profile: str, max_per_genome_bin_by_k: str
+) -> dict[int, int]:
+    """Resolve profile-specific per-k candidate bin quotas.
+
+    Parameters
+    ----------
+    marker_profile : str
+        Selected marker profile.
+    max_per_genome_bin_by_k : str
+        User-specified quota string.
+
+    Returns
+    -------
+    dict[int, int]
+        Effective per-k quota mapping.
+    """
+    explicit = parse_max_per_genome_bin_by_k_spec(
+        spec=max_per_genome_bin_by_k
+    )
+    if explicit:
+        return explicit
+    if marker_profile == "raw_ont_multik_balanced":
+        return {51: 3, 77: 3, 101: 2, 151: 2}
+    return {}
 
 def main() -> None:
     """Run the panel builder."""
@@ -735,6 +811,14 @@ def main() -> None:
     candidate_k_order = resolve_candidate_k_order(
         marker_profile=args.marker_profile,
         candidate_k_order=args.candidate_k_order,
+    )
+    min_cross_k_marker_distance = resolve_min_cross_k_marker_distance(
+        marker_profile=args.marker_profile,
+        min_cross_k_marker_distance=args.min_cross_k_marker_distance,
+    )
+    max_per_genome_bin_by_k = resolve_max_per_genome_bin_by_k(
+        marker_profile=args.marker_profile,
+        max_per_genome_bin_by_k=args.max_per_genome_bin_by_k,
     )
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -756,7 +840,11 @@ def main() -> None:
     logger.info("Screen panel storage format: %s", args.panel_storage_format)
     logger.info("Genome bin size: %d", args.genome_bin_size)
     logger.info("Max per genome bin: %d", args.max_per_genome_bin)
-    logger.info("Minimum cross-k marker distance: %d", args.min_cross_k_marker_distance)
+    logger.info("Minimum cross-k marker distance: %d", min_cross_k_marker_distance)
+    logger.info(
+        "Per-k candidate bin quotas: %s",
+        format_max_per_genome_bin_by_k(quotas=max_per_genome_bin_by_k) or "none",
+    )
     logger.info("Assembly-aware candidate binning: %s", args.assembly_aware_binning)
     logger.info("Skip lowercase repeat-masked regions: %s", args.skip_lowercase_regions)
     logger.info("Small assembly length threshold: %d", args.assembly_small_length)
@@ -878,7 +966,8 @@ def main() -> None:
                     progress_interval=args.global_index_progress_interval,
                     genome_bin_size=args.genome_bin_size,
                     max_per_genome_bin=args.max_per_genome_bin,
-                    min_cross_k_marker_distance=args.min_cross_k_marker_distance,
+                    max_per_genome_bin_by_k=max_per_genome_bin_by_k,
+                    min_cross_k_marker_distance=min_cross_k_marker_distance,
                     assembly_aware_binning=args.assembly_aware_binning,
                     assembly_small_length=args.assembly_small_length,
                     assembly_small_min_bin_size=args.assembly_small_min_bin_size,
@@ -906,7 +995,8 @@ def main() -> None:
                     marker_selection=args.marker_selection,
                     genome_bin_size=args.genome_bin_size,
                     max_per_genome_bin=args.max_per_genome_bin,
-                    min_cross_k_marker_distance=args.min_cross_k_marker_distance,
+                    max_per_genome_bin_by_k=max_per_genome_bin_by_k,
+                    min_cross_k_marker_distance=min_cross_k_marker_distance,
                 )
             collection_summary = global_candidate_result.collection_summary
             if args.global_source_index_mode == "candidate_universe":
@@ -989,6 +1079,9 @@ def main() -> None:
                             "k_values": ";".join(map(str, args.k_values)),
                             "marker_profile": args.marker_profile,
                             "candidate_k_order": candidate_k_order,
+                            "max_per_genome_bin_by_k": format_max_per_genome_bin_by_k(
+                                quotas=max_per_genome_bin_by_k
+                            ),
                             "marker_selection": args.marker_selection,
                             "global_source_index_mode": args.global_source_index_mode,
                             "global_index_progress_interval": args.global_index_progress_interval,
@@ -996,7 +1089,7 @@ def main() -> None:
                             "candidate_evidence_audit": str(candidate_evidence_audit_path),
                             "genome_bin_size": args.genome_bin_size,
                             "max_per_genome_bin": args.max_per_genome_bin,
-                            "min_cross_k_marker_distance": args.min_cross_k_marker_distance,
+                            "min_cross_k_marker_distance": min_cross_k_marker_distance,
                             "write_module_parquet": args.write_module_parquet,
                             "module_parquet_dir": args.module_parquet_dir,
                             "module_name": args.module_name,
@@ -1071,7 +1164,8 @@ def main() -> None:
                     marker_selection=args.marker_selection,
                     genome_bin_size=args.genome_bin_size,
                     max_per_genome_bin=args.max_per_genome_bin,
-                    min_cross_k_marker_distance=args.min_cross_k_marker_distance,
+                    max_per_genome_bin_by_k=max_per_genome_bin_by_k,
+                    min_cross_k_marker_distance=min_cross_k_marker_distance,
                 )
             collection_summary = all_candidate_result.collection_summary
             write_tsv(
@@ -1111,7 +1205,8 @@ def main() -> None:
                     marker_selection=args.marker_selection,
                     genome_bin_size=args.genome_bin_size,
                     max_per_genome_bin=args.max_per_genome_bin,
-                    min_cross_k_marker_distance=args.min_cross_k_marker_distance,
+                    max_per_genome_bin_by_k=max_per_genome_bin_by_k,
+                    min_cross_k_marker_distance=min_cross_k_marker_distance,
                 )
             collection_summary = target_result.collection_summary
             write_tsv(
@@ -1228,7 +1323,7 @@ def main() -> None:
                 "module_count": module_export_result.n_modules if module_export_result else 0,
                 "genome_bin_size": args.genome_bin_size,
                 "max_per_genome_bin": args.max_per_genome_bin,
-                "min_cross_k_marker_distance": args.min_cross_k_marker_distance,
+                "min_cross_k_marker_distance": min_cross_k_marker_distance,
                 "assembly_aware_binning": args.assembly_aware_binning,
                 "skip_lowercase_regions": args.skip_lowercase_regions,
                 "assembly_small_length": args.assembly_small_length,

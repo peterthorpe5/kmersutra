@@ -57,6 +57,108 @@ VALID_GLOBAL_SOURCE_INDEX_MODES = {
 VALID_CANDIDATE_K_ORDERS = {"long_to_short", "short_to_long", "input"}
 
 
+
+
+def parse_max_per_genome_bin_by_k_spec(*, spec: str | None) -> dict[int, int]:
+    """Parse a per-k candidate bin quota specification.
+
+    Parameters
+    ----------
+    spec : str or None
+        Comma-separated ``k:quota`` pairs, for example
+        ``"51:4,77:3,101:2,151:1"``. Empty values return an empty mapping.
+
+    Returns
+    -------
+    dict[int, int]
+        Mapping from k value to maximum sampled candidates per effective
+        genome/bin for that k.
+
+    Raises
+    ------
+    ValueError
+        If the specification is malformed or contains non-positive values.
+    """
+    if spec is None:
+        return {}
+    text = str(spec).strip()
+    if not text:
+        return {}
+    quotas: dict[int, int] = {}
+    for raw_part in text.split(","):
+        part = raw_part.strip()
+        if not part:
+            continue
+        if ":" not in part:
+            raise ValueError(
+                "max_per_genome_bin_by_k entries must use k:quota format"
+            )
+        raw_k, raw_quota = part.split(":", 1)
+        try:
+            k_value = int(raw_k.strip())
+            quota = int(raw_quota.strip())
+        except ValueError as exc:
+            raise ValueError(
+                "max_per_genome_bin_by_k entries must contain integer k and quota values"
+            ) from exc
+        if k_value <= 0:
+            raise ValueError("max_per_genome_bin_by_k k values must be positive")
+        if quota <= 0:
+            raise ValueError("max_per_genome_bin_by_k quotas must be positive")
+        quotas[k_value] = quota
+    return quotas
+
+
+def format_max_per_genome_bin_by_k(*, quotas: dict[int, int] | None) -> str:
+    """Format per-k candidate bin quotas for logs and TSV metadata.
+
+    Parameters
+    ----------
+    quotas : dict[int, int] or None
+        Per-k quota mapping.
+
+    Returns
+    -------
+    str
+        Stable comma-separated representation, or an empty string.
+    """
+    if not quotas:
+        return ""
+    return ",".join(f"{int(k)}:{int(quotas[k])}" for k in sorted(quotas))
+
+
+def resolve_candidate_bin_quota(
+    *,
+    k: int,
+    max_per_genome_bin: int,
+    max_per_genome_bin_by_k: dict[int, int] | None = None,
+) -> int:
+    """Return the effective per-bin sampling quota for one k value.
+
+    Parameters
+    ----------
+    k : int
+        Candidate k value.
+    max_per_genome_bin : int
+        Global fallback quota.
+    max_per_genome_bin_by_k : dict[int, int] or None, optional
+        Optional per-k quota mapping.
+
+    Returns
+    -------
+    int
+        Effective candidate quota for this k value.
+    """
+    if max_per_genome_bin <= 0:
+        raise ValueError("max_per_genome_bin must be positive")
+    if max_per_genome_bin_by_k:
+        quota = int(max_per_genome_bin_by_k.get(int(k), max_per_genome_bin))
+    else:
+        quota = int(max_per_genome_bin)
+    if quota <= 0:
+        raise ValueError("effective max_per_genome_bin quota must be positive")
+    return quota
+
 def order_candidate_k_values(*, k_values: list[int], candidate_k_order: str) -> list[int]:
     """Return candidate-sampling k values in the requested order.
 
@@ -1069,6 +1171,7 @@ def collect_candidate_universe_sqlite(
     batch_size: int = 50000,
     genome_bin_size: int = 10000,
     max_per_genome_bin: int = 10,
+    max_per_genome_bin_by_k: dict[int, int] | None = None,
     min_cross_k_marker_distance: int = 5000,
     assembly_aware_binning: bool = True,
     assembly_small_length: int = 250000,
@@ -1103,7 +1206,9 @@ def collect_candidate_universe_sqlite(
     genome_bin_size : int, optional
         Reference bases per candidate-sampling bin.
     max_per_genome_bin : int, optional
-        Maximum sampled candidates per effective genome/k/bin.
+        Global fallback maximum sampled candidates per effective genome/k/bin.
+    max_per_genome_bin_by_k : dict[int, int] or None, optional
+        Optional per-k maximum sampled candidates per effective genome/k/bin.
     min_cross_k_marker_distance : int, optional
         Minimum same-contig distance between sampled markers from different k
         values.
@@ -1143,6 +1248,9 @@ def collect_candidate_universe_sqlite(
         raise ValueError("genome_bin_size must be positive")
     if max_per_genome_bin <= 0:
         raise ValueError("max_per_genome_bin must be positive")
+    formatted_bin_quotas = format_max_per_genome_bin_by_k(
+        quotas=max_per_genome_bin_by_k
+    )
     if min_cross_k_marker_distance < 0:
         raise ValueError("min_cross_k_marker_distance must be non-negative")
     if progress_interval <= 0:
@@ -1255,7 +1363,12 @@ def collect_candidate_universe_sqlite(
                             genome_bin_size=effective_genome_bin_size,
                         )
                         bin_key = (int(k), bin_scope, bin_id)
-                        if bin_counts[bin_key] >= max_per_genome_bin:
+                        effective_bin_quota = resolve_candidate_bin_quota(
+                            k=int(k),
+                            max_per_genome_bin=max_per_genome_bin,
+                            max_per_genome_bin_by_k=max_per_genome_bin_by_k,
+                        )
+                        if bin_counts[bin_key] >= effective_bin_quota:
                             pass
                         elif not cross_k_index.is_available(
                             contig_id=record.identifier,
@@ -1339,6 +1452,7 @@ def collect_candidate_universe_sqlite(
                     "genome_bin_size": genome_bin_size,
                     "effective_genome_bin_size": effective_genome_bin_size,
                     "max_per_genome_bin": max_per_genome_bin,
+                    "max_per_genome_bin_by_k": formatted_bin_quotas,
                     "min_cross_k_marker_distance": min_cross_k_marker_distance,
                     "assembly_aware_binning": assembly_aware_binning,
                     "assembly_total_length": (
@@ -1545,6 +1659,7 @@ def collect_global_kmer_sources_sqlite(
     progress_interval: int = 1000000,
     genome_bin_size: int = 10000,
     max_per_genome_bin: int = 10,
+    max_per_genome_bin_by_k: dict[int, int] | None = None,
     min_cross_k_marker_distance: int = 5000,
     assembly_aware_binning: bool = True,
     assembly_small_length: int = 250000,
@@ -1585,6 +1700,9 @@ def collect_global_kmer_sources_sqlite(
         raise ValueError("genome_bin_size must be positive")
     if max_per_genome_bin <= 0:
         raise ValueError("max_per_genome_bin must be positive")
+    formatted_bin_quotas = format_max_per_genome_bin_by_k(
+        quotas=max_per_genome_bin_by_k
+    )
     if min_cross_k_marker_distance < 0:
         raise ValueError("min_cross_k_marker_distance must be non-negative")
     if source_index_mode not in VALID_GLOBAL_SOURCE_INDEX_MODES:
@@ -1603,6 +1721,7 @@ def collect_global_kmer_sources_sqlite(
             batch_size=batch_size,
             genome_bin_size=genome_bin_size,
             max_per_genome_bin=max_per_genome_bin,
+            max_per_genome_bin_by_k=max_per_genome_bin_by_k,
             min_cross_k_marker_distance=min_cross_k_marker_distance,
             assembly_aware_binning=assembly_aware_binning,
             assembly_small_length=assembly_small_length,
@@ -2730,6 +2849,7 @@ def build_global_candidate_evidence_sqlite(
     progress_interval: int = 1000000,
     genome_bin_size: int = 10000,
     max_per_genome_bin: int = 10,
+    max_per_genome_bin_by_k: dict[int, int] | None = None,
     min_cross_k_marker_distance: int = 5000,
     assembly_aware_binning: bool = True,
     assembly_small_length: int = 250000,
@@ -2810,6 +2930,11 @@ def build_global_candidate_evidence_sqlite(
         )
         logger.info("Global source-index mode: %s", source_index_mode)
         logger.info("Candidate k sampling order: %s", candidate_k_order)
+        if max_per_genome_bin_by_k:
+            logger.info(
+                "Per-k candidate bin quotas: %s",
+                format_max_per_genome_bin_by_k(quotas=max_per_genome_bin_by_k),
+            )
 
     collection_summary = collect_global_kmer_sources_sqlite(
         genome_configs=genome_configs,
@@ -2820,6 +2945,7 @@ def build_global_candidate_evidence_sqlite(
         progress_interval=progress_interval,
         genome_bin_size=genome_bin_size,
         max_per_genome_bin=max_per_genome_bin,
+        max_per_genome_bin_by_k=max_per_genome_bin_by_k,
         min_cross_k_marker_distance=min_cross_k_marker_distance,
         assembly_aware_binning=assembly_aware_binning,
         assembly_small_length=assembly_small_length,

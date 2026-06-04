@@ -1,0 +1,102 @@
+KmerSutra v0.41.0 release notes
+=================================
+
+Purpose
+-------
+
+v0.41.0 fixes the raw-read database-build problem found after testing the
+v0.40 raw_ont_balanced profile on the public Zymo D6300 bacterial benchmark.
+v0.40 changed candidate sampling from long-to-short to short-to-long, but the
+candidate-universe sampler still applied a global cross-k position exclusion.
+Because k=51 was processed first, k=51 could block nearby k=77/k=101/k=151
+markers. The resulting bacterial panel was strongly k=51 dominated and lacked
+useful longer-k evidence for several expected species.
+
+Main changes
+------------
+
+1. New marker profile:
+
+       --marker_profile raw_ont_multik_balanced
+
+2. New per-k candidate/bin quota option:
+
+       --max_per_genome_bin_by_k "51:3,77:3,101:2,151:2"
+
+   This option allows different k values to retain independent quotas per
+   effective genome/bin. It prevents one k value from consuming all local
+   candidate opportunities.
+
+3. Profile defaults for raw_ont_multik_balanced:
+
+       candidate_k_order: input
+       max_per_genome_bin_by_k: 51:3,77:3,101:2,151:2
+       min_cross_k_marker_distance: 0
+
+   The profile deliberately makes per-k quotas, rather than global cross-k
+   blocking, responsible for controlling local evidence density. This is meant
+   to preserve a multi-k marker ladder for raw ONT benchmarking.
+
+4. Existing profiles remain available:
+
+       default
+       raw_ont_balanced
+       raw_ont_multik_balanced
+
+5. Existing --max_per_genome_bin remains as the fallback for k values absent
+   from --max_per_genome_bin_by_k.
+
+6. Candidate-sampling summaries now include max_per_genome_bin_by_k metadata.
+
+7. Build logs now report the effective per-k quota string.
+
+8. New build wrapper:
+
+       run_kmersutra_build_global_candidate_v041_raw_ont_multik_balanced_tmpdir.sh
+
+   This uses the current Plasmodium v4 config by default and writes output
+   folders labelled rawontmultikbalanced_v041.
+
+Tests
+-----
+
+The unittest suite was run with:
+
+    python -m unittest discover -s tests -p 'test*.py'
+
+Result:
+
+    Ran 328 tests in 12.628s
+    OK
+
+New tests cover:
+
+    parsing --max_per_genome_bin_by_k
+    rejecting malformed quota strings
+    raw_ont_multik_balanced profile defaults
+    explicit quota overrides
+    fallback to global --max_per_genome_bin
+    candidate-universe sampling retaining markers at every k value
+
+Recommended next step
+---------------------
+
+Pause use of the v0.40 raw_ont_balanced bacterial/Zymo database as a final
+benchmark panel. Treat it as diagnostic evidence that short-to-long sampling
+alone over-corrected.
+
+Build a new v0.41 panel using raw_ont_multik_balanced, inspect the final k
+composition, and only then proceed to full spike-in or public dataset screening.
+
+Suggested quick k-composition check after the build:
+
+    BUILD_DIR="/path/to/v041/build"
+    zcat "${BUILD_DIR}/species_kmer_panel.tsv.gz" \
+      | awk -F '\t' 'NR > 1 {count[$2]++} END {for (k in count) print k, count[k]}' \
+      | sort -n
+
+Expected direction of improvement:
+
+    k=51 should no longer starve k=77/k=101/k=151.
+    k=101 and k=151 should have non-trivial marker counts for expected taxa.
+

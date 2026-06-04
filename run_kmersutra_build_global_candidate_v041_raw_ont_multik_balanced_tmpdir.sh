@@ -3,9 +3,9 @@
 #$ -j y
 #$ -pe smp 24
 #$ -jc long
-#$ -mods l_hard mfree 300G
-#$ -adds l_hard h_vmem 300G
-#$ -N KSbuild_global_v021
+#$ -mods l_hard mfree 100G
+#$ -adds l_hard h_vmem 100G
+#$ -N KSbuild_v041
 
 set -euo pipefail
 
@@ -68,12 +68,12 @@ run_command() {
 }
 
 DB_ROOT="${DB_ROOT:-/home/pthorpe001/data/databases/kmersutra_db}"
-SOURCE_CONFIG="${SOURCE_CONFIG:-${DB_ROOT}/ncbi_genomes_plasmodium_outgroups_v3/kmersutra_genome_config.tsv}"
+SOURCE_CONFIG="${SOURCE_CONFIG:-${DB_ROOT}/ncbi_genomes_plasmodium_outgroups_v4/kmersutra_genome_config.tsv}"
 RUN_STAMP="${RUN_STAMP:-$(date +%Y%m%d_%H%M%S)}"
 BUILD_ROOT="${BUILD_ROOT:-${DB_ROOT}/kmersutra_builds}"
-K_VALUES="${K_VALUES:-77 101}"
+K_VALUES="${K_VALUES:-51 77 101 151}"
 K_LABEL="$(printf '%s' "${K_VALUES}" | tr ' ' '_')"
-FINAL_OUT_DIR="${OUT_DIR:-${BUILD_ROOT}/kmersutra_plasmodium_outgroups_v3_global_candidate_k${K_LABEL}_${RUN_STAMP}}"
+FINAL_OUT_DIR="${OUT_DIR:-${BUILD_ROOT}/kmersutra_plasmodium_outgroups_v4_global_candidate_k${K_LABEL}_rawontmultikbalanced_v041_${RUN_STAMP}}"
 TMP_PARENT="${TMPDIR:-/tmp}"
 WORK_OUT_DIR="${TMP_PARENT}/$(basename "${FINAL_OUT_DIR}")"
 TAXONOMY_DIR="${TAXONOMY_DIR:-${DB_ROOT}/ncbi_taxonomy}"
@@ -81,17 +81,53 @@ KMERSUTRA_THREADS="${KMERSUTRA_THREADS:-${NSLOTS:-24}}"
 MAX_KMERSUTRA_THREADS="${MAX_KMERSUTRA_THREADS:-24}"
 SQLITE_BATCH_SIZE="${SQLITE_BATCH_SIZE:-50000}"
 MAX_PER_SPECIES_PER_K="${MAX_PER_SPECIES_PER_K:-100000}"
-GLOBAL_SOURCE_INDEX_MODE="${GLOBAL_SOURCE_INDEX_MODE:-source_rows}"
-GLOBAL_INDEX_PROGRESS_INTERVAL="${GLOBAL_INDEX_PROGRESS_INTERVAL:-1000000}"
-MARKER_SELECTION="${MARKER_SELECTION:-genome_spread}"
+GLOBAL_SOURCE_INDEX_MODE="${GLOBAL_SOURCE_INDEX_MODE:-candidate_universe}"
+GLOBAL_INDEX_PROGRESS_INTERVAL="${GLOBAL_INDEX_PROGRESS_INTERVAL:-5000000}"
+SKIP_LOWERCASE_REGIONS="${SKIP_LOWERCASE_REGIONS:-false}"
+MARKER_PROFILE="${MARKER_PROFILE:-raw_ont_multik_balanced}"
+CANDIDATE_K_ORDER="${CANDIDATE_K_ORDER:-auto}"
+MARKER_SELECTION="${MARKER_SELECTION:-independent_multik_genome_spread}"
+MIN_CROSS_K_MARKER_DISTANCE="${MIN_CROSS_K_MARKER_DISTANCE:-0}"
 GENOME_BIN_SIZE="${GENOME_BIN_SIZE:-10000}"
 MAX_PER_GENOME_BIN="${MAX_PER_GENOME_BIN:-10}"
-WRITE_MODULE_PARQUET="${WRITE_MODULE_PARQUET:-false}"
+MAX_PER_GENOME_BIN_BY_K="${MAX_PER_GENOME_BIN_BY_K:-51:3,77:3,101:2,151:2}"
+ASSEMBLY_AWARE_BINNING="${ASSEMBLY_AWARE_BINNING:-true}"
+ASSEMBLY_SMALL_LENGTH="${ASSEMBLY_SMALL_LENGTH:-250000}"
+ASSEMBLY_SMALL_MIN_BIN_SIZE="${ASSEMBLY_SMALL_MIN_BIN_SIZE:-10000}"
+ASSEMBLY_SMALL_TARGET_BINS="${ASSEMBLY_SMALL_TARGET_BINS:-25}"
+ASSEMBLY_FRAGMENTED_CONTIG_COUNT="${ASSEMBLY_FRAGMENTED_CONTIG_COUNT:-500}"
+ASSEMBLY_FRAGMENTED_N50_MULTIPLIER="${ASSEMBLY_FRAGMENTED_N50_MULTIPLIER:-2.0}"
+ASSEMBLY_FRAGMENTED_MAX_GLOBAL_BINS="${ASSEMBLY_FRAGMENTED_MAX_GLOBAL_BINS:-1000}"
+WRITE_MODULE_MANIFEST="${WRITE_MODULE_MANIFEST:-true}"
+MODULE_MANIFEST_DIR="${MODULE_MANIFEST_DIR:-}"
+MODULE_MAX_GATE_RECORDS_PER_K="${MODULE_MAX_GATE_RECORDS_PER_K:-0}"
+MODULE_MIN_GATE_UNIQUE_KMERS="${MODULE_MIN_GATE_UNIQUE_KMERS:-1}"
+MODULE_MIN_GATE_POSITIVE_SEQUENCES="${MODULE_MIN_GATE_POSITIVE_SEQUENCES:-1}"
+MODULE_MIN_GATE_K_VALUES="${MODULE_MIN_GATE_K_VALUES:-1}"
+MODULE_MIN_GATE_BEST_K="${MODULE_MIN_GATE_BEST_K:-0}"
+
+ASSEMBLY_AWARE_ARG="--assembly_aware_binning"
+case "${ASSEMBLY_AWARE_BINNING}" in
+    false|False|FALSE|0|no|No|NO)
+        ASSEMBLY_AWARE_ARG="--no_assembly_aware_binning"
+        ;;
+esac
+
+WRITE_MODULE_PARQUET="${WRITE_MODULE_PARQUET:-true}"
 MODULE_PARQUET_DIR="${MODULE_PARQUET_DIR:-${WORK_OUT_DIR}/module_parquet}"
 MODULE_NAME="${MODULE_NAME:-$(basename "${FINAL_OUT_DIR}")}"
+PANEL_STORAGE_FORMAT="${PANEL_STORAGE_FORMAT:-auto}"
 RAM_LOG_INTERVAL_SECONDS="${RAM_LOG_INTERVAL_SECONDS:-30}"
 KEEP_SQLITE="${KEEP_SQLITE:-false}"
 EVIDENCE_RANKS="${EVIDENCE_RANKS:-species genus family order class phylum superkingdom}"
+
+EXPECTED_SOURCE_CONFIG="${DB_ROOT}/ncbi_genomes_plasmodium_outgroups_v4/kmersutra_genome_config.tsv"
+if [ "${SOURCE_CONFIG}" != "${EXPECTED_SOURCE_CONFIG}" ]; then
+    fail "SOURCE_CONFIG is not the expected v4 config. SOURCE_CONFIG=${SOURCE_CONFIG}; EXPECTED_SOURCE_CONFIG=${EXPECTED_SOURCE_CONFIG}. Unset SOURCE_CONFIG before submitting if this was accidental."
+fi
+if [[ "${FINAL_OUT_DIR}" == *"outgroups_v3"* ]]; then
+    fail "FINAL_OUT_DIR still contains outgroups_v3: ${FINAL_OUT_DIR}. Unset OUT_DIR before submitting."
+fi
 
 if [ "${KMERSUTRA_THREADS}" -gt "${MAX_KMERSUTRA_THREADS}" ]; then
     log_warn "Capping KMERSUTRA_THREADS from ${KMERSUTRA_THREADS} to ${MAX_KMERSUTRA_THREADS}"
@@ -129,11 +165,27 @@ log_info "K values: ${K_VALUES}"
 log_info "Threads: ${KMERSUTRA_THREADS}"
 log_info "Keep SQLite: ${KEEP_SQLITE}"
 log_info "Global source-index mode: ${GLOBAL_SOURCE_INDEX_MODE}"
+log_info "Candidate-universe mode samples genome-spread candidates before conflict annotation"
 log_info "Global index progress interval: ${GLOBAL_INDEX_PROGRESS_INTERVAL}"
+log_info "Marker profile: ${MARKER_PROFILE}"
+log_info "Candidate k order: ${CANDIDATE_K_ORDER}"
 log_info "Marker selection: ${MARKER_SELECTION}"
+log_info "Minimum cross-k marker distance: ${MIN_CROSS_K_MARKER_DISTANCE}"
 log_info "Genome bin size: ${GENOME_BIN_SIZE}"
 log_info "Max per genome bin: ${MAX_PER_GENOME_BIN}"
+log_info "Max per genome bin by k: ${MAX_PER_GENOME_BIN_BY_K}"
+log_info "Assembly-aware binning: ${ASSEMBLY_AWARE_BINNING}"
+log_info "Skip lowercase repeat-masked regions: ${SKIP_LOWERCASE_REGIONS}"
+log_info "Assembly small length threshold: ${ASSEMBLY_SMALL_LENGTH}"
+log_info "Assembly small minimum bin size: ${ASSEMBLY_SMALL_MIN_BIN_SIZE}"
+log_info "Assembly small target bins: ${ASSEMBLY_SMALL_TARGET_BINS}"
+log_info "Assembly fragmented contig threshold: ${ASSEMBLY_FRAGMENTED_CONTIG_COUNT}"
+log_info "Assembly fragmented N50 multiplier: ${ASSEMBLY_FRAGMENTED_N50_MULTIPLIER}"
+log_info "Assembly fragmented max global bins: ${ASSEMBLY_FRAGMENTED_MAX_GLOBAL_BINS}"
 log_info "Write module Parquet: ${WRITE_MODULE_PARQUET}"
+log_info "Write module manifest: ${WRITE_MODULE_MANIFEST}"
+log_info "Module manifest dir: ${MODULE_MANIFEST_DIR:-${WORK_OUT_DIR}/hierarchical_modules}"
+log_info "Panel storage format: ${PANEL_STORAGE_FORMAT}"
 
 df -h "${TMP_PARENT}" >&2 || true
 
@@ -156,6 +208,21 @@ command -v kmersutra-build-panel >/dev/null 2>&1 || fail "kmersutra-build-panel 
     printf 'max_per_species_per_k\t%s\n' "${MAX_PER_SPECIES_PER_K}"
     printf 'global_source_index_mode\t%s\n' "${GLOBAL_SOURCE_INDEX_MODE}"
     printf 'global_index_progress_interval\t%s\n' "${GLOBAL_INDEX_PROGRESS_INTERVAL}"
+    printf 'marker_profile\t%s\n' "${MARKER_PROFILE}"
+    printf 'candidate_k_order\t%s\n' "${CANDIDATE_K_ORDER}"
+    printf 'marker_selection\t%s\n' "${MARKER_SELECTION}"
+    printf 'min_cross_k_marker_distance\t%s\n' "${MIN_CROSS_K_MARKER_DISTANCE}"
+    printf 'genome_bin_size\t%s\n' "${GENOME_BIN_SIZE}"
+    printf 'max_per_genome_bin\t%s\n' "${MAX_PER_GENOME_BIN}"
+    printf 'max_per_genome_bin_by_k\t%s\n' "${MAX_PER_GENOME_BIN_BY_K}"
+    printf 'assembly_aware_binning\t%s\n' "${ASSEMBLY_AWARE_BINNING}"
+    printf 'skip_lowercase_regions\t%s\n' "${SKIP_LOWERCASE_REGIONS}"
+    printf 'assembly_small_length\t%s\n' "${ASSEMBLY_SMALL_LENGTH}"
+    printf 'assembly_small_min_bin_size\t%s\n' "${ASSEMBLY_SMALL_MIN_BIN_SIZE}"
+    printf 'assembly_small_target_bins\t%s\n' "${ASSEMBLY_SMALL_TARGET_BINS}"
+    printf 'assembly_fragmented_contig_count\t%s\n' "${ASSEMBLY_FRAGMENTED_CONTIG_COUNT}"
+    printf 'assembly_fragmented_n50_multiplier\t%s\n' "${ASSEMBLY_FRAGMENTED_N50_MULTIPLIER}"
+    printf 'assembly_fragmented_max_global_bins\t%s\n' "${ASSEMBLY_FRAGMENTED_MAX_GLOBAL_BINS}"
     printf 'ram_log_interval_seconds\t%s\n' "${RAM_LOG_INTERVAL_SECONDS}"
     printf 'keep_sqlite\t%s\n' "${KEEP_SQLITE}"
     printf 'job_id\t%s\n' "${JOB_ID:-NA}"
@@ -202,18 +269,47 @@ BUILD_COMMAND=(
     --evidence_ranks "${EVIDENCE_RANK_ARRAY[@]}"
     --threads "${KMERSUTRA_THREADS}"
     --global_candidate_evidence
+    --marker_profile "${MARKER_PROFILE}"
+    --candidate_k_order "${CANDIDATE_K_ORDER}"
     --sqlite_batch_size "${SQLITE_BATCH_SIZE}"
     --max_per_species_per_k "${MAX_PER_SPECIES_PER_K}"
     --global_source_index_mode "${GLOBAL_SOURCE_INDEX_MODE}"
     --global_index_progress_interval "${GLOBAL_INDEX_PROGRESS_INTERVAL}"
     --marker_selection "${MARKER_SELECTION}"
+    --min_cross_k_marker_distance "${MIN_CROSS_K_MARKER_DISTANCE}"
     --genome_bin_size "${GENOME_BIN_SIZE}"
     --max_per_genome_bin "${MAX_PER_GENOME_BIN}"
+    --max_per_genome_bin_by_k "${MAX_PER_GENOME_BIN_BY_K}"
+    "${ASSEMBLY_AWARE_ARG}"
+    --assembly_small_length "${ASSEMBLY_SMALL_LENGTH}"
+    --assembly_small_min_bin_size "${ASSEMBLY_SMALL_MIN_BIN_SIZE}"
+    --assembly_small_target_bins "${ASSEMBLY_SMALL_TARGET_BINS}"
+    --assembly_fragmented_contig_count "${ASSEMBLY_FRAGMENTED_CONTIG_COUNT}"
+    --assembly_fragmented_n50_multiplier "${ASSEMBLY_FRAGMENTED_N50_MULTIPLIER}"
+    --assembly_fragmented_max_global_bins "${ASSEMBLY_FRAGMENTED_MAX_GLOBAL_BINS}"
+    --module_min_gate_unique_kmers "${MODULE_MIN_GATE_UNIQUE_KMERS}"
+    --module_min_gate_positive_sequences "${MODULE_MIN_GATE_POSITIVE_SEQUENCES}"
+    --module_min_gate_k_values "${MODULE_MIN_GATE_K_VALUES}"
+    --module_min_gate_best_k "${MODULE_MIN_GATE_BEST_K}"
+    --module_max_gate_records_per_k "${MODULE_MAX_GATE_RECORDS_PER_K}"
+    --panel_storage_format "${PANEL_STORAGE_FORMAT}"
     --ram_log_path "${RAM_LOG_TSV}"
     --ram_log_interval_seconds "${RAM_LOG_INTERVAL_SECONDS}"
     --profile
     --verbose
 )
+
+case "${SKIP_LOWERCASE_REGIONS}" in
+    true|True|TRUE|1|yes|Yes|YES)
+        BUILD_COMMAND+=(--skip_lowercase_regions)
+        ;;
+esac
+
+if [ "${WRITE_MODULE_MANIFEST}" != "true" ]; then
+    BUILD_COMMAND+=(--no_write_module_manifest)
+elif [ -n "${MODULE_MANIFEST_DIR}" ]; then
+    BUILD_COMMAND+=(--module_manifest_dir "${MODULE_MANIFEST_DIR}")
+fi
 
 if [ "${WRITE_MODULE_PARQUET}" = "true" ]; then
     BUILD_COMMAND+=(
