@@ -101,6 +101,93 @@ class KmerHit:
 
 
 
+def filter_panel_index_by_species(
+    *,
+    panel_index: dict[int, dict[str, list[DiagnosticKmer]]],
+    species_names: set[str],
+    min_k: int = 0,
+) -> dict[int, dict[str, list[DiagnosticKmer]]]:
+    """Return a species- and k-filtered diagnostic panel index.
+
+    Parameters
+    ----------
+    panel_index : dict[int, dict[str, list[DiagnosticKmer]]]
+        Full diagnostic k-mer index.
+    species_names : set[str]
+        Species labels to retain. Matching is exact after string conversion.
+    min_k : int, optional
+        Minimum k-mer length to retain. Use zero to retain all k values.
+
+    Returns
+    -------
+    dict[int, dict[str, list[DiagnosticKmer]]]
+        Filtered panel index containing only diagnostic rows for the requested
+        species and k values. Empty k-mer groups are omitted.
+    """
+    if min_k < 0:
+        raise ValueError("min_k must be zero or greater")
+    if not species_names:
+        return {}
+
+    retained_species = {str(name) for name in species_names if str(name)}
+    filtered: dict[int, dict[str, list[DiagnosticKmer]]] = {}
+    for k, kmer_map in panel_index.items():
+        k_int = int(k)
+        if k_int < min_k:
+            continue
+        filtered_kmers: dict[str, list[DiagnosticKmer]] = {}
+        for kmer, diagnostics in kmer_map.items():
+            retained_diagnostics = [
+                diagnostic
+                for diagnostic in diagnostics
+                if diagnostic.species_name in retained_species
+            ]
+            if retained_diagnostics:
+                filtered_kmers[kmer] = retained_diagnostics
+        if filtered_kmers:
+            filtered[k_int] = filtered_kmers
+    return filtered
+
+
+def deduplicate_hits(*, hits: Iterable[KmerHit]) -> list[KmerHit]:
+    """Return hits with duplicate evidence records removed.
+
+    Parameters
+    ----------
+    hits : iterable of KmerHit
+        Hit records to deduplicate.
+
+    Returns
+    -------
+    list[KmerHit]
+        Deduplicated hits in first-observed order.
+    """
+    seen: set[tuple[object, ...]] = set()
+    unique_hits: list[KmerHit] = []
+    for hit in hits:
+        key = (
+            hit.sample_id,
+            hit.sequence_id,
+            hit.sequence_type,
+            hit.k,
+            hit.query_position,
+            hit.matched_kmer,
+            hit.query_kmer,
+            hit.mismatches,
+            hit.panel_type,
+            hit.species_name,
+            hit.clade,
+            hit.evidence_taxid,
+            hit.evidence_name,
+            hit.evidence_rank,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_hits.append(hit)
+    return unique_hits
+
+
 @dataclass(frozen=True)
 class OneMismatchSeedIndex:
     """Seed index used to accelerate one-mismatch fuzzy lookups.

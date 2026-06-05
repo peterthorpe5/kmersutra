@@ -1,0 +1,111 @@
+KmerSutra v0.45 handover for public benchmark chat
+==================================================
+
+Context
+-------
+
+The Plasmodium comparable benchmark reached a good locus-balanced exact-screen
+result, but one limiting case remained: three-genome Plasmodium vivax had good
+LOD50 but high LOD100. Threshold sweeps on the locus-balanced run showed that
+simple post-hoc relaxation did not improve this limiting LOD100 case. The issue
+was therefore treated as a code/design problem rather than another threshold
+problem.
+
+v0.43 introduced raw_ont_sensitive fuzzy long-k support, allowing one mismatch
+for k >= 101 and using a call preset that could count exact-plus-fuzzy evidence.
+This was biologically sensible for noisy raw ONT-style reads, but it risked
+substantial CPU overhead.
+
+v0.44 added a seeded one-mismatch lookup to avoid generating all mutated
+neighbours per query k-mer. This was faster than naive fuzzy matching, but in
+practice it was still too slow when applied to every read against the whole
+panel. In the Plasmodium comparable array, small shuffled-negative samples were
+still running after about one hour. That showed the approach would not scale to
+real public datasets.
+
+v0.45 design decision
+---------------------
+
+v0.45 changes raw_ont_sensitive into an exact-first two-stage rescue workflow:
+
+1. Run a fast exact screen against the whole panel.
+2. Summarise exact species evidence.
+3. Select only candidate species with some exact evidence.
+4. Build a filtered long-k panel for those candidate species.
+5. Run one-mismatch seeded fuzzy rescue only on that candidate panel.
+6. Combine exact hits plus fuzzy hits and deduplicate.
+
+The command-line interface is intentionally kept compatible with the existing
+array shell setup:
+
+    --screen_preset raw_ont_sensitive
+    --call_preset raw_ont_sensitive
+
+The same shell/export blocks should work after installing v0.45, provided the
+worker passes those arguments to kmersutra-screen.
+
+Why this matters for public benchmarking
+----------------------------------------
+
+The public bacterial/Zymo benchmark should not use the v0.44 whole-panel fuzzy
+screen as a final workflow. It is too slow for realistic datasets. Instead, use
+v0.45 raw_ont_sensitive, which keeps the sensitivity idea but limits fuzzy
+matching to taxa with exact evidence.
+
+This is closer to a practical diagnostic interpretation workflow:
+
+    fast exact evidence first
+    fuzzy rescue only where exact evidence indicates a plausible taxon
+
+What to check in logs
+---------------------
+
+A good v0.45 log should contain:
+
+    Running two-stage raw-ONT-sensitive screening: exact pass first, then fuzzy long-k rescue for exact-evidence candidate species only
+    Exact first pass retained ... diagnostic hits
+    Selected ... species for two-stage fuzzy rescue ...
+    Fuzzy rescue panel contains ... unique long-k keys
+
+If candidate species are selected, the fuzzy rescue stage should also show:
+
+    Using accelerated one-mismatch seed-index fuzzy path for k >= 101 ...
+
+If no exact candidate evidence exists, the log should say:
+
+    No fuzzy rescue candidates selected; returning exact-pass hits
+
+This is a good outcome for negative samples because it means they avoid fuzzy
+screening entirely.
+
+Suggested public benchmark stance
+---------------------------------
+
+For the public dataset chat:
+
+* Stop or avoid the v0.44 whole-panel seeded fuzzy screen if it is still running
+  slowly.
+* Install v0.45.
+* Reuse the existing locus-balanced database/panel where appropriate.
+* Rerun with the same raw_ont_sensitive command/export block.
+* Check runtime and false positives before interpreting sensitivity gains.
+
+Important caveat
+----------------
+
+The AI/calibration layer still has not been developed and tested on final
+outputs. Do not claim AI-calibrated calling in the manuscript or public dataset
+benchmark yet. Treat the current work as rule-based exact-plus-rescue evidence
+interpretation.
+
+Testing
+-------
+
+v0.45 was tested with unittest:
+
+    python -m unittest discover -s tests -p 'test*.py'
+
+Result:
+
+    Ran 346 tests in 12.924s
+    OK

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import time
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -28,7 +29,13 @@ from kmersutra.lineage_interpretation import (
 from kmersutra.profiling import WorkflowProfiler
 from kmersutra.logging_utils import configure_logging
 from kmersutra.reporting import write_html_report
-from kmersutra.screen_reads import screen_file_for_species_kmers
+from kmersutra.panel_cache import load_panel_with_cache
+from kmersutra.screen_reads import (
+    deduplicate_hits,
+    filter_panel_index_by_species,
+    screen_file_for_panel_index,
+    screen_file_for_species_kmers,
+)
 from kmersutra.summarise_hits import (
     SPECIES_EVIDENCE_FIELDNAMES,
     TAXONOMIC_EVIDENCE_FIELDNAMES,
@@ -94,12 +101,35 @@ def parse_args() -> argparse.Namespace:
         default="exact",
         help=(
             "Screening preset. The exact preset preserves exact matching. "
-            "raw_ont_sensitive enables one-mismatch fuzzy matching for long "
-            "k-mers unless explicit --max_mismatches/--fuzzy_min_k values are supplied."
+            "raw_ont_sensitive runs a fast exact pass followed by one-mismatch "
+            "long-k fuzzy rescue only for exact-evidence candidate species, "
+            "unless explicit --max_mismatches/--fuzzy_min_k values are supplied."
         ),
     )
     parser.add_argument("--max_mismatches", type=int, default=None)
     parser.add_argument("--fuzzy_min_k", type=int, default=None)
+    parser.add_argument(
+        "--fuzzy_rescue_max_species",
+        type=int,
+        default=8,
+        help=(
+            "Maximum exact-evidence candidate species to pass to the second-stage "
+            "raw_ont_sensitive fuzzy rescue screen. This keeps one-mismatch "
+            "screening scalable by avoiding whole-panel fuzzy matching."
+        ),
+    )
+    parser.add_argument(
+        "--fuzzy_rescue_min_unique_kmers",
+        type=int,
+        default=1,
+        help="Minimum exact unique k-mers required for fuzzy-rescue candidacy.",
+    )
+    parser.add_argument(
+        "--fuzzy_rescue_min_positive_sequences",
+        type=int,
+        default=1,
+        help="Minimum exact positive sequences required for fuzzy-rescue candidacy.",
+    )
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument("--chunk_size", type=int, default=5000)
     parser.add_argument(
@@ -419,6 +449,239 @@ def maybe_write_parquet_table(
     logger.info("Wrote Parquet output %s (%d rows)", output_path, n_written)
 
 
+def select_fuzzy_rescue_species(
+    *,
+    evidence_records: list[dict[str, object]],
+    max_species: int,
+    min_unique_kmers: int,
+    min_positive_sequences: int,
+    logger: logging.Logger,
+) -> list[str]:
+    """Select exact-evidence candidate species for fuzzy long-k rescue.
+
+    Parameters
+    ----------
+    evidence_records : list of dict
+        Exact-pass species evidence rows.
+    max_species : int
+        Maximum number of candidate species to rescue.
+    min_unique_kmers : int
+        Minimum exact-pass unique k-mers required.
+    min_positive_sequences : int
+        Minimum exact-pass positive sequences required.
+    logger : logging.Logger
+        Logger used for diagnostics.
+
+    Returns
+    -------
+    list[str]
+        Candidate species names, ordered by decreasing exact support.
+    """
+    if max_species <= 0:
+        logger.info("Fuzzy rescue disabled because max_species=%d", max_species)
+        return []
+    if min_unique_kmers < 0:
+        raise ValueError("min_unique_kmers must be zero or greater")
+    if min_positive_sequences < 0:
+        raise ValueError("min_positive_sequences must be zero or greater")
+
+    candidates: list[tuple[tuple[int, int, int, int], str]] = []
+    for row in evidence_records:
+        species_name = str(row.get("species_name", ""))
+        if not species_name:
+            continue
+        try:
+            n_unique = int(row.get("n_unique_kmers", 0))
+            n_sequences = int(row.get("n_positive_sequences", 0))
+            best_k = int(row.get("best_k", 0))
+            n_hits = int(row.get("n_hits", 0))
+        except (TypeError, ValueError):
+            continue
+        if n_unique < min_unique_kmers:
+            continue
+        if n_sequences < min_positive_sequences:
+            continue
+        if n_hits <= 0:
+            continue
+        candidates.append(((n_sequences, n_unique, best_k, n_hits), species_name))
+
+    candidates.sort(reverse=True)
+    selected: list[str] = []
+    seen: set[str] = set()
+    for _, species_name in candidates:
+        if species_name in seen:
+            continue
+        selected.append(species_name)
+        seen.add(species_name)
+        if len(selected) >= max_species:
+            break
+
+    logger.info(
+        "Selected %d species for two-stage fuzzy rescue from %d exact-evidence candidates: %s",
+        len(selected),
+        len(candidates),
+        "; ".join(selected) if selected else "none",
+    )
+    return selected
+
+
+def screen_single_panel_with_optional_two_stage_rescue(
+    *,
+    args: argparse.Namespace,
+    logger: logging.Logger,
+    profile_records: list[dict[str, object]] | None,
+) -> list:
+    """Screen a single panel, using exact-first fuzzy rescue when requested.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed command-line arguments.
+    logger : logging.Logger
+        Logger for progress and diagnostics.
+    profile_records : list of dict or None
+        Optional profile sink.
+
+    Returns
+    -------
+    list
+        Diagnostic k-mer hit records.
+    """
+    two_stage_rescue = (
+        args.screen_preset == "raw_ont_sensitive"
+        and int(args.max_mismatches) == 1
+        and args.input_format in {"fastq", "fasta"}
+    )
+
+    if not two_stage_rescue:
+        return screen_file_for_species_kmers(
+            input_path=args.input,
+            panel_path=args.panel,
+            sample_id=args.sample_id,
+            input_format=args.input_format,
+            max_mismatches=args.max_mismatches,
+            fuzzy_min_k=args.fuzzy_min_k,
+            threads=args.threads,
+            chunk_size=args.chunk_size,
+            max_pending_chunks=args.max_pending_chunks,
+            panel_cache_path=args.panel_cache,
+            use_panel_cache=args.use_panel_cache,
+            write_panel_cache=args.write_panel_cache,
+            profile_records=profile_records,
+            logger=logger,
+        )
+
+    logger.info(
+        "Running two-stage raw-ONT-sensitive screening: exact pass first, "
+        "then fuzzy long-k rescue for exact-evidence candidate species only"
+    )
+    panel_start = time.perf_counter()
+    panel_index, panel_source = load_panel_with_cache(
+        panel_path=args.panel,
+        cache_path=args.panel_cache,
+        use_cache=args.use_panel_cache,
+        write_cache=args.write_panel_cache,
+    )
+    panel_seconds = time.perf_counter() - panel_start
+    if profile_records is not None:
+        profile_records.append({
+            "stage": "load_panel",
+            "seconds": f"{panel_seconds:.6f}",
+            "detail": f"{panel_source};two_stage_rescue",
+        })
+    logger.info(
+        "Loaded panel from %s with %d k values and %d unique panel k-mer keys in %.3fs",
+        panel_source,
+        len(panel_index),
+        sum(len(kmer_map) for kmer_map in panel_index.values()),
+        panel_seconds,
+    )
+
+    exact_profile = profile_records if profile_records is not None else None
+    exact_hits = screen_file_for_panel_index(
+        input_path=args.input,
+        panel_index=panel_index,
+        sample_id=args.sample_id,
+        input_format=args.input_format,
+        max_mismatches=0,
+        fuzzy_min_k=args.fuzzy_min_k,
+        threads=args.threads,
+        chunk_size=args.chunk_size,
+        max_pending_chunks=args.max_pending_chunks,
+        profile_records=exact_profile,
+        logger=logger,
+    )
+    logger.info("Exact first pass retained %d diagnostic hits", len(exact_hits))
+
+    exact_summary = summarise_species_hits(hits=exact_hits)
+    exact_evidence = summarise_sample_species_evidence(
+        species_summary=exact_summary,
+    )
+    rescue_species = select_fuzzy_rescue_species(
+        evidence_records=exact_evidence,
+        max_species=args.fuzzy_rescue_max_species,
+        min_unique_kmers=args.fuzzy_rescue_min_unique_kmers,
+        min_positive_sequences=args.fuzzy_rescue_min_positive_sequences,
+        logger=logger,
+    )
+    if not rescue_species:
+        logger.info("No fuzzy rescue candidates selected; returning exact-pass hits")
+        return exact_hits
+
+    rescue_panel_index = filter_panel_index_by_species(
+        panel_index=panel_index,
+        species_names=set(rescue_species),
+        min_k=int(args.fuzzy_min_k),
+    )
+    n_rescue_keys = sum(len(kmer_map) for kmer_map in rescue_panel_index.values())
+    logger.info(
+        "Fuzzy rescue panel contains %d k values and %d unique long-k keys",
+        len(rescue_panel_index),
+        n_rescue_keys,
+    )
+    if not rescue_panel_index:
+        logger.info("Fuzzy rescue panel is empty; returning exact-pass hits")
+        return exact_hits
+
+    fuzzy_profile_start = time.perf_counter()
+    rescue_hits_all = screen_file_for_panel_index(
+        input_path=args.input,
+        panel_index=rescue_panel_index,
+        sample_id=args.sample_id,
+        input_format=args.input_format,
+        max_mismatches=args.max_mismatches,
+        fuzzy_min_k=args.fuzzy_min_k,
+        threads=args.threads,
+        chunk_size=args.chunk_size,
+        max_pending_chunks=args.max_pending_chunks,
+        profile_records=None,
+        logger=logger,
+    )
+    fuzzy_profile_seconds = time.perf_counter() - fuzzy_profile_start
+    fuzzy_hits = [hit for hit in rescue_hits_all if hit.mismatches > 0]
+    if profile_records is not None:
+        profile_records.append({
+            "stage": "two_stage_fuzzy_rescue",
+            "seconds": f"{fuzzy_profile_seconds:.6f}",
+            "detail": (
+                f"candidate_species={len(rescue_species)};"
+                f"rescue_panel_keys={n_rescue_keys};"
+                f"fuzzy_hits={len(fuzzy_hits)}"
+            ),
+        })
+    logger.info(
+        "Fuzzy rescue found %d fuzzy hits from %d total rescue-pass hits",
+        len(fuzzy_hits),
+        len(rescue_hits_all),
+    )
+    combined_hits = deduplicate_hits(hits=[*exact_hits, *fuzzy_hits])
+    logger.info(
+        "Two-stage screen retained %d combined diagnostic hits after deduplication",
+        len(combined_hits),
+    )
+    return combined_hits
+
+
 def resolve_screening_preset(*, args: argparse.Namespace, logger: logging.Logger) -> None:
     """Resolve screening-preset defaults in-place.
 
@@ -562,21 +825,10 @@ def main() -> None:
             logger.info(
                 "No module manifest supplied; using single-panel compatibility fallback"
             )
-        hits = screen_file_for_species_kmers(
-            input_path=args.input,
-            panel_path=args.panel,
-            sample_id=args.sample_id,
-            input_format=args.input_format,
-            max_mismatches=args.max_mismatches,
-            fuzzy_min_k=args.fuzzy_min_k,
-            threads=args.threads,
-            chunk_size=args.chunk_size,
-            max_pending_chunks=args.max_pending_chunks,
-            panel_cache_path=args.panel_cache,
-            use_panel_cache=args.use_panel_cache,
-            write_panel_cache=args.write_panel_cache,
-            profile_records=screen_profile_records if profiler else None,
+        hits = screen_single_panel_with_optional_two_stage_rescue(
+            args=args,
             logger=logger,
+            profile_records=screen_profile_records if profiler else None,
         )
     logger.info("Detected %d diagnostic k-mer hits", len(hits))
 

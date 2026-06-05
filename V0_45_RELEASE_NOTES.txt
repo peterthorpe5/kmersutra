@@ -1,0 +1,128 @@
+KmerSutra v0.45.0 release notes
+================================
+
+Purpose
+-------
+
+v0.45.0 replaces the all-sample fuzzy raw-read screen with an exact-first,
+two-stage raw ONT rescue workflow. The previous v0.44 seeded one-mismatch
+implementation was biologically appropriate but still too slow when fuzzy
+screening was applied to every read against the whole panel. In the Plasmodium
+comparable benchmark, small samples were still running after about one hour,
+which would not scale to practical datasets.
+
+Main change
+-----------
+
+The existing command-line interface is retained. Users can keep running:
+
+    --screen_preset raw_ont_sensitive
+    --call_preset raw_ont_sensitive
+
+with empty/default values for:
+
+    --max_mismatches
+    --fuzzy_min_k
+    --min_total_hits
+
+The raw_ont_sensitive screen now performs:
+
+1. Fast exact screening against the full panel.
+2. Exact-evidence candidate-species selection.
+3. One-mismatch long-k fuzzy rescue only for selected candidate species.
+4. Combination and deduplication of exact hits plus fuzzy rescue hits.
+
+This means negative samples or samples with no plausible exact evidence avoid
+whole-panel fuzzy screening. Positive samples pay fuzzy cost only for a small
+candidate panel rather than for all species in the database.
+
+New options
+-----------
+
+The same shell commands work, but the following optional tuning arguments are
+available:
+
+    --fuzzy_rescue_max_species
+        Maximum candidate species to pass from the exact stage to the fuzzy
+        rescue stage. Default: 8.
+
+    --fuzzy_rescue_min_unique_kmers
+        Minimum exact-pass unique k-mers required for fuzzy-rescue candidacy.
+        Default: 1.
+
+    --fuzzy_rescue_min_positive_sequences
+        Minimum exact-pass positive sequences required for fuzzy-rescue
+        candidacy. Default: 1.
+
+Implementation details
+----------------------
+
+Added helper functions:
+
+    kmersutra.screen_reads.filter_panel_index_by_species()
+    kmersutra.screen_reads.deduplicate_hits()
+    kmersutra.cli.screen_reads_for_clade_kmers.select_fuzzy_rescue_species()
+    kmersutra.cli.screen_reads_for_clade_kmers.screen_single_panel_with_optional_two_stage_rescue()
+
+The seeded one-mismatch lookup from v0.44 remains available and is used inside
+the fuzzy rescue pass, but it is now applied only to a filtered long-k candidate
+panel.
+
+Expected log messages
+---------------------
+
+A successful v0.45 raw_ont_sensitive run should include messages similar to:
+
+    Running two-stage raw-ONT-sensitive screening: exact pass first, then fuzzy long-k rescue for exact-evidence candidate species only
+    Exact first pass retained ... diagnostic hits
+    Selected ... species for two-stage fuzzy rescue ...
+    Fuzzy rescue panel contains ... unique long-k keys
+    Using accelerated one-mismatch seed-index fuzzy path for k >= 101 ...
+    Two-stage screen retained ... combined diagnostic hits after deduplication
+
+If no candidate species are observed in the exact pass, the log should say:
+
+    No fuzzy rescue candidates selected; returning exact-pass hits
+
+Tests
+-----
+
+Unit tests were run with unittest, not nose2:
+
+    python -m unittest discover -s tests -p 'test*.py'
+
+Result:
+
+    Ran 346 tests in 12.924s
+    OK
+
+New/updated test coverage includes:
+
+    * raw_ont_sensitive preset defaults.
+    * one-mismatch seed-index fuzzy matching.
+    * candidate species selection for fuzzy rescue.
+    * panel filtering by selected species and minimum k.
+    * hit deduplication after exact-plus-fuzzy rescue.
+
+Recommended benchmark use
+-------------------------
+
+No database rebuild is required. Reuse the current locus-balanced panel and
+rerun only the screening array with:
+
+    SCREEN_PRESET=raw_ont_sensitive
+    CALL_PRESET=raw_ont_sensitive
+
+Keep the existing comparable-array submitter and the current generic TMPDIR
+worker script where possible:
+
+    prepare_submit_kmersutra_v015_conservative_comparable_array.sh
+    run_kmersutra_comparable_array_tmpdir.sh
+
+If using older local wrappers, make sure they pass:
+
+    --screen_preset raw_ont_sensitive
+    --call_preset raw_ont_sensitive
+
+and do not force --max_mismatches, --fuzzy_min_k, or --min_total_hits unless a
+deliberate test is intended.

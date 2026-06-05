@@ -252,3 +252,116 @@ class TestRawOntSensitiveSeedAcceleration(unittest.TestCase):
 
         self.assertEqual(len(hits), 1)
         self.assertEqual(hits[0].mismatches, 1)
+
+from kmersutra.cli.screen_reads_for_clade_kmers import select_fuzzy_rescue_species
+from kmersutra.screen_reads import deduplicate_hits, filter_panel_index_by_species
+
+
+class TestRawOntSensitiveTwoStageRescue(unittest.TestCase):
+    """Tests for exact-first fuzzy rescue candidate selection."""
+
+    def test_select_fuzzy_rescue_species_limits_to_exact_evidence_candidates(self) -> None:
+        """Fuzzy rescue should select supported candidates and ignore zero rows."""
+        evidence = [
+            {
+                "species_name": "Alpha",
+                "n_hits": 5,
+                "n_unique_kmers": 5,
+                "n_positive_sequences": 2,
+                "best_k": 77,
+            },
+            {
+                "species_name": "Beta",
+                "n_hits": 0,
+                "n_unique_kmers": 0,
+                "n_positive_sequences": 0,
+                "best_k": 0,
+            },
+            {
+                "species_name": "Gamma",
+                "n_hits": 9,
+                "n_unique_kmers": 9,
+                "n_positive_sequences": 3,
+                "best_k": 51,
+            },
+        ]
+        selected = select_fuzzy_rescue_species(
+            evidence_records=evidence,
+            max_species=1,
+            min_unique_kmers=1,
+            min_positive_sequences=1,
+            logger=logging.getLogger(__name__),
+        )
+        self.assertEqual(selected, ["Gamma"])
+
+    def test_filter_panel_index_by_species_keeps_requested_long_k_only(self) -> None:
+        """Rescue panels should include only selected species and long k values."""
+        alpha_short = DiagnosticKmer(
+            kmer="A" * 77,
+            k=77,
+            panel_type="species_unique",
+            species_name="Alpha",
+            clade="Demo",
+            source_genomes="g1",
+            source_contigs="c1",
+            example_position=0,
+        )
+        alpha_long = DiagnosticKmer(
+            kmer="A" * 101,
+            k=101,
+            panel_type="species_unique",
+            species_name="Alpha",
+            clade="Demo",
+            source_genomes="g1",
+            source_contigs="c1",
+            example_position=0,
+        )
+        beta_long = DiagnosticKmer(
+            kmer="C" * 101,
+            k=101,
+            panel_type="species_unique",
+            species_name="Beta",
+            clade="Demo",
+            source_genomes="g2",
+            source_contigs="c1",
+            example_position=0,
+        )
+        panel = {
+            77: {"A" * 77: [alpha_short]},
+            101: {"A" * 101: [alpha_long], "C" * 101: [beta_long]},
+        }
+        filtered = filter_panel_index_by_species(
+            panel_index=panel,
+            species_names={"Alpha"},
+            min_k=101,
+        )
+        self.assertNotIn(77, filtered)
+        self.assertIn(101, filtered)
+        self.assertIn("A" * 101, filtered[101])
+        self.assertNotIn("C" * 101, filtered[101])
+
+    def test_deduplicate_hits_removes_repeated_exact_rescue_records(self) -> None:
+        """Combined exact and rescue hits should not duplicate identical records."""
+        diagnostic = DiagnosticKmer(
+            kmer="A" * 101,
+            k=101,
+            panel_type="species_unique",
+            species_name="Alpha",
+            clade="Demo",
+            source_genomes="g1",
+            source_contigs="c1",
+            example_position=0,
+        )
+        record = SequenceRecord(
+            identifier="read1",
+            description="read1",
+            sequence="A" * 101,
+        )
+        hits = screen_sequence_for_kmers(
+            sequence_record=record,
+            panel_index={101: {"A" * 101: [diagnostic]}},
+            sample_id="s1",
+            sequence_type="read",
+        )
+        combined = deduplicate_hits(hits=[*hits, *hits])
+        self.assertEqual(len(combined), 1)
