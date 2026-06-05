@@ -125,3 +125,130 @@ class TestRawOntSensitiveScreening(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+from unittest.mock import patch
+
+from kmersutra.screen_reads import (
+    build_one_mismatch_seed_index,
+    screen_records_for_species_kmers,
+)
+
+
+class TestRawOntSensitiveSeedAcceleration(unittest.TestCase):
+    """Tests for accelerated one-mismatch raw-read screening."""
+
+    def test_one_mismatch_seed_index_finds_long_k_hit(self) -> None:
+        """Seeded one-mismatch screening should preserve fuzzy sensitivity."""
+        panel_kmer = "A" * 101
+        query_kmer = "A" * 100 + "C"
+        diagnostic = DiagnosticKmer(
+            kmer=panel_kmer,
+            k=101,
+            panel_type="species_unique",
+            species_name="Plasmodium example",
+            clade="Plasmodium",
+            source_genomes="g1",
+            source_contigs="c1",
+            example_position=0,
+        )
+        panel_index = {101: {panel_kmer: [diagnostic]}}
+        seed_index = build_one_mismatch_seed_index(
+            panel_index=panel_index,
+            fuzzy_min_k=101,
+        )
+        record = SequenceRecord(
+            identifier="read1",
+            description="read1",
+            sequence=query_kmer,
+        )
+
+        hits = screen_sequence_for_kmers(
+            sequence_record=record,
+            panel_index=panel_index,
+            sample_id="s1",
+            sequence_type="read",
+            max_mismatches=1,
+            fuzzy_min_k=101,
+            one_mismatch_seed_indices=seed_index,
+        )
+
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0].mismatches, 1)
+        self.assertEqual(hits[0].species_name, "Plasmodium example")
+
+    def test_one_mismatch_seed_index_rejects_two_mismatch_candidate(self) -> None:
+        """Seeded one-mismatch screening should still verify Hamming distance."""
+        panel_kmer = "A" * 101
+        query_kmer = "A" * 99 + "CC"
+        diagnostic = DiagnosticKmer(
+            kmer=panel_kmer,
+            k=101,
+            panel_type="species_unique",
+            species_name="Plasmodium example",
+            clade="Plasmodium",
+            source_genomes="g1",
+            source_contigs="c1",
+            example_position=0,
+        )
+        panel_index = {101: {panel_kmer: [diagnostic]}}
+        seed_index = build_one_mismatch_seed_index(
+            panel_index=panel_index,
+            fuzzy_min_k=101,
+        )
+        record = SequenceRecord(
+            identifier="read1",
+            description="read1",
+            sequence=query_kmer,
+        )
+
+        hits = screen_sequence_for_kmers(
+            sequence_record=record,
+            panel_index=panel_index,
+            sample_id="s1",
+            sequence_type="read",
+            max_mismatches=1,
+            fuzzy_min_k=101,
+            one_mismatch_seed_indices=seed_index,
+        )
+
+        self.assertEqual(hits, [])
+
+    def test_record_screening_uses_seed_path_for_one_mismatch(self) -> None:
+        """Record-level one-mismatch screening should avoid neighbour generation."""
+        panel_kmer = "A" * 101
+        query_kmer = "A" * 100 + "C"
+        diagnostic = DiagnosticKmer(
+            kmer=panel_kmer,
+            k=101,
+            panel_type="species_unique",
+            species_name="Plasmodium example",
+            clade="Plasmodium",
+            source_genomes="g1",
+            source_contigs="c1",
+            example_position=0,
+        )
+        records = [
+            SequenceRecord(
+                identifier="read1",
+                description="read1",
+                sequence=query_kmer,
+            )
+        ]
+
+        with patch("kmersutra.screen_reads.iter_mismatch_neighbourhood") as mocked:
+            mocked.side_effect = AssertionError(
+                "Neighbour-generation fallback should not be used for max_mismatches=1"
+            )
+            hits = screen_records_for_species_kmers(
+                records=records,
+                panel_index={101: {panel_kmer: [diagnostic]}},
+                sample_id="s1",
+                sequence_type="read",
+                max_mismatches=1,
+                fuzzy_min_k=101,
+                threads=1,
+                chunk_size=1,
+            )
+
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0].mismatches, 1)

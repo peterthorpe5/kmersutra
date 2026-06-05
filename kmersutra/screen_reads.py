@@ -20,6 +20,7 @@ _GLOBAL_SEQUENCE_TYPE = ""
 _GLOBAL_MAX_MISMATCHES = 0
 _GLOBAL_FUZZY_MIN_K = 71
 _GLOBAL_EXACT_ORIENTATION_INDEX = False
+_GLOBAL_ONE_MISMATCH_SEED_INDICES: dict[int, OneMismatchSeedIndex] | None = None
 
 
 @dataclass(frozen=True)
@@ -98,6 +99,73 @@ class KmerHit:
             "evidence_rank": self.evidence_rank,
         }
 
+
+
+@dataclass(frozen=True)
+class OneMismatchSeedIndex:
+    """Seed index used to accelerate one-mismatch fuzzy lookups.
+
+    Attributes
+    ----------
+    split_position : int
+        Boundary used to divide a k-mer into left and right exact seeds.
+    left_seed_to_kmers : dict[str, set[str]]
+        Mapping from left seed to panel k-mers with that seed.
+    right_seed_to_kmers : dict[str, set[str]]
+        Mapping from right seed to panel k-mers with that seed.
+    """
+
+    split_position: int
+    left_seed_to_kmers: dict[str, set[str]]
+    right_seed_to_kmers: dict[str, set[str]]
+
+
+def build_one_mismatch_seed_index(
+    *,
+    panel_index: dict[int, dict[str, list[DiagnosticKmer]]],
+    fuzzy_min_k: int,
+) -> dict[int, OneMismatchSeedIndex]:
+    """Build a half-seed index for fast one-mismatch fuzzy screening.
+
+    Parameters
+    ----------
+    panel_index : dict[int, dict[str, list[DiagnosticKmer]]]
+        Canonical diagnostic k-mer index.
+    fuzzy_min_k : int
+        Minimum k value eligible for fuzzy matching.
+
+    Returns
+    -------
+    dict[int, OneMismatchSeedIndex]
+        Per-k seed indices. A one-substitution match must share either the
+        left or right half seed with the panel k-mer, so candidate retrieval is
+        far smaller than generating every possible one-mismatch neighbour for
+        every query window.
+    """
+    if fuzzy_min_k <= 0:
+        raise ValueError("fuzzy_min_k must be a positive integer")
+
+    seed_indices: dict[int, OneMismatchSeedIndex] = {}
+    for k, kmer_map in panel_index.items():
+        k_int = int(k)
+        if k_int < fuzzy_min_k or not kmer_map:
+            continue
+        split_position = max(1, k_int // 2)
+        left_seed_to_kmers: dict[str, set[str]] = {}
+        right_seed_to_kmers: dict[str, set[str]] = {}
+        for panel_kmer in kmer_map:
+            if len(panel_kmer) != k_int:
+                continue
+            left_seed = panel_kmer[:split_position]
+            right_seed = panel_kmer[split_position:]
+            left_seed_to_kmers.setdefault(left_seed, set()).add(panel_kmer)
+            right_seed_to_kmers.setdefault(right_seed, set()).add(panel_kmer)
+        seed_indices[k_int] = OneMismatchSeedIndex(
+            split_position=split_position,
+            left_seed_to_kmers=left_seed_to_kmers,
+            right_seed_to_kmers=right_seed_to_kmers,
+        )
+    return seed_indices
 
 
 def build_orientation_aware_exact_index(
@@ -252,10 +320,53 @@ def _fuzzy_hits(
     query_kmer: str,
     diagnostics: dict[str, list[DiagnosticKmer]],
     max_mismatches: int,
+    one_mismatch_seed_index: OneMismatchSeedIndex | None = None,
 ) -> list[tuple[int, DiagnosticKmer]]:
-    """Find fuzzy diagnostic k-mer hits using neighbourhood lookup."""
+    """Find fuzzy diagnostic k-mer hits.
+
+    Parameters
+    ----------
+    query_kmer : str
+        Canonical query k-mer.
+    diagnostics : dict[str, list[DiagnosticKmer]]
+        Diagnostic panel k-mer map for this k value.
+    max_mismatches : int
+        Maximum mismatch distance.
+    one_mismatch_seed_index : OneMismatchSeedIndex or None, optional
+        Optional half-seed index for one-mismatch rescue. When supplied and
+        ``max_mismatches`` is one, candidate panel k-mers are retrieved by
+        exact half-seed matches and then verified by Hamming distance. This
+        avoids generating all 3*k neighbours for every query window.
+
+    Returns
+    -------
+    list of tuple
+        Mismatch count and diagnostic record pairs.
+    """
     if max_mismatches <= 0:
         return []
+
+    if max_mismatches == 1 and one_mismatch_seed_index is not None:
+        split_position = one_mismatch_seed_index.split_position
+        left_seed = query_kmer[:split_position]
+        right_seed = query_kmer[split_position:]
+        candidate_kmers = set()
+        candidate_kmers.update(
+            one_mismatch_seed_index.left_seed_to_kmers.get(left_seed, set())
+        )
+        candidate_kmers.update(
+            one_mismatch_seed_index.right_seed_to_kmers.get(right_seed, set())
+        )
+
+        hits: list[tuple[int, DiagnosticKmer]] = []
+        for candidate in candidate_kmers:
+            if candidate == query_kmer:
+                continue
+            distance = hamming_distance(left=query_kmer, right=candidate)
+            if distance == 1:
+                hits.extend((distance, item) for item in diagnostics.get(candidate, []))
+        return hits
+
     hits: list[tuple[int, DiagnosticKmer]] = []
     for candidate in iter_mismatch_neighbourhood(
         kmer=query_kmer,
@@ -279,6 +390,7 @@ def screen_sequence_for_kmers(
     max_mismatches: int = 0,
     fuzzy_min_k: int = 71,
     exact_orientation_index: bool = False,
+    one_mismatch_seed_indices: dict[int, OneMismatchSeedIndex] | None = None,
 ) -> list[KmerHit]:
     """Screen a sequence for diagnostic k-mers.
 
@@ -301,6 +413,8 @@ def screen_sequence_for_kmers(
         reverse-complement diagnostic keys, so query k-mers are looked up in
         their raw forward orientation without canonicalisation. This is only
         valid for exact matching.
+    one_mismatch_seed_indices : dict[int, OneMismatchSeedIndex] or None, optional
+        Optional pre-computed fast seed indices for one-mismatch fuzzy matching.
 
     Returns
     -------
@@ -333,6 +447,11 @@ def screen_sequence_for_kmers(
                         query_kmer=query_kmer,
                         diagnostics=diagnostics,
                         max_mismatches=max_mismatches,
+                        one_mismatch_seed_index=(
+                            one_mismatch_seed_indices.get(k)
+                            if one_mismatch_seed_indices is not None
+                            else None
+                        ),
                     )
                 )
             for mismatches, diagnostic in matched:
@@ -391,6 +510,7 @@ def _screen_chunk(
     max_mismatches: int,
     fuzzy_min_k: int,
     exact_orientation_index: bool,
+    one_mismatch_seed_indices: dict[int, OneMismatchSeedIndex] | None = None,
 ) -> list[KmerHit]:
     """Screen one chunk of records."""
     hits: list[KmerHit] = []
@@ -404,6 +524,7 @@ def _screen_chunk(
                 max_mismatches=max_mismatches,
                 fuzzy_min_k=fuzzy_min_k,
                 exact_orientation_index=exact_orientation_index,
+                one_mismatch_seed_indices=one_mismatch_seed_indices,
             )
         )
     return hits
@@ -416,6 +537,7 @@ def _init_worker(
     max_mismatches: int,
     fuzzy_min_k: int,
     exact_orientation_index: bool,
+    one_mismatch_seed_indices: dict[int, OneMismatchSeedIndex] | None = None,
 ) -> None:
     """Initialise worker process globals for screening."""
     global _GLOBAL_PANEL_INDEX
@@ -424,12 +546,14 @@ def _init_worker(
     global _GLOBAL_MAX_MISMATCHES
     global _GLOBAL_FUZZY_MIN_K
     global _GLOBAL_EXACT_ORIENTATION_INDEX
+    global _GLOBAL_ONE_MISMATCH_SEED_INDICES
     _GLOBAL_PANEL_INDEX = panel_index
     _GLOBAL_SAMPLE_ID = sample_id
     _GLOBAL_SEQUENCE_TYPE = sequence_type
     _GLOBAL_MAX_MISMATCHES = max_mismatches
     _GLOBAL_FUZZY_MIN_K = fuzzy_min_k
     _GLOBAL_EXACT_ORIENTATION_INDEX = exact_orientation_index
+    _GLOBAL_ONE_MISMATCH_SEED_INDICES = one_mismatch_seed_indices
 
 
 def _screen_chunk_worker(records: list[SequenceRecord]) -> list[KmerHit]:
@@ -444,6 +568,7 @@ def _screen_chunk_worker(records: list[SequenceRecord]) -> list[KmerHit]:
         max_mismatches=_GLOBAL_MAX_MISMATCHES,
         fuzzy_min_k=_GLOBAL_FUZZY_MIN_K,
         exact_orientation_index=_GLOBAL_EXACT_ORIENTATION_INDEX,
+        one_mismatch_seed_indices=_GLOBAL_ONE_MISMATCH_SEED_INDICES,
     )
 
 
@@ -503,6 +628,14 @@ def screen_records_for_species_kmers(
         if use_exact_orientation_index
         else panel_index
     )
+    one_mismatch_seed_indices = (
+        build_one_mismatch_seed_index(
+            panel_index=panel_index,
+            fuzzy_min_k=fuzzy_min_k,
+        )
+        if max_mismatches == 1
+        else None
+    )
 
     if logger:
         logger.info(
@@ -518,10 +651,23 @@ def screen_records_for_species_kmers(
                 n_keys,
             )
         else:
-            logger.info(
-                "Using canonical/fuzzy screening path because max_mismatches=%d",
-                max_mismatches,
-            )
+            if one_mismatch_seed_indices is not None:
+                n_seed_keys = sum(
+                    len(seed_index.left_seed_to_kmers)
+                    + len(seed_index.right_seed_to_kmers)
+                    for seed_index in one_mismatch_seed_indices.values()
+                )
+                logger.info(
+                    "Using accelerated one-mismatch seed-index fuzzy path "
+                    "for k >= %d with %d seed keys",
+                    fuzzy_min_k,
+                    n_seed_keys,
+                )
+            else:
+                logger.info(
+                    "Using canonical/fuzzy screening path because max_mismatches=%d",
+                    max_mismatches,
+                )
 
     if threads == 1:
         all_hits: list[KmerHit] = []
@@ -537,6 +683,7 @@ def screen_records_for_species_kmers(
                     max_mismatches=max_mismatches,
                     fuzzy_min_k=fuzzy_min_k,
                     exact_orientation_index=use_exact_orientation_index,
+                    one_mismatch_seed_indices=one_mismatch_seed_indices,
                 )
             )
         if logger:
@@ -561,6 +708,7 @@ def screen_records_for_species_kmers(
             max_mismatches=max_mismatches,
             fuzzy_min_k=fuzzy_min_k,
             exact_orientation_index=use_exact_orientation_index,
+            one_mismatch_seed_indices=one_mismatch_seed_indices,
         )
 
     with ThreadPoolExecutor(max_workers=threads) as executor:
