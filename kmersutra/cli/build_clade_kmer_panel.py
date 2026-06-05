@@ -81,6 +81,7 @@ def parse_args() -> argparse.Namespace:
             "raw_ont_balanced",
             "raw_ont_multik_balanced",
             "raw_ont_multik_locus_balanced",
+            "raw_ont_lod_balanced",
         ],
         default="default",
         help=(
@@ -89,7 +90,10 @@ def parse_args() -> argparse.Namespace:
             "raw_ont_multik_balanced adds per-k bin quotas. "
             "raw_ont_multik_locus_balanced adds per-k bin quotas plus "
             "small cross-k interval separation so different k values are not "
-            "sampled as nested markers from the same local locus."
+            "sampled as nested markers from the same local locus. "
+            "raw_ont_lod_balanced is an exact-screening sensitivity profile "
+            "that increases k=77/k=101 marker density while retaining locus "
+            "separation, avoiding costly fuzzy screening for routine runs."
         ),
     )
     parser.add_argument(
@@ -166,7 +170,8 @@ def parse_args() -> argparse.Namespace:
             "different k values within the same genome/contig/evidence bucket "
             "when using independent multi-k marker selection. If omitted, "
             "default/raw_ont_balanced use 5000, raw_ont_multik_balanced uses 0, "
-            "and raw_ont_multik_locus_balanced uses 250. The distance is "
+            "raw_ont_multik_locus_balanced uses 250, and raw_ont_lod_balanced "
+            "uses 150. The distance is "
             "interpreted as interval/locus separation between different k "
             "values, not just start-position separation."
         ),
@@ -746,6 +751,7 @@ def resolve_candidate_k_order(*, marker_profile: str, candidate_k_order: str) ->
         "raw_ont_balanced",
         "raw_ont_multik_balanced",
         "raw_ont_multik_locus_balanced",
+        "raw_ont_lod_balanced",
     }
     valid_orders = {"auto", "long_to_short", "short_to_long", "input"}
     if marker_profile not in valid_profiles:
@@ -760,7 +766,11 @@ def resolve_candidate_k_order(*, marker_profile: str, candidate_k_order: str) ->
         return candidate_k_order
     if marker_profile == "raw_ont_balanced":
         return "short_to_long"
-    if marker_profile in {"raw_ont_multik_balanced", "raw_ont_multik_locus_balanced"}:
+    if marker_profile in {
+        "raw_ont_multik_balanced",
+        "raw_ont_multik_locus_balanced",
+        "raw_ont_lod_balanced",
+    }:
         return "input"
     return "long_to_short"
 
@@ -792,6 +802,8 @@ def resolve_min_cross_k_marker_distance(
         return 0
     if marker_profile == "raw_ont_multik_locus_balanced":
         return 250
+    if marker_profile == "raw_ont_lod_balanced":
+        return 150
     return 5000
 
 
@@ -819,6 +831,8 @@ def resolve_max_per_genome_bin_by_k(
         return explicit
     if marker_profile in {"raw_ont_multik_balanced", "raw_ont_multik_locus_balanced"}:
         return {51: 3, 77: 3, 101: 2, 151: 2}
+    if marker_profile == "raw_ont_lod_balanced":
+        return {51: 4, 77: 6, 101: 4, 151: 1}
     return {}
 
 def main() -> None:

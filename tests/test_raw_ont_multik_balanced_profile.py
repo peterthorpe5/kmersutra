@@ -239,3 +239,91 @@ class TestRawOntMultikLocusBalancedProfile(unittest.TestCase):
                     right_end = right_start + int(right_k)
                     gap = max(0, max(left_start, right_start) - min(left_end, right_end))
                     self.assertGreaterEqual(gap, 1)
+
+
+class TestRawOntLodBalancedProfile(unittest.TestCase):
+    """Test the raw ONT LOD-balanced exact-screening build controls."""
+
+    def test_lod_balanced_profile_defaults(self) -> None:
+        """The LOD-balanced profile should favour k=77/k=101 exact evidence."""
+        self.assertEqual(
+            resolve_candidate_k_order(
+                marker_profile="raw_ont_lod_balanced",
+                candidate_k_order="auto",
+            ),
+            "input",
+        )
+        self.assertEqual(
+            resolve_min_cross_k_marker_distance(
+                marker_profile="raw_ont_lod_balanced",
+                min_cross_k_marker_distance=None,
+            ),
+            150,
+        )
+        self.assertEqual(
+            resolve_max_per_genome_bin_by_k(
+                marker_profile="raw_ont_lod_balanced",
+                max_per_genome_bin_by_k="",
+            ),
+            {51: 4, 77: 6, 101: 4, 151: 1},
+        )
+
+    def test_lod_balanced_profile_explicit_quota_override(self) -> None:
+        """Explicit quotas should override LOD-balanced defaults."""
+        self.assertEqual(
+            resolve_max_per_genome_bin_by_k(
+                marker_profile="raw_ont_lod_balanced",
+                max_per_genome_bin_by_k="51:2,77:2,101:2,151:2",
+            ),
+            {51: 2, 77: 2, 101: 2, 151: 2},
+        )
+
+    def test_lod_balanced_candidate_universe_retains_mid_k_values(self) -> None:
+        """LOD-balanced quotas should retain comparatively dense mid-k evidence."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            fasta_path = tmp_path / "genome.fna"
+            sqlite_path = tmp_path / "candidates.sqlite"
+            fasta_path.write_text(
+                ">contig1\n" + "ACGT" * 400 + "\n",
+                encoding="utf-8",
+            )
+            config = GenomeConfig(
+                genome_fasta=fasta_path,
+                species_name="Example species",
+                strain_name="strain1",
+                taxid="12345",
+                role="target_species",
+                clade="example",
+                assembly_accession="ASM1",
+            )
+
+            collect_candidate_universe_sqlite(
+                genome_configs=[config],
+                k_values=[5, 7, 9, 11],
+                sqlite_path=sqlite_path,
+                batch_size=100,
+                genome_bin_size=100,
+                max_per_genome_bin=1,
+                max_per_genome_bin_by_k={5: 4, 7: 6, 9: 4, 11: 1},
+                min_cross_k_marker_distance=1,
+                assembly_aware_binning=False,
+                progress_interval=1000000,
+                candidate_k_order="input",
+            )
+
+            with sqlite3.connect(sqlite_path) as connection:
+                rows = connection.execute(
+                    """
+                    SELECT k, COUNT(*)
+                    FROM candidate_kmers
+                    GROUP BY k
+                    ORDER BY k
+                    """
+                ).fetchall()
+
+            counts = dict(rows)
+            self.assertIn(7, counts)
+            self.assertIn(9, counts)
+            self.assertGreater(counts[7], 0)
+            self.assertGreater(counts[9], 0)
