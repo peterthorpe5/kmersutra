@@ -949,7 +949,7 @@ such as Kraken2 and Metabuli.
 Suggested first Plasmodium/outgroup build:
 
 ```bash
-cd /home/pthorpe001/data/databases/kmersutra_db
+cd /home/${USER}/data/databases/kmersutra_db
 
 kmersutra-build-panel \
   --genome_config ncbi_genomes_plasmodium_outgroups_v3/kmersutra_genome_config_targets_supported_roles.tsv \
@@ -1689,8 +1689,8 @@ The main command is:
 ```bash
 kmersutra-summarise-lca \
   --evidence_table summary_v030_expected_lineage_hammondia/kmersutra_detection_calls_long.tsv.gz \
-  --taxon_map_table /home/pthorpe001/data/databases/kmersutra_db/ncbi_genomes_plasmodium_outgroups_v4/kmersutra_genome_config.tsv \
-  --taxonomy_dir /home/pthorpe001/data/databases/kmersutra_db/taxonomy \
+  --taxon_map_table /home/${USER}/data/databases/kmersutra_db/ncbi_genomes_plasmodium_outgroups_v4/kmersutra_genome_config.tsv \
+  --taxonomy_dir /home/${USER}/data/databases/kmersutra_db/taxonomy \
   --out_table summary_v030_expected_lineage_hammondia/kmersutra_lca_summary.tsv.gz \
   --taxon_name_column species_name \
   --taxon_map_name_column species_name \
@@ -1744,8 +1744,8 @@ numeric features, and a combined HTML/XLSX report:
 kmersutra-benchmark-postprocess \
   --summary_dir summary_v034_expected_lineage_hammondia \
   --out_dir summary_v034_expected_lineage_hammondia/postprocess_v035 \
-  --taxonomy_dir /home/pthorpe001/data/databases/kmersutra_db/ncbi_taxonomy \
-  --taxon_map_table /home/pthorpe001/data/databases/kmersutra_db/ncbi_genomes_plasmodium_outgroups_v4/kmersutra_genome_config.tsv \
+  --taxonomy_dir /home/${USER}/data/databases/kmersutra_db/ncbi_taxonomy \
+  --taxon_map_table /home/${USER}/data/databases/kmersutra_db/ncbi_genomes_plasmodium_outgroups_v4/kmersutra_genome_config.tsv \
   --taxon_name_column species_name \
   --taxon_map_name_column species_name \
   --taxon_map_taxid_column taxid \
@@ -1760,8 +1760,8 @@ post-processing run, add `--train_calibrator`:
 kmersutra-benchmark-postprocess \
   --summary_dir summary_v034_expected_lineage_hammondia \
   --out_dir summary_v034_expected_lineage_hammondia/postprocess_v035_ai \
-  --taxonomy_dir /home/pthorpe001/data/databases/kmersutra_db/ncbi_taxonomy \
-  --taxon_map_table /home/pthorpe001/data/databases/kmersutra_db/ncbi_genomes_plasmodium_outgroups_v4/kmersutra_genome_config.tsv \
+  --taxonomy_dir /home/${USER}/data/databases/kmersutra_db/ncbi_taxonomy \
+  --taxon_map_table /home/${USER}/data/databases/kmersutra_db/ncbi_genomes_plasmodium_outgroups_v4/kmersutra_genome_config.tsv \
   --taxon_name_column species_name \
   --taxon_map_name_column species_name \
   --taxon_map_taxid_column taxid \

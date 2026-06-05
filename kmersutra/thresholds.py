@@ -38,6 +38,11 @@ class SpeciesCallPreset:
         passing species to be promoted to a reportable mixed-species call.
         Species below this fraction are retained as neighbouring-lineage
         evidence rather than over-reported as present species.
+    min_total_hits : int
+        Minimum total exact-plus-fuzzy hit count required. This is useful for
+        noisy long-read screening where one-mismatch long-k evidence is allowed
+        and requiring exact hits alone would prevent rescued evidence from
+        contributing to reportable calls.
     """
 
     min_unique_kmers: int
@@ -49,6 +54,7 @@ class SpeciesCallPreset:
     min_confidence_score: float
     low_evidence_call: str
     min_mixed_species_fraction: float
+    min_total_hits: int = 0
 
 
 CALL_PRESETS: dict[str, SpeciesCallPreset] = {
@@ -62,6 +68,7 @@ CALL_PRESETS: dict[str, SpeciesCallPreset] = {
         min_confidence_score=0.0,
         low_evidence_call="present_low_confidence",
         min_mixed_species_fraction=0.0,
+        min_total_hits=0,
     ),
     "conservative": SpeciesCallPreset(
         min_unique_kmers=20,
@@ -73,6 +80,7 @@ CALL_PRESETS: dict[str, SpeciesCallPreset] = {
         min_confidence_score=0.50,
         low_evidence_call="observed_below_threshold",
         min_mixed_species_fraction=0.0,
+        min_total_hits=0,
     ),
     "lineage_aware": SpeciesCallPreset(
         min_unique_kmers=20,
@@ -84,6 +92,19 @@ CALL_PRESETS: dict[str, SpeciesCallPreset] = {
         min_confidence_score=0.50,
         low_evidence_call="observed_below_threshold",
         min_mixed_species_fraction=0.25,
+        min_total_hits=0,
+    ),
+    "raw_ont_sensitive": SpeciesCallPreset(
+        min_unique_kmers=8,
+        min_positive_sequences=2,
+        min_k_values_positive=1,
+        max_conflict_ratio=0.10,
+        min_best_k=77,
+        min_exact_hits=0,
+        min_confidence_score=0.45,
+        low_evidence_call="observed_below_threshold",
+        min_mixed_species_fraction=0.25,
+        min_total_hits=8,
     ),
     "strict": SpeciesCallPreset(
         min_unique_kmers=50,
@@ -95,6 +116,7 @@ CALL_PRESETS: dict[str, SpeciesCallPreset] = {
         min_confidence_score=0.70,
         low_evidence_call="observed_below_threshold",
         min_mixed_species_fraction=0.50,
+        min_total_hits=0,
     ),
 }
 
@@ -106,7 +128,7 @@ def get_species_call_preset(*, preset_name: str) -> SpeciesCallPreset:
     ----------
     preset_name : str
         Preset name. Supported values are ``legacy``, ``conservative``,
-        ``lineage_aware`` and ``strict``.
+        ``lineage_aware``, ``raw_ont_sensitive`` and ``strict``.
 
     Returns
     -------
@@ -221,6 +243,7 @@ def _passes_species_evidence(
     min_k_values_positive: int,
     min_best_k: int,
     min_exact_hits: int,
+    min_total_hits: int = 0,
 ) -> bool:
     """Return whether a species evidence row passes detection minima.
 
@@ -238,6 +261,8 @@ def _passes_species_evidence(
         Minimum longest k value supported.
     min_exact_hits : int
         Minimum number of exact k-mer hits.
+    min_total_hits : int, optional
+        Minimum number of total exact-plus-fuzzy k-mer hits.
 
     Returns
     -------
@@ -250,6 +275,7 @@ def _passes_species_evidence(
         and _integer_from_row(row=row, key="n_k_values_positive") >= min_k_values_positive
         and _integer_from_row(row=row, key="best_k") >= min_best_k
         and _integer_from_row(row=row, key="n_exact_hits") >= min_exact_hits
+        and _integer_from_row(row=row, key="n_hits") >= min_total_hits
     )
 
 
@@ -302,6 +328,7 @@ def call_species_presence(
     min_unique_kmer_ratio: float = 0.0,
     low_evidence_call: str = "present_low_confidence",
     min_mixed_species_fraction: float = 0.0,
+    min_total_hits: int = 0,
 ) -> list[dict[str, object]]:
     """Call species presence from summarised evidence.
 
@@ -339,6 +366,10 @@ def call_species_presence(
         promotion to a reportable mixed-species call. Values <= 0 preserve the
         legacy behaviour where all passing species are reported in mixed
         samples.
+    min_total_hits : int, optional
+        Minimum total exact-plus-fuzzy k-mer hits required for a reportable
+        species call. This allows raw-read fuzzy evidence to contribute while
+        retaining a quantitative support floor.
 
     Returns
     -------
@@ -388,6 +419,7 @@ def call_species_presence(
                 min_k_values_positive=min_k_values_positive,
                 min_best_k=min_best_k,
                 min_exact_hits=min_exact_hits,
+                min_total_hits=min_total_hits,
             )
             passes_relative_support = _passes_relative_support(
                 target_unique_kmers=target_unique,
@@ -538,6 +570,7 @@ def apply_species_call_preset(
         "present_low_confidence", "observed_below_threshold"
     ] | None = None,
     min_mixed_species_fraction: float | None = None,
+    min_total_hits: int | None = None,
 ) -> dict[str, object]:
     """Resolve species-call thresholds from a preset and optional overrides.
 
@@ -563,6 +596,8 @@ def apply_species_call_preset(
         Optional low-evidence call label override.
     min_mixed_species_fraction : float or None, optional
         Optional mixed-species co-dominance fraction override.
+    min_total_hits : int or None, optional
+        Optional total-hit override.
 
     Returns
     -------
@@ -599,5 +634,8 @@ def apply_species_call_preset(
             preset.min_mixed_species_fraction
             if min_mixed_species_fraction is None
             else min_mixed_species_fraction
+        ),
+        "min_total_hits": (
+            preset.min_total_hits if min_total_hits is None else min_total_hits
         ),
     }

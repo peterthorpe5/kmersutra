@@ -5,7 +5,7 @@ This folder contains a robust Python summary tool for the KmerSutra v0.14 compar
 The tool is designed for output roots created by the KmerSutra comparable benchmark array, for example:
 
 ```bash
-/home/pthorpe001/data/2026_plasmodium_kraken_sensitivity/runs_kmersutra_v014_global_comparable_20260514_111550
+/home/${USER}/data/2026_plasmodium_kraken_sensitivity/runs_kmersutra_v014_global_comparable_20260514_111550
 ```
 
 ## Files
@@ -71,7 +71,7 @@ kmersutra_comparable_summary.log
 Copy the script and wrapper into the project root:
 
 ```bash
-cd /home/pthorpe001/data/2026_plasmodium_kraken_sensitivity
+cd /home/${USER}/data/2026_plasmodium_kraken_sensitivity
 
 cp /path/to/summarise_kmersutra_comparable_benchmark.py .
 cp /path/to/run_kmersutra_comparable_summary.sh .
@@ -82,7 +82,7 @@ chmod +x run_kmersutra_comparable_summary.sh
 Run a partial-safe summary while the array is still running:
 
 ```bash
-OUT_ROOT="/home/pthorpe001/data/2026_plasmodium_kraken_sensitivity/runs_kmersutra_v014_global_comparable_20260514_111550" \
+OUT_ROOT="/home/${USER}/data/2026_plasmodium_kraken_sensitivity/runs_kmersutra_v014_global_comparable_20260514_111550" \
 ./run_kmersutra_comparable_summary.sh
 ```
 
@@ -90,10 +90,10 @@ Or call the Python script directly:
 
 ```bash
 python3 summarise_kmersutra_comparable_benchmark.py \
-    --out_root "/home/pthorpe001/data/2026_plasmodium_kraken_sensitivity/runs_kmersutra_v014_global_comparable_20260514_111550" \
+    --out_root "/home/${USER}/data/2026_plasmodium_kraken_sensitivity/runs_kmersutra_v014_global_comparable_20260514_111550" \
     --panel1_targets "Plasmodium vivax" \
-    --panel2_tsv "/home/pthorpe001/data/2026_plasmodium_kraken_sensitivity/PT_nanopore_spike_in_pathogen_detection/configs/pathogen_panel_2.tsv" \
-    --panel3_tsv "/home/pthorpe001/data/2026_plasmodium_kraken_sensitivity/PT_nanopore_spike_in_pathogen_detection/configs/pathogen_panel_3.tsv" \
+    --panel2_tsv "/home/${USER}/data/2026_plasmodium_kraken_sensitivity/PT_nanopore_spike_in_pathogen_detection/configs/pathogen_panel_2.tsv" \
+    --panel3_tsv "/home/${USER}/data/2026_plasmodium_kraken_sensitivity/PT_nanopore_spike_in_pathogen_detection/configs/pathogen_panel_3.tsv" \
     --allow_partial \
     --verbose
 ```
@@ -103,7 +103,7 @@ python3 summarise_kmersutra_comparable_benchmark.py \
 Once the SGE array has completed, run in strict mode to ensure no samples are missing:
 
 ```bash
-OUT_ROOT="/home/pthorpe001/data/2026_plasmodium_kraken_sensitivity/runs_kmersutra_v014_global_comparable_20260514_111550" \
+OUT_ROOT="/home/${USER}/data/2026_plasmodium_kraken_sensitivity/runs_kmersutra_v014_global_comparable_20260514_111550" \
 ALLOW_PARTIAL=false \
 STRICT=true \
 ./run_kmersutra_comparable_summary.sh

@@ -28,11 +28,11 @@ SCRIPT_DIR="$(
     pwd
 )"
 
-PROJECT_DIR="${PROJECT_DIR:-/home/pthorpe001/data/2026_plasmodium_kraken_sensitivity}"
-DB_ROOT="${DB_ROOT:-/home/pthorpe001/data/databases/kmersutra_db}"
+PROJECT_DIR="${PROJECT_DIR:-/home/${USER}/data/2026_plasmodium_kraken_sensitivity}"
+DB_ROOT="${DB_ROOT:-/home/${USER}/data/databases/kmersutra_db}"
 SOURCE_RUN_ROOT="${SOURCE_RUN_ROOT:-${PROJECT_DIR}/runs_kmersutra_v014_global_comparable_20260514_111550}"
 PANEL="${PANEL:-${DB_ROOT}/kmersutra_builds/kmersutra_plasmodium_outgroups_v3_global_candidate_k77_101_20260512_113441/species_kmer_panel.tsv.gz}"
-ARRAY_SCRIPT="${ARRAY_SCRIPT:-${SCRIPT_DIR}/run_kmersutra_v015_conservative_array_tmpdir.sh}"
+ARRAY_SCRIPT="${ARRAY_SCRIPT:-${SCRIPT_DIR}/run_kmersutra_comparable_array_tmpdir.sh}"
 RUN_STAMP="${RUN_STAMP:-$(date '+%Y%m%d_%H%M%S')}"
 OUT_ROOT="${OUT_ROOT:-${PROJECT_DIR}/runs_kmersutra_v015_conservative_comparable_${RUN_STAMP}}"
 SOURCE_MANIFEST="${SOURCE_MANIFEST:-}"
@@ -41,6 +41,9 @@ THREADS="${THREADS:-4}"
 CHUNK_SIZE="${CHUNK_SIZE:-10000}"
 MAX_PENDING_CHUNKS="${MAX_PENDING_CHUNKS:-}"
 CALL_PRESET="${CALL_PRESET:-conservative}"
+SCREEN_PRESET="${SCREEN_PRESET:-exact}"
+MAX_MISMATCHES="${MAX_MISMATCHES:-}"
+FUZZY_MIN_K="${FUZZY_MIN_K:-}"
 LOW_EVIDENCE_CALL="${LOW_EVIDENCE_CALL:-observed_below_threshold}"
 MIN_UNIQUE_KMER_MARGIN="${MIN_UNIQUE_KMER_MARGIN:-0}"
 MIN_UNIQUE_KMER_RATIO="${MIN_UNIQUE_KMER_RATIO:-0.0}"
@@ -64,6 +67,7 @@ MAX_CONFLICT_RATIO="${MAX_CONFLICT_RATIO:-}"
 MIN_BEST_K="${MIN_BEST_K:-}"
 MIN_EXACT_HITS="${MIN_EXACT_HITS:-}"
 MIN_CONFIDENCE_SCORE="${MIN_CONFIDENCE_SCORE:-}"
+MIN_TOTAL_HITS="${MIN_TOTAL_HITS:-}"
 
 require_file "${PANEL}" "KmerSutra panel"
 require_file "${ARRAY_SCRIPT}" "Array worker script"
@@ -103,7 +107,7 @@ log "Output root: ${OUT_ROOT}"
 log "Array script: ${ARRAY_SCRIPT}"
 log "Throttle: ${TC_LIMIT} concurrent array task(s)"
 log "Threads per task: ${THREADS}"
-log "Call preset: ${CALL_PRESET}; low evidence call: ${LOW_EVIDENCE_CALL}"
+log "Call preset: ${CALL_PRESET}; screen preset: ${SCREEN_PRESET}; low evidence call: ${LOW_EVIDENCE_CALL}"
 log "Consolidate species calls: ${CONSOLIDATE_SPECIES_CALLS}; background candidate taxa: ${BACKGROUND_CANDIDATE_TAXA:-none}"
 log "h_rt request: ${H_RT:-queue_default}"
 
@@ -161,8 +165,9 @@ NR == 1 {
 
     gsub(/^kmersutra_v014/, "kmersutra_v015", sample_id)
     gsub(/kmersutra_v014/, "kmersutra_v015", sample_id)
-    gsub(/^\/gpfs\/uod-scale-01\/cluster\/gjb_lab\/pthorpe001\//, "/home/pthorpe001/data/", input_fastq)
-    gsub(/^\/gpfs\/uod-scale-01\/cluster\/gjb_lab\/pthorpe001\//, "/home/pthorpe001/data/", source_run_dir)
+    # Keep legacy GPFS paths untouched in public wrappers. Users may pre-normalise
+    # their manifests or provide site-specific path rewrites outside this generic
+    # submission helper.
 
     if (sample_id == "" || input_fastq == "") {
         next
@@ -218,9 +223,10 @@ log "Number of samples: ${N_TASKS}"
 log "Submitting SGE array with -tc ${TC_LIMIT}"
 
 export MANIFEST OUT_ROOT PANEL THREADS CHUNK_SIZE MAX_PENDING_CHUNKS
-export CALL_PRESET LOW_EVIDENCE_CALL MIN_UNIQUE_KMER_MARGIN MIN_UNIQUE_KMER_RATIO
+export CALL_PRESET SCREEN_PRESET MAX_MISMATCHES FUZZY_MIN_K LOW_EVIDENCE_CALL
+export MIN_UNIQUE_KMER_MARGIN MIN_UNIQUE_KMER_RATIO
 export MIN_UNIQUE_KMERS MIN_POSITIVE_SEQUENCES MIN_K_VALUES_POSITIVE
-export MAX_CONFLICT_RATIO MIN_BEST_K MIN_EXACT_HITS MIN_CONFIDENCE_SCORE
+export MAX_CONFLICT_RATIO MIN_BEST_K MIN_EXACT_HITS MIN_CONFIDENCE_SCORE MIN_TOTAL_HITS
 export CONSOLIDATE_SPECIES_CALLS BACKGROUND_CANDIDATE_TAXA BACKGROUND_CANDIDATE_FILE
 export DISABLE_SAME_GENUS_NEIGHBOUR_DEMOTION DOMINANT_SPECIES_MIN_MARGIN
 export DOMINANT_SPECIES_MIN_RATIO WRITE_PARQUET_OUTPUTS

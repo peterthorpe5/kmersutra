@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -87,8 +88,18 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--out_dir", required=True)
-    parser.add_argument("--max_mismatches", type=int, default=0)
-    parser.add_argument("--fuzzy_min_k", type=int, default=71)
+    parser.add_argument(
+        "--screen_preset",
+        choices=["exact", "raw_ont_sensitive"],
+        default="exact",
+        help=(
+            "Screening preset. The exact preset preserves exact matching. "
+            "raw_ont_sensitive enables one-mismatch fuzzy matching for long "
+            "k-mers unless explicit --max_mismatches/--fuzzy_min_k values are supplied."
+        ),
+    )
+    parser.add_argument("--max_mismatches", type=int, default=None)
+    parser.add_argument("--fuzzy_min_k", type=int, default=None)
     parser.add_argument("--threads", type=int, default=1)
     parser.add_argument("--chunk_size", type=int, default=5000)
     parser.add_argument(
@@ -124,13 +135,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--call_preset",
-        choices=["legacy", "conservative", "lineage_aware", "strict"],
+        choices=["legacy", "conservative", "lineage_aware", "raw_ont_sensitive", "strict"],
         default="legacy",
         help=(
             "Species-call threshold preset. The legacy preset preserves older "
             "behaviour. Conservative and strict presets make species calls "
             "harder to earn. The lineage_aware preset keeps weak neighbouring "
-            "species evidence visible but demotes it from reportable species calls."
+            "species evidence visible but demotes it from reportable species calls. "
+            "The raw_ont_sensitive preset is intended for noisy raw long reads "
+            "where fuzzy long-k evidence may be enabled with --screen_preset."
         ),
     )
     parser.add_argument("--min_unique_kmers", type=int, default=None)
@@ -148,6 +161,15 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=None,
         help="Minimum exact-hit count required for a reportable species call.",
+    )
+    parser.add_argument(
+        "--min_total_hits",
+        type=int,
+        default=None,
+        help=(
+            "Minimum total exact-plus-fuzzy hit count required for a reportable "
+            "species call. Defaults to the selected call preset."
+        ),
     )
     parser.add_argument(
         "--min_confidence_score",
@@ -396,12 +418,41 @@ def maybe_write_parquet_table(
         return
     logger.info("Wrote Parquet output %s (%d rows)", output_path, n_written)
 
+
+def resolve_screening_preset(*, args: argparse.Namespace, logger: logging.Logger) -> None:
+    """Resolve screening-preset defaults in-place.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed command-line arguments. ``max_mismatches`` and ``fuzzy_min_k``
+        are updated when omitted.
+    logger : logging.Logger
+        Logger used to record the resolved behaviour.
+    """
+    if args.screen_preset == "raw_ont_sensitive":
+        if args.max_mismatches is None:
+            args.max_mismatches = 1
+        if args.fuzzy_min_k is None:
+            args.fuzzy_min_k = 101
+    else:
+        if args.max_mismatches is None:
+            args.max_mismatches = 0
+        if args.fuzzy_min_k is None:
+            args.fuzzy_min_k = 71
+
+    logger.info("Screen preset: %s", args.screen_preset)
+    logger.info("Resolved maximum mismatches: %d", args.max_mismatches)
+    logger.info("Resolved fuzzy minimum k: %d", args.fuzzy_min_k)
+
+
 def main() -> None:
     """Run the sequence screening workflow."""
     args = parse_args()
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     logger = configure_logging(log_file=out_dir / "screen_reads.log", verbose=args.verbose)
+    resolve_screening_preset(args=args, logger=logger)
     logger.info("Starting KmerSutra screening")
     logger.info("Input: %s", args.input)
     logger.info("Screen mode: %s", args.screen_mode)
@@ -432,6 +483,7 @@ def main() -> None:
         max_conflict_ratio=args.max_conflict_ratio,
         min_best_k=args.min_best_k,
         min_exact_hits=args.min_exact_hits,
+        min_total_hits=args.min_total_hits,
         min_confidence_score=args.min_confidence_score,
         low_evidence_call=args.low_evidence_call,
         min_mixed_species_fraction=args.min_mixed_species_fraction,
@@ -554,6 +606,7 @@ def main() -> None:
             allow_mixed_species=not args.disallow_mixed_species,
             min_best_k=int(call_settings["min_best_k"]),
             min_exact_hits=int(call_settings["min_exact_hits"]),
+            min_total_hits=int(call_settings["min_total_hits"]),
             min_confidence_score=float(call_settings["min_confidence_score"]),
             min_unique_kmer_margin=args.min_unique_kmer_margin,
             min_unique_kmer_ratio=args.min_unique_kmer_ratio,

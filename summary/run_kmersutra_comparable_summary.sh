@@ -29,7 +29,7 @@ require_dir() {
     [[ -d "$1" ]] || fail "Required directory missing: $1"
 }
 
-PROJECT_DIR="${PROJECT_DIR:-/home/pthorpe001/data/2026_plasmodium_kraken_sensitivity}"
+PROJECT_DIR="${PROJECT_DIR:-/home/${USER}/data/2026_plasmodium_kraken_sensitivity}"
 REPO_DIR="${REPO_DIR:-${PROJECT_DIR}/PT_nanopore_spike_in_pathogen_detection}"
 SCRIPT_DIR="$(
     cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1

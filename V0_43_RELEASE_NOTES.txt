@@ -1,0 +1,97 @@
+KmerSutra v0.43.0 release notes
+================================
+
+Purpose
+-------
+This update addresses the remaining raw-read LOD limitation observed after the locus-balanced multi-k database build. The final Plasmodium benchmark showed clean negatives and no strict off-target calls, but the hardest three-genome Plasmodium vivax condition still required 4,000 spike-in reads for full replicate-level consistency. A post-hoc threshold sweep showed that relaxing reporting thresholds alone did not improve that limiting LOD, which indicated that the bottleneck was not call promotion but insufficient exact promotable evidence in noisy raw reads.
+
+Main design change
+------------------
+The package now separates two ideas that were previously coupled:
+
+1. Screening behaviour: whether raw reads are matched exactly or with controlled long-k fuzzy matching.
+2. Reporting behaviour: how evidence is promoted into species calls.
+
+v0.43.0 adds a coherent raw-read sensitivity mode:
+
+  --screen_preset raw_ont_sensitive
+
+This preset enables one-mismatch matching for long k-mers by default:
+
+  max_mismatches = 1
+  fuzzy_min_k = 101
+
+The intent is to rescue long-k evidence from noisy raw ONT-like reads while avoiding fuzzy matching at short k values, where one mismatch could be less specific.
+
+Species-call preset
+-------------------
+A new species-call preset was added:
+
+  --call_preset raw_ont_sensitive
+
+This preset is deliberately not a simple threshold relaxation. It is designed to let controlled fuzzy long-k evidence contribute while retaining quantitative support requirements:
+
+  min_unique_kmers = 8
+  min_positive_sequences = 2
+  min_k_values_positive = 1
+  min_best_k = 77
+  min_exact_hits = 0
+  min_total_hits = 8
+  min_confidence_score = 0.45
+  max_conflict_ratio = 0.10
+  min_mixed_species_fraction = 0.25
+  low_evidence_call = observed_below_threshold
+
+The key addition is min_total_hits, which requires total exact-plus-fuzzy hits. This matters because fuzzy evidence should not be blocked by a remaining exact-hit floor, but sparse fuzzy evidence should still remain below threshold.
+
+New CLI options
+---------------
+kmersutra-screen now accepts:
+
+  --screen_preset exact|raw_ont_sensitive
+  --min_total_hits INT
+
+If --screen_preset raw_ont_sensitive is used and the user does not explicitly supply --max_mismatches or --fuzzy_min_k, the screen resolves to one-mismatch matching for k>=101. Explicit user values are preserved.
+
+Array wrapper updates
+---------------------
+The package now includes a generic TMPDIR-aware array worker:
+
+  run_kmersutra_comparable_array_tmpdir.sh
+
+The comparable array submitter now defaults to this worker and exports the new settings:
+
+  SCREEN_PRESET
+  MAX_MISMATCHES
+  FUZZY_MIN_K
+  MIN_TOTAL_HITS
+
+The submitter defaults now use /home/${USER}/... rather than hard-coded usernames. Legacy GPFS path rewriting was removed from the public wrapper to avoid embedding private cluster paths in the release.
+
+Tests
+-----
+Added unittest coverage for:
+
+- raw_ont_sensitive screening preset resolving to one-mismatch k>=101 matching;
+- explicit user mismatch settings overriding the preset defaults;
+- raw_ont_sensitive call preset allowing fuzzy long-k evidence to support a call;
+- sparse fuzzy evidence remaining below threshold;
+- one-mismatch k=101 hits contributing to n_fuzzy_hits and best_k.
+
+Full unittest suite:
+
+  python -m unittest discover -s tests -p 'test*.py'
+
+Result:
+
+  Ran 340 tests in 12.332s
+  OK
+
+Benchmark recommendation
+------------------------
+Do not discard the current locus-balanced database. The next test should reuse the current final locus-balanced panel and rerun the comparable Plasmodium screen with:
+
+  SCREEN_PRESET=raw_ont_sensitive
+  CALL_PRESET=raw_ont_sensitive
+
+This directly tests whether controlled long-k one-mismatch screening improves the remaining LOD100 limitation without reintroducing false positives.

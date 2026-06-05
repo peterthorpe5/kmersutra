@@ -1,0 +1,113 @@
+KmerSutra v0.43 handover notes for public benchmark chat
+========================================================
+
+Context
+-------
+The Plasmodium benchmark reached a near-final result using the locus-balanced multi-k database. The marker profile was much improved compared with earlier k=151-heavy or k=51-heavy builds, and the final summary showed clean shuffled negatives, no strict off-target rows, no neighbour-lineage rows, and strong LOD50 values.
+
+However, the hardest condition remained unsatisfactory: in the three-genome spike-in panel, Plasmodium vivax still required 4,000 spike-in reads for LOD95/LOD100. The user correctly felt this was too high for a strong "use this tool" claim, even though high-depth sequencing will often exceed this.
+
+Important diagnostic conclusion
+-------------------------------
+A threshold sweep on the correct final locus-balanced run showed that the limiting three-genome P. vivax result did not improve when reporting thresholds were relaxed. The same LOD50/LOD95/LOD100 values persisted under the tested post-hoc settings. Therefore, the bottleneck is not simply the reporting threshold.
+
+The likely bottleneck is that noisy raw reads break exact long-k matches. Exact 101/151-mer evidence is vulnerable when raw-read Q20/Q30 fractions are modest. The read-quality summary showed moderate-to-noisy raw long-read quality rather than high-Q consensus quality, so exact long-k support can remain stochastic in low-spike-depth or multi-genome mixtures.
+
+What changed in v0.43
+---------------------
+v0.43 adds a raw-read sensitivity mode that should be tested on both the Plasmodium benchmark and the public bacterial benchmark.
+
+New screening preset:
+
+  --screen_preset raw_ont_sensitive
+
+Default behaviour of this preset:
+
+  max_mismatches = 1
+  fuzzy_min_k = 101
+
+This means one-mismatch fuzzy matching is only applied to long k-mers by default. Short k values remain exact, preserving specificity.
+
+New call preset:
+
+  --call_preset raw_ont_sensitive
+
+Key preset values:
+
+  min_unique_kmers = 8
+  min_positive_sequences = 2
+  min_k_values_positive = 1
+  min_best_k = 77
+  min_exact_hits = 0
+  min_total_hits = 8
+  min_confidence_score = 0.45
+  max_conflict_ratio = 0.10
+  min_mixed_species_fraction = 0.25
+  low_evidence_call = observed_below_threshold
+
+Why min_total_hits was added
+----------------------------
+The previous call logic could require exact hits even when fuzzy screening was enabled. That means a fuzzy screen could find useful one-mismatch long-k evidence but still fail promotion because n_exact_hits was too low. v0.43 adds min_total_hits so exact-plus-fuzzy evidence can satisfy a support floor without abandoning quantitative stringency.
+
+This is not just threshold relaxation. It is a raw-read error-tolerance change plus a compatible evidence-promotion rule.
+
+Recommended next public benchmark test
+--------------------------------------
+For the public bacterial benchmark chat, use the same database-building strategy that was selected after the k-balance issue:
+
+  raw ONT multi-k locus-balanced database
+  per-k per-bin quotas
+  cross-k locus separation
+
+Then screen using:
+
+  SCREEN_PRESET=raw_ont_sensitive
+  CALL_PRESET=raw_ont_sensitive
+
+For the public benchmark, carefully track:
+
+1. sensitivity and LOD/lowest detected abundance if applicable;
+2. false positives in negative controls;
+3. off-target same-genus or strain-neighbour calls;
+4. whether fuzzy hits mostly support the expected species rather than unrelated taxa;
+5. runtime increase compared with exact screening.
+
+Possible cost
+-------------
+One-mismatch fuzzy matching is expected to be slower than exact matching. v0.43 keeps fuzzy matching restricted to k>=101 by default to control that cost. If runtime is too high, use a smaller test subset first or raise FUZZY_MIN_K to 151. If sensitivity is still too low, consider FUZZY_MIN_K=77 as a controlled exploratory stress test, but that should not become the default without negative-control evidence.
+
+Suggested Plasmodium rerun settings
+-----------------------------------
+Reuse the current final locus-balanced database. Do not rebuild the database for this test.
+
+Set:
+
+  SCREEN_PRESET=raw_ont_sensitive
+  CALL_PRESET=raw_ont_sensitive
+  LOW_EVIDENCE_CALL=observed_below_threshold
+  CONSOLIDATE_SPECIES_CALLS=true
+  BACKGROUND_CANDIDATE_TAXA="Hammondia hammondi"
+  WRITE_PARQUET_OUTPUTS=true
+
+Leave MAX_MISMATCHES and FUZZY_MIN_K empty unless deliberately overriding the preset:
+
+  MAX_MISMATCHES=""
+  FUZZY_MIN_K=""
+
+The resolved defaults will be max_mismatches=1 and fuzzy_min_k=101.
+
+AI calibration status
+---------------------
+The AI/calibration layer has still not been validated on the final outputs. Do not claim AI-enhanced classification yet. The AI part should be developed and tested after the rule-based evidence outputs are stable. The next AI step should train/test on sample-level evidence features from the final exact and raw_ont_sensitive runs, using held-out benchmark samples and public benchmark data.
+
+How to interpret success
+------------------------
+A good result would be:
+
+- three-genome P. vivax LOD100 drops below 4,000 reads;
+- ideally LOD95/LOD100 move toward 1,000 or below;
+- shuffled negatives remain clean;
+- off-target rows remain absent or scientifically interpretable;
+- any runtime increase is acceptable and documented.
+
+If negatives remain clean and the hard P. vivax case improves, v0.43 should become the final screening mode for raw ONT-like reads. If negatives degrade, keep v0.42 exact/locus-balanced as the conservative default and present v0.43 as an exploratory raw-read sensitivity mode.
