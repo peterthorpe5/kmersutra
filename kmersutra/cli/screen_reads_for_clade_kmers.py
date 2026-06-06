@@ -139,6 +139,17 @@ def parse_args() -> argparse.Namespace:
         help="Maximum queued chunks during threaded screening. Default: twice --threads.",
     )
     parser.add_argument(
+        "--decompressor",
+        choices=["python", "pigz", "auto"],
+        default="python",
+        help=(
+            "Text decompressor for gzip FASTA/FASTQ inputs. The default "
+            "python preserves existing behaviour. pigz uses external "
+            "pigz -dc and auto uses pigz when available, otherwise "
+            "Python gzip."
+        ),
+    )
+    parser.add_argument(
         "--panel_cache",
         default=None,
         help="Optional pickled panel-index cache path.",
@@ -559,6 +570,7 @@ def screen_single_panel_with_optional_two_stage_rescue(
             panel_path=args.panel,
             sample_id=args.sample_id,
             input_format=args.input_format,
+            decompressor=args.decompressor,
             max_mismatches=args.max_mismatches,
             fuzzy_min_k=args.fuzzy_min_k,
             threads=args.threads,
@@ -603,6 +615,7 @@ def screen_single_panel_with_optional_two_stage_rescue(
         panel_index=panel_index,
         sample_id=args.sample_id,
         input_format=args.input_format,
+        decompressor=args.decompressor,
         max_mismatches=0,
         fuzzy_min_k=args.fuzzy_min_k,
         threads=args.threads,
@@ -649,6 +662,7 @@ def screen_single_panel_with_optional_two_stage_rescue(
         panel_index=rescue_panel_index,
         sample_id=args.sample_id,
         input_format=args.input_format,
+        decompressor=args.decompressor,
         max_mismatches=args.max_mismatches,
         fuzzy_min_k=args.fuzzy_min_k,
         threads=args.threads,
@@ -718,6 +732,7 @@ def main() -> None:
     resolve_screening_preset(args=args, logger=logger)
     logger.info("Starting KmerSutra screening")
     logger.info("Input: %s", args.input)
+    logger.info("Input decompressor: %s", args.decompressor)
     logger.info("Screen mode: %s", args.screen_mode)
     logger.info("Panel: %s", args.panel or "not supplied")
     logger.info("Module manifest: %s", args.module_manifest or "not supplied")
@@ -806,6 +821,7 @@ def main() -> None:
             module_manifest_path=args.module_manifest,
             sample_id=args.sample_id,
             input_format=args.input_format,
+            decompressor=args.decompressor,
             max_mismatches=args.max_mismatches,
             fuzzy_min_k=args.fuzzy_min_k,
             threads=args.threads,

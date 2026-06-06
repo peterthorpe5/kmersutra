@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from kmersutra.io import open_text
+from kmersutra.io import open_text_reader
 
 
 @dataclass(frozen=True)
@@ -62,6 +62,7 @@ def read_fasta_records(
     *,
     fasta_path: str | Path,
     mask_lowercase: bool = False,
+    decompressor: str = "python",
 ) -> Iterator[SequenceRecord]:
     """Yield records from a FASTA or FASTA.GZ file.
 
@@ -72,6 +73,10 @@ def read_fasta_records(
     mask_lowercase : bool, optional
         If true, lowercase repeat-masked bases are converted to ``N`` before
         sequence records are yielded.
+    decompressor : str, optional
+        Text decompressor for gzip inputs. ``python`` preserves historical
+        behaviour; ``pigz`` uses external pigz; ``auto`` uses pigz when
+        available and falls back to Python gzip.
 
     Yields
     ------
@@ -81,7 +86,7 @@ def read_fasta_records(
     header: str | None = None
     sequence_parts: list[str] = []
 
-    with open_text(fasta_path, "rt") as handle:
+    with open_text_reader(fasta_path, decompressor=decompressor) as handle:
         for raw_line in handle:
             line = raw_line.rstrip("\n")
             if not line:
@@ -93,9 +98,9 @@ def read_fasta_records(
                         identifier=identifier,
                         description=header,
                         sequence=normalise_sequence(
-                            "".join(sequence_parts),
-                            mask_lowercase=mask_lowercase,
-                        ),
+                "".join(sequence_parts),
+                mask_lowercase=mask_lowercase,
+            ),
                     )
                 header = line[1:].strip()
                 sequence_parts = []
@@ -108,26 +113,34 @@ def read_fasta_records(
             identifier=identifier,
             description=header,
             sequence=normalise_sequence(
-                            "".join(sequence_parts),
-                            mask_lowercase=mask_lowercase,
-                        ),
+                "".join(sequence_parts),
+                mask_lowercase=mask_lowercase,
+            ),
         )
 
 
-def read_fastq_records(*, fastq_path: str | Path) -> Iterator[SequenceRecord]:
+def read_fastq_records(
+    *,
+    fastq_path: str | Path,
+    decompressor: str = "python",
+) -> Iterator[SequenceRecord]:
     """Yield records from a FASTQ or FASTQ.GZ file.
 
     Parameters
     ----------
     fastq_path : str or pathlib.Path
         Path to FASTQ file.
+    decompressor : str, optional
+        Text decompressor for gzip inputs. ``python`` preserves historical
+        behaviour; ``pigz`` uses external pigz; ``auto`` uses pigz when
+        available and falls back to Python gzip.
 
     Yields
     ------
     SequenceRecord
         Parsed sequence record without quality scores.
     """
-    with open_text(fastq_path, "rt") as handle:
+    with open_text_reader(fastq_path, decompressor=decompressor) as handle:
         while True:
             header = handle.readline().rstrip("\n")
             if not header:
@@ -138,7 +151,9 @@ def read_fastq_records(*, fastq_path: str | Path) -> Iterator[SequenceRecord]:
             if not header.startswith("@") or not plus.startswith("+"):
                 raise ValueError(f"Malformed FASTQ record in {fastq_path}")
             if len(quality) != len(sequence):
-                raise ValueError(f"FASTQ sequence and quality length differ in {fastq_path}")
+                raise ValueError(
+                    f"FASTQ sequence and quality length differ in {fastq_path}"
+                )
             description = header[1:].strip()
             identifier = description.split()[0]
             yield SequenceRecord(

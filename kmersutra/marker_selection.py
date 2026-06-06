@@ -8,13 +8,18 @@ sliding-window k-mers from one small genomic region.
 
 from __future__ import annotations
 
+import bisect
 import hashlib
 import heapq
+import logging
+import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Iterable, Iterator
 
 from kmersutra.build_panel import DiagnosticKmer
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -252,6 +257,198 @@ def shifted_genome_bin_key(
     )
     return (genome_id, contig_id, (position + offset) // genome_bin_size)
 
+
+
+
+def interval_overlaps_with_padding(
+    *,
+    candidate_start: int,
+    candidate_end: int,
+    existing_start: int,
+    existing_end: int,
+    padding: int,
+) -> bool:
+    """Return whether two half-open intervals conflict with padding.
+
+    Parameters
+    ----------
+    candidate_start : int
+        Zero-based start coordinate of the candidate interval.
+    candidate_end : int
+        Half-open end coordinate of the candidate interval.
+    existing_start : int
+        Zero-based start coordinate of an existing selected interval.
+    existing_end : int
+        Half-open end coordinate of an existing selected interval.
+    padding : int
+        Minimum required separating distance. A gap exactly equal to
+        ``padding`` is allowed, matching :func:`interval_gap` semantics where
+        candidates are rejected only when ``gap < padding``.
+
+    Returns
+    -------
+    bool
+        True when the intervals overlap or are closer than ``padding`` bases.
+
+    Raises
+    ------
+    ValueError
+        If coordinates or padding are invalid.
+    """
+    candidate_start = int(candidate_start)
+    candidate_end = int(candidate_end)
+    existing_start = int(existing_start)
+    existing_end = int(existing_end)
+    padding = int(padding)
+    if padding < 0:
+        raise ValueError("padding must be non-negative")
+    if candidate_end < candidate_start:
+        raise ValueError("candidate_end must be greater than or equal to candidate_start")
+    if existing_end < existing_start:
+        raise ValueError("existing_end must be greater than or equal to existing_start")
+    return (
+        existing_start < candidate_end + padding
+        and existing_end > candidate_start - padding
+    )
+
+
+@dataclass
+class SelectedIntervalIndex:
+    """Store selected marker intervals and query nearby spacing conflicts.
+
+    The independent multi-k marker selector needs to know whether a candidate
+    marker is too close to an already selected marker with a different k value
+    in the same genome and contig. Earlier code scanned all selected positions
+    in an evidence bucket for every candidate. This index keeps intervals
+    sorted by start coordinate per scope and uses ``bisect`` to inspect only
+    nearby intervals.
+    """
+
+    intervals_by_scope: dict[tuple[str, str], list[tuple[int, int, int]]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
+    starts_by_scope: dict[tuple[str, str], list[int]] = field(
+        default_factory=lambda: defaultdict(list)
+    )
+    max_interval_length: int = 0
+    n_interval_comparisons: int = 0
+
+    def add(
+        self,
+        *,
+        scope_key: tuple[str, str],
+        start: int,
+        end: int,
+        k: int,
+    ) -> None:
+        """Add a selected marker interval to the index.
+
+        Parameters
+        ----------
+        scope_key : tuple[str, str]
+            Scope key, currently source genome and source contig.
+        start : int
+            Zero-based interval start.
+        end : int
+            Half-open interval end.
+        k : int
+            Marker k value.
+
+        Raises
+        ------
+        ValueError
+            If interval coordinates are invalid.
+        """
+        start = int(start)
+        end = int(end)
+        k = int(k)
+        if end < start:
+            raise ValueError("end must be greater than or equal to start")
+        if k <= 0:
+            raise ValueError("k must be positive")
+        intervals = self.intervals_by_scope[scope_key]
+        starts = self.starts_by_scope[scope_key]
+        insert_at = bisect.bisect_left(starts, start)
+        interval = (start, end, k)
+        intervals.insert(insert_at, interval)
+        starts.insert(insert_at, start)
+        self.max_interval_length = max(self.max_interval_length, end - start)
+
+    def has_conflict(
+        self,
+        *,
+        scope_key: tuple[str, str],
+        start: int,
+        end: int,
+        k: int,
+        padding: int,
+    ) -> bool:
+        """Return whether a candidate conflicts with selected intervals.
+
+        Parameters
+        ----------
+        scope_key : tuple[str, str]
+            Scope key, currently source genome and source contig.
+        start : int
+            Candidate half-open interval start.
+        end : int
+            Candidate half-open interval end.
+        k : int
+            Candidate k value. Existing intervals with the same k are ignored
+            to preserve the previous cross-k-only spacing behaviour.
+        padding : int
+            Minimum required separating distance between different k values.
+
+        Returns
+        -------
+        bool
+            True if a selected different-k interval is closer than ``padding``.
+        """
+        padding = int(padding)
+        if padding < 0:
+            raise ValueError("padding must be non-negative")
+        if padding == 0:
+            return False
+        start = int(start)
+        end = int(end)
+        k = int(k)
+        intervals = self.intervals_by_scope.get(scope_key)
+        if not intervals:
+            return False
+        starts = self.starts_by_scope[scope_key]
+        lower_start = start - padding - max(self.max_interval_length, 0)
+        upper_start = end + padding
+        index = bisect.bisect_left(starts, lower_start)
+        while index < len(intervals) and intervals[index][0] < upper_start:
+            existing_start, existing_end, existing_k = intervals[index]
+            self.n_interval_comparisons += 1
+            if existing_k != k and interval_overlaps_with_padding(
+                candidate_start=start,
+                candidate_end=end,
+                existing_start=existing_start,
+                existing_end=existing_end,
+                padding=padding,
+            ):
+                return True
+            index += 1
+        return False
+
+    def n_intervals(self, *, scope_key: tuple[str, str] | None = None) -> int:
+        """Return the number of intervals stored in the index.
+
+        Parameters
+        ----------
+        scope_key : tuple[str, str] or None, optional
+            Specific scope to count. If omitted, all scopes are counted.
+
+        Returns
+        -------
+        int
+            Number of selected intervals in the requested scope.
+        """
+        if scope_key is not None:
+            return len(self.intervals_by_scope.get(scope_key, []))
+        return sum(len(intervals) for intervals in self.intervals_by_scope.values())
 
 def interval_gap(*, start_a: int, end_a: int, start_b: int, end_b: int) -> int:
     """Return the distance between two half-open marker intervals.
@@ -747,6 +944,21 @@ def _select_independent_multik_markers(
             )
 
     selected: list[DiagnosticKmer] = []
+    selection_start = time.perf_counter()
+    processed_total = 0
+    accepted_total = 0
+    rejected_by_bucket_cap = 0
+    rejected_by_spacing = 0
+    next_log_at = 100000
+
+    logger.info(
+        "Selecting independent multi-k markers with interval-indexed "
+        "cross-k spacing: buckets=%d; candidates=%d; min_distance=%d",
+        len(candidates_by_bucket),
+        sum(len(values) for values in candidates_by_bucket.values()),
+        config.min_cross_k_marker_distance,
+    )
+
     for bucket_key in sorted(candidates_by_bucket):
         bucket_candidates = sorted(
             candidates_by_bucket[bucket_key],
@@ -756,37 +968,70 @@ def _select_independent_multik_markers(
                 _marker_sort_key(item),
             ),
         )
-        selected_positions: list[tuple[str, str, int, int]] = []
+        interval_index = SelectedIntervalIndex()
         selected_counts_by_k: dict[int, int] = defaultdict(int)
-        deferred: list[DiagnosticKmer] = []
         for item in bucket_candidates:
+            processed_total += 1
             k_value = int(item.k)
             if (
                 config.max_per_bucket is not None
                 and selected_counts_by_k[k_value] >= config.max_per_bucket
             ):
+                rejected_by_bucket_cap += 1
                 continue
             genome_id = first_semicolon_value(item.source_genomes)
             contig_id = first_semicolon_value(item.source_contigs)
             position = max(0, int(item.example_position))
-            if cross_k_region_is_available(
-                selected_positions=selected_positions,
-                genome_id=genome_id,
-                contig_id=contig_id,
-                position=position,
+            end_position = position + k_value
+            scope_key = (genome_id, contig_id)
+            if interval_index.has_conflict(
+                scope_key=scope_key,
+                start=position,
+                end=end_position,
                 k=k_value,
-                min_cross_k_marker_distance=config.min_cross_k_marker_distance,
+                padding=config.min_cross_k_marker_distance,
             ):
-                selected.append(item)
-                selected_counts_by_k[k_value] += 1
-                selected_positions.append((genome_id, contig_id, position, k_value))
-            else:
-                deferred.append(item)
+                rejected_by_spacing += 1
+                continue
+
+            selected.append(item)
+            accepted_total += 1
+            selected_counts_by_k[k_value] += 1
+            interval_index.add(
+                scope_key=scope_key,
+                start=position,
+                end=end_position,
+                k=k_value,
+            )
+
+            if processed_total >= next_log_at:
+                elapsed = time.perf_counter() - selection_start
+                logger.info(
+                    "Marker selection progress: processed=%d; accepted=%d; "
+                    "rejected_by_bucket_cap=%d; rejected_by_spacing=%d; "
+                    "elapsed_seconds=%.1f",
+                    processed_total,
+                    accepted_total,
+                    rejected_by_bucket_cap,
+                    rejected_by_spacing,
+                    elapsed,
+                )
+                next_log_at += 100000
 
         # If a very small genome cannot satisfy the distance rule for a k value,
         # retain no nested fallback by default. The intentionally reduced count is
         # safer than presenting nested local support as independent evidence.
-        del deferred
+
+    elapsed = time.perf_counter() - selection_start
+    logger.info(
+        "Marker selection complete: processed=%d; accepted=%d; "
+        "rejected_by_bucket_cap=%d; rejected_by_spacing=%d; elapsed_seconds=%.1f",
+        processed_total,
+        accepted_total,
+        rejected_by_bucket_cap,
+        rejected_by_spacing,
+        elapsed,
+    )
 
     for item in sorted(selected, key=_marker_sort_key):
         yield item

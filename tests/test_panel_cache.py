@@ -132,3 +132,28 @@ class TestPanelCache(unittest.TestCase):
                     cache_path=cache_path,
                     panel_path=panel_path,
                 )
+
+
+class TestPanelCacheMetadata(unittest.TestCase):
+    """Tests for v0.47 panel-cache validation metadata."""
+
+    def test_cache_payload_contains_hash_and_panel_metadata(self) -> None:
+        """Written caches should include SHA-256 and compact panel metadata."""
+        import pickle
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            panel_path = Path(tmpdir) / "panel.tsv"
+            cache_path = Path(tmpdir) / "panel.index.pkl"
+            TestPanelCache()._write_panel(panel_path)
+            index, source = load_panel_with_cache(
+                panel_path=panel_path,
+                cache_path=cache_path,
+                use_cache=True,
+            )
+            self.assertEqual(source, "tsv")
+            self.assertIn(5, index)
+            with cache_path.open("rb") as handle:
+                payload = pickle.load(handle)
+            self.assertIn("sha256", payload["panel_signature"])
+            self.assertEqual(payload["panel_metadata"]["k_values"], [5])
+            self.assertEqual(payload["panel_metadata"]["n_panel_kmer_keys"], 1)

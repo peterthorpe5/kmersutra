@@ -1,0 +1,58 @@
+KmerSutra v0.47.0 marker-selection and exact-screening performance update
+=======================================================================
+
+Date: 2026-06-06
+
+Purpose
+-------
+
+This release updates KmerSutra v0.46.0 with behaviour-preserving performance
+and robustness improvements for the current exact-screening workflow. The
+raw_ont_lod_balanced biological marker profile is unchanged.
+
+Main changes
+------------
+
+1. Accelerated independent multi-k genome-spread marker selection.
+   The cross-k locus-spacing check now uses an interval-indexed selected-marker
+   structure rather than repeatedly scanning all selected markers in an evidence
+   bucket. This preserves the previous half-open interval gap semantics, ignores
+   same-k intervals as before, and retains per-k/bin quota behaviour.
+
+2. Added marker-selection progress logging.
+   Independent multi-k selection now reports processed, accepted,
+   rejected-by-bucket-cap, rejected-by-spacing and elapsed time counters during
+   large builds.
+
+3. Strengthened panel-index cache validation.
+   Panel cache files now include SHA-256 panel signatures, package version,
+   k-value metadata, diagnostic-row counts and panel key counts. Older cache
+   formats are rejected with a clear rebuild message.
+
+4. Deterministic exact-screening hit ordering.
+   Screen hits are sorted before being returned so chunk size and worker
+   completion order do not alter output ordering.
+
+Testing
+-------
+
+New and updated unittest coverage includes:
+- interval padding and gap semantics;
+- same-k interval exception in cross-k spacing;
+- nested marker rejection;
+- distant cross-k marker acceptance;
+- per-k shifted-bin quota preservation;
+- equivalence against a slow reference selector on small data;
+- panel cache SHA-256 and metadata payloads;
+- deterministic output with different chunk sizes.
+
+Compatibility
+-------------
+
+No TSV schemas are intentionally changed. No CSV outputs are introduced. The
+v0.46 raw_ont_lod_balanced profile remains:
+
+    candidate_k_order=input
+    min_cross_k_marker_distance=150
+    max_per_genome_bin_by_k=51:4,77:6,101:4,151:1
+

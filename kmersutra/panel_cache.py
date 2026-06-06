@@ -1,14 +1,22 @@
-"""Panel index caching utilities for faster KmerSutra screening."""
+"""Panel index caching utilities for faster KmerSutra screening.
+
+The cache stores the already parsed in-memory panel index used by screening.
+It is deliberately validated against panel metadata before use so array tasks
+cannot silently reuse an index built from a different panel.
+"""
 
 from __future__ import annotations
 
+import hashlib
 import pickle
 from pathlib import Path
 from typing import Any
 
+from kmersutra import __version__
 from kmersutra.build_panel import DiagnosticKmer, load_panel
 
-CACHE_FORMAT_VERSION = 1
+CACHE_FORMAT_VERSION = 2
+_HASH_CHUNK_SIZE = 1024 * 1024
 
 
 def get_default_panel_cache_path(*, panel_path: str | Path) -> Path:
@@ -27,8 +35,28 @@ def get_default_panel_cache_path(*, panel_path: str | Path) -> Path:
     return Path(f"{Path(panel_path)}.index.pkl")
 
 
-def _panel_signature(*, panel_path: str | Path) -> dict[str, int]:
-    """Return a compact signature for stale-cache detection.
+def _sha256_file(*, path: str | Path) -> str:
+    """Return the SHA-256 digest of a file.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        File to hash.
+
+    Returns
+    -------
+    str
+        Hexadecimal SHA-256 digest.
+    """
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(_HASH_CHUNK_SIZE), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _panel_signature(*, panel_path: str | Path) -> dict[str, object]:
+    """Return a panel signature for stale-cache detection.
 
     Parameters
     ----------
@@ -37,11 +65,17 @@ def _panel_signature(*, panel_path: str | Path) -> dict[str, int]:
 
     Returns
     -------
-    dict[str, int]
-        File size and modification-time signature.
+    dict[str, object]
+        File path, size, modification time and SHA-256 digest.
     """
-    stat = Path(panel_path).stat()
-    return {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+    panel_file = Path(panel_path)
+    stat = panel_file.stat()
+    return {
+        "path_name": panel_file.name,
+        "size": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+        "sha256": _sha256_file(path=panel_file),
+    }
 
 
 def _plain_panel_index(
@@ -63,6 +97,42 @@ def _plain_panel_index(
     return {int(k): dict(kmer_map) for k, kmer_map in panel_index.items()}
 
 
+def _panel_index_metadata(
+    *,
+    panel_index: dict[int, dict[str, list[DiagnosticKmer]]],
+) -> dict[str, object]:
+    """Return compact metadata describing a parsed panel index.
+
+    Parameters
+    ----------
+    panel_index : dict[int, dict[str, list[DiagnosticKmer]]]
+        Parsed panel index.
+
+    Returns
+    -------
+    dict[str, object]
+        K values, number of unique k-mer keys and number of taxa/species.
+    """
+    species_names: set[str] = set()
+    evidence_taxids: set[str] = set()
+    n_diagnostic_rows = 0
+    for kmer_map in panel_index.values():
+        for diagnostics in kmer_map.values():
+            n_diagnostic_rows += len(diagnostics)
+            for diagnostic in diagnostics:
+                if diagnostic.species_name:
+                    species_names.add(str(diagnostic.species_name))
+                if diagnostic.evidence_taxid:
+                    evidence_taxids.add(str(diagnostic.evidence_taxid))
+    return {
+        "k_values": sorted(int(k_value) for k_value in panel_index),
+        "n_panel_kmer_keys": sum(len(kmer_map) for kmer_map in panel_index.values()),
+        "n_diagnostic_rows": n_diagnostic_rows,
+        "n_species_names": len(species_names),
+        "n_evidence_taxids": len(evidence_taxids),
+    }
+
+
 def write_panel_index_cache(
     *,
     panel_index: dict[int, dict[str, list[DiagnosticKmer]]],
@@ -80,12 +150,16 @@ def write_panel_index_cache(
     cache_path : str or pathlib.Path
         Output cache path.
     """
+    if not panel_index:
+        raise ValueError("panel_index is empty; refusing to write an empty cache")
     cache_file = Path(cache_path)
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     payload: dict[str, Any] = {
         "format_version": CACHE_FORMAT_VERSION,
+        "kmersutra_version": __version__,
         "panel_path": str(Path(panel_path)),
         "panel_signature": _panel_signature(panel_path=panel_path),
+        "panel_metadata": _panel_index_metadata(panel_index=panel_index),
         "panel_index": _plain_panel_index(panel_index=panel_index),
     }
     with cache_file.open("wb") as handle:
@@ -117,13 +191,21 @@ def load_panel_index_cache(
     Raises
     ------
     ValueError
-        If the cache format is unsupported or stale.
+        If the cache format is unsupported, stale or malformed.
     """
     with Path(cache_path).open("rb") as handle:
         payload = pickle.load(handle)
 
-    if payload.get("format_version") != CACHE_FORMAT_VERSION:
+    if payload.get("format_version") not in {1, CACHE_FORMAT_VERSION}:
         raise ValueError("Unsupported panel cache format version")
+
+    if payload.get("format_version") != CACHE_FORMAT_VERSION:
+        raise ValueError(
+            "Panel cache was written by an older cache format; rebuild the cache"
+        )
+
+    if payload.get("kmersutra_version") != __version__:
+        raise ValueError("Panel cache KmerSutra version does not match this package")
 
     if panel_path is not None and require_current:
         expected = _panel_signature(panel_path=panel_path)
@@ -134,6 +216,8 @@ def load_panel_index_cache(
     panel_index = payload.get("panel_index")
     if not isinstance(panel_index, dict):
         raise ValueError("Panel cache does not contain a valid panel index")
+    if not panel_index:
+        raise ValueError("Panel cache contains an empty panel index")
     return panel_index
 
 

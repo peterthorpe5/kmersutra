@@ -7,9 +7,12 @@ import unittest
 from kmersutra.build_panel import DiagnosticKmer
 from kmersutra.marker_selection import (
     MarkerSelectionConfig,
+    _marker_sort_key,
     diagnostic_retention_key,
     first_semicolon_value,
     genome_bin_key,
+    marker_score,
+    shifted_genome_bin_key,
     select_genome_spread_markers,
 )
 
@@ -345,4 +348,165 @@ class TestMarkerSelectionIntervalSeparation(unittest.TestCase):
                 k=51,
                 min_cross_k_marker_distance=50,
             )
+        )
+
+
+class TestIntervalIndexedMarkerSelection(unittest.TestCase):
+    """Tests for interval-indexed independent marker selection."""
+
+    def test_interval_padding_matches_existing_gap_semantics(self) -> None:
+        """A gap equal to padding should be allowed, but a shorter gap rejected."""
+        from kmersutra.marker_selection import interval_overlaps_with_padding
+
+        self.assertFalse(
+            interval_overlaps_with_padding(
+                candidate_start=200,
+                candidate_end=251,
+                existing_start=100,
+                existing_end=150,
+                padding=50,
+            )
+        )
+        self.assertTrue(
+            interval_overlaps_with_padding(
+                candidate_start=199,
+                candidate_end=250,
+                existing_start=100,
+                existing_end=150,
+                padding=50,
+            )
+        )
+        self.assertTrue(
+            interval_overlaps_with_padding(
+                candidate_start=110,
+                candidate_end=161,
+                existing_start=100,
+                existing_end=177,
+                padding=1,
+            )
+        )
+
+    def test_selected_interval_index_ignores_same_k_conflicts(self) -> None:
+        """The interval index should preserve cross-k-only spacing behaviour."""
+        from kmersutra.marker_selection import SelectedIntervalIndex
+
+        index = SelectedIntervalIndex()
+        index.add(scope_key=("genome1", "contig1"), start=100, end=151, k=51)
+        self.assertFalse(
+            index.has_conflict(
+                scope_key=("genome1", "contig1"),
+                start=110,
+                end=161,
+                k=51,
+                padding=150,
+            )
+        )
+        self.assertTrue(
+            index.has_conflict(
+                scope_key=("genome1", "contig1"),
+                start=110,
+                end=187,
+                k=77,
+                padding=150,
+            )
+        )
+        self.assertFalse(
+            index.has_conflict(
+                scope_key=("genome1", "contig2"),
+                start=110,
+                end=187,
+                k=77,
+                padding=150,
+            )
+        )
+
+    def test_independent_mode_respects_per_k_bin_quotas(self) -> None:
+        """Independent selection should preserve configured per-k bin quotas."""
+        markers = []
+        for k_value, n_markers in [(51, 5), (77, 5), (101, 5), (151, 5)]:
+            for index in range(n_markers):
+                markers.append(
+                    make_marker(
+                        kmer=("A" * (k_value - len(str(index)))) + str(index),
+                        position=index * 1000,
+                        k=k_value,
+                    )
+                )
+        selected = list(
+            select_genome_spread_markers(
+                diagnostic_kmers=markers,
+                config=MarkerSelectionConfig(
+                    strategy="independent_multik_genome_spread",
+                    max_per_bucket=100,
+                    genome_bin_size=10000,
+                    max_per_genome_bin=10,
+                    max_per_genome_bin_by_k={51: 1, 77: 2, 101: 1, 151: 1},
+                    min_cross_k_marker_distance=0,
+                ),
+            )
+        )
+        quotas = {51: 1, 77: 2, 101: 1, 151: 1}
+        counts_by_bin_k = {}
+        for item in selected:
+            bin_key = shifted_genome_bin_key(
+                item=item,
+                genome_bin_size=10000,
+                k_values=[51, 77, 101, 151],
+            )
+            key = (bin_key, item.k)
+            counts_by_bin_k[key] = counts_by_bin_k.get(key, 0) + 1
+        for (_bin_key, k_value), count in counts_by_bin_k.items():
+            self.assertLessEqual(count, quotas[k_value])
+
+    def test_interval_indexed_selector_matches_cross_k_reference(self) -> None:
+        """Fast selection should match a small slow reference for cross-k spacing."""
+        from kmersutra.marker_selection import cross_k_region_is_available
+
+        markers = [
+            make_marker(kmer="A" * 51, position=100, k=51),
+            make_marker(kmer="C" * 77, position=120, k=77),
+            make_marker(kmer="G" * 101, position=1000, k=101),
+            make_marker(kmer="T" * 151, position=1250, k=151),
+        ]
+        config = MarkerSelectionConfig(
+            strategy="independent_multik_genome_spread",
+            max_per_bucket=10,
+            genome_bin_size=10000,
+            max_per_genome_bin=10,
+            min_cross_k_marker_distance=150,
+        )
+        selected = list(
+            select_genome_spread_markers(
+                diagnostic_kmers=markers,
+                config=config,
+            )
+        )
+
+        reference_selected = []
+        selected_positions = []
+        ordered = sorted(
+            markers,
+            key=lambda item: (
+                marker_score(item),
+                -int(item.k),
+                _marker_sort_key(item),
+            ),
+        )
+        for item in ordered:
+            genome_id = first_semicolon_value(item.source_genomes)
+            contig_id = first_semicolon_value(item.source_contigs)
+            if cross_k_region_is_available(
+                selected_positions=selected_positions,
+                genome_id=genome_id,
+                contig_id=contig_id,
+                position=item.example_position,
+                k=item.k,
+                min_cross_k_marker_distance=150,
+            ):
+                reference_selected.append(item)
+                selected_positions.append((genome_id, contig_id, item.example_position, item.k))
+
+        self.assertEqual(
+            [item.kmer for item in selected],
+            [item.kmer for item in sorted(reference_selected, key=_marker_sort_key)],
         )

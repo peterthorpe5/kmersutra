@@ -164,6 +164,27 @@ panel loading, screening, summarisation, and report writing. Panel caching write
 or reuses a pickled index next to the panel by default, avoiding repeated parsing
 of large gzip-compressed TSV panels.
 
+KmerSutra v0.48.0 adds an optional input decompressor for gzip FASTA/FASTQ
+screening inputs:
+
+```bash
+kmersutra-screen \
+  --input sample.fastq.gz \
+  --input_format fastq \
+  --panel master_kmer_panel.tsv.gz \
+  --sample_id sample_001 \
+  --out_dir sample_001_kmersutra \
+  --threads 12 \
+  --chunk_size 10000 \
+  --decompressor pigz \
+  --profile
+```
+
+The default is `--decompressor python`, which preserves previous behaviour.
+Use `--decompressor auto` to use `pigz` when it is available on `PATH` and fall
+back to Python gzip otherwise. Explicit `--decompressor pigz` fails clearly if
+`pigz` is not installed.
+
 ## Genome configuration
 
 The genome configuration is a tab-separated file.

@@ -101,6 +101,37 @@ class KmerHit:
 
 
 
+def hit_sort_key(hit: KmerHit) -> tuple[object, ...]:
+    """Return a deterministic sort key for a k-mer hit.
+
+    Parameters
+    ----------
+    hit : KmerHit
+        Hit to sort.
+
+    Returns
+    -------
+    tuple[object, ...]
+        Stable ordering key independent of worker/chunk completion order.
+    """
+    return (
+        hit.sample_id,
+        hit.sequence_id,
+        hit.sequence_type,
+        int(hit.k),
+        int(hit.query_position),
+        hit.matched_kmer,
+        hit.query_kmer,
+        int(hit.mismatches),
+        hit.panel_type,
+        hit.species_name,
+        hit.clade,
+        hit.evidence_taxid,
+        hit.evidence_name,
+        hit.evidence_rank,
+    )
+
+
 def filter_panel_index_by_species(
     *,
     panel_index: dict[int, dict[str, list[DiagnosticKmer]]],
@@ -775,7 +806,7 @@ def screen_records_for_species_kmers(
             )
         if logger:
             logger.info("Screened %d records and retained %d hits", n_records, len(all_hits))
-        return all_hits
+        return sorted(all_hits, key=hit_sort_key)
 
     all_hits: list[KmerHit] = []
     n_records = 0
@@ -831,7 +862,7 @@ def screen_records_for_species_kmers(
 
     if logger:
         logger.info("Screened %d records and retained %d hits", n_records, len(all_hits))
-    return all_hits
+    return sorted(all_hits, key=hit_sort_key)
 
 
 
@@ -841,6 +872,7 @@ def screen_file_for_panel_index(
     panel_index: dict[int, dict[str, list[DiagnosticKmer]]],
     sample_id: str,
     input_format: str,
+    decompressor: str = "python",
     max_mismatches: int = 0,
     fuzzy_min_k: int = 71,
     threads: int = 1,
@@ -863,6 +895,10 @@ def screen_file_for_panel_index(
         Sample identifier.
     input_format : str
         Input format, either ``fasta`` or ``fastq``.
+    decompressor : str, optional
+        Text decompressor for gzip inputs. ``python`` preserves historical
+        behaviour; ``pigz`` uses external pigz; ``auto`` uses pigz when
+        available and falls back to Python gzip.
     max_mismatches : int, optional
         Maximum mismatches for fuzzy matching.
     fuzzy_min_k : int, optional
@@ -902,12 +938,15 @@ def screen_file_for_panel_index(
             n_panel_kmers,
         )
 
+    if logger:
+        logger.info("Input decompressor: %s", decompressor)
+
     parse_start = time.perf_counter()
     if input_format == "fasta":
-        records = read_fasta_records(fasta_path=input_path)
+        records = read_fasta_records(fasta_path=input_path, decompressor=decompressor)
         sequence_type = "contig"
     elif input_format == "fastq":
-        records = read_fastq_records(fastq_path=input_path)
+        records = read_fastq_records(fastq_path=input_path, decompressor=decompressor)
         sequence_type = "read"
     else:
         raise ValueError("input_format must be either fasta or fastq")
@@ -916,7 +955,7 @@ def screen_file_for_panel_index(
         profile_records.append({
             "stage": "prepare_input_iterator",
             "seconds": f"{parse_seconds:.6f}",
-            "detail": input_format,
+            "detail": f"{input_format};decompressor={decompressor}",
         })
 
     screen_start = time.perf_counter()
@@ -947,6 +986,7 @@ def screen_file_for_species_kmers(
     panel_path: str | Path,
     sample_id: str,
     input_format: str,
+    decompressor: str = "python",
     max_mismatches: int = 0,
     fuzzy_min_k: int = 71,
     threads: int = 1,
@@ -970,6 +1010,10 @@ def screen_file_for_species_kmers(
         Sample identifier.
     input_format : str
         Input format, either fasta or fastq.
+    decompressor : str, optional
+        Text decompressor for gzip inputs. ``python`` preserves historical
+        behaviour; ``pigz`` uses external pigz; ``auto`` uses pigz when
+        available and falls back to Python gzip.
     max_mismatches : int, optional
         Maximum mismatches for fuzzy matching.
     fuzzy_min_k : int, optional
@@ -1018,12 +1062,15 @@ def screen_file_for_species_kmers(
             panel_seconds,
         )
 
+    if logger:
+        logger.info("Input decompressor: %s", decompressor)
+
     parse_start = time.perf_counter()
     if input_format == "fasta":
-        records = read_fasta_records(fasta_path=input_path)
+        records = read_fasta_records(fasta_path=input_path, decompressor=decompressor)
         sequence_type = "contig"
     elif input_format == "fastq":
-        records = read_fastq_records(fastq_path=input_path)
+        records = read_fastq_records(fastq_path=input_path, decompressor=decompressor)
         sequence_type = "read"
     else:
         raise ValueError("input_format must be either fasta or fastq")
@@ -1032,7 +1079,7 @@ def screen_file_for_species_kmers(
         profile_records.append({
             "stage": "prepare_input_iterator",
             "seconds": f"{parse_seconds:.6f}",
-            "detail": input_format,
+            "detail": f"{input_format};decompressor={decompressor}",
         })
 
     screen_start = time.perf_counter()

@@ -647,6 +647,7 @@ def screen_file_hierarchical(
     module_manifest_path: str | Path,
     sample_id: str,
     input_format: str,
+    decompressor: str = "python",
     max_mismatches: int = 0,
     fuzzy_min_k: int = 71,
     threads: int = 1,
@@ -671,6 +672,10 @@ def screen_file_hierarchical(
         Sample identifier.
     input_format : str
         Input format, either ``fastq`` or ``fasta``.
+    decompressor : str, optional
+        Text decompressor for gzip inputs. ``python`` preserves historical
+        behaviour; ``pigz`` uses external pigz; ``auto`` uses pigz when
+        available and falls back to Python gzip.
     max_mismatches : int, optional
         Maximum mismatches for fuzzy matching.
     fuzzy_min_k : int, optional
@@ -733,6 +738,7 @@ def screen_file_hierarchical(
             panel_index=gate_index,
             sample_id=sample_id,
             input_format=input_format,
+            decompressor=decompressor,
             max_mismatches=max_mismatches,
             fuzzy_min_k=fuzzy_min_k,
             threads=threads,
@@ -842,6 +848,7 @@ def screen_file_hierarchical(
             panel_index=module_index,
             sample_id=sample_id,
             input_format=input_format,
+            decompressor=decompressor,
             max_mismatches=max_mismatches,
             fuzzy_min_k=fuzzy_min_k,
             threads=threads,

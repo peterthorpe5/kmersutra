@@ -1,0 +1,25 @@
+.............................................................................2026-06-06 10:02:31 WARNING [kmersutra] pyarrow is not available; keeping TSV.GZ screen panels only
+2026-06-06 10:02:31 WARNING [kmersutra] Skipping hierarchical module export because the final panel has no diagnostic records: /tmp/tmpffiipwjo/panel/species_kmer_panel.tsv.gz
+....No detection calls were read. This is not a valid benchmark summary. First missing paths:
+        sample_id  ...  screen_status
+0  missing_sample  ...  missing_calls
+
+[1 rows x 5 columns]
+..........................................................................................................................2026-06-06 10:02:31 WARNING [download_ncbi_genomes_for_kmersutra] mock esummary batch failed on attempt 1/2: IncompleteRead(7 bytes read)
+................................................................................./usr/lib/python3.13/argparse.py:2000: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7ed6174d0310>
+  arg_string_pattern_parts.append(pattern)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/usr/lib/python3.13/argparse.py:2000: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7ed6175673d0>
+  arg_string_pattern_parts.append(pattern)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/usr/lib/python3.13/argparse.py:2000: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7ed617567010>
+  arg_string_pattern_parts.append(pattern)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.2026-06-06 10:02:32 WARNING [kmersutra] Could not write Parquet output /tmp/tmpui_jshcs/out/sample_taxonomic_kmer_evidence.parquet because pyarrow is unavailable: Parquet module storage requires the optional pyarrow dependency. Install KmerSutra with the parquet extra, for example: pip install '.[parquet]', or install pyarrow in the active environment.
+2026-06-06 10:02:32 WARNING [kmersutra] Could not write Parquet output /tmp/tmpui_jshcs/out/species_detection_calls.parquet because pyarrow is unavailable: Parquet module storage requires the optional pyarrow dependency. Install KmerSutra with the parquet extra, for example: pip install '.[parquet]', or install pyarrow in the active environment.
+2026-06-06 10:02:32 WARNING [kmersutra] Could not write Parquet output /tmp/tmpui_jshcs/out/sample_lineage_interpretation.parquet because pyarrow is unavailable: Parquet module storage requires the optional pyarrow dependency. Install KmerSutra with the parquet extra, for example: pip install '.[parquet]', or install pyarrow in the active environment.
+......................................................................
+----------------------------------------------------------------------
+Ran 355 tests in 8.733s
+
+OK

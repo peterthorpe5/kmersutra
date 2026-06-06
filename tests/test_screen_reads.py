@@ -291,3 +291,87 @@ class TestScreenReads(unittest.TestCase):
         serial_ids = sorted(hit.sequence_id for hit in serial)
         parallel_ids = sorted(hit.sequence_id for hit in parallel)
         self.assertEqual(serial_ids, parallel_ids)
+
+
+class TestScreenReadDeterminism(unittest.TestCase):
+    """Tests for deterministic exact-screening output order."""
+
+    def test_chunk_size_does_not_change_hit_order_or_content(self) -> None:
+        """Different chunk sizes should produce identical sorted hit records."""
+        diagnostic = DiagnosticKmer(
+            kmer="AAAAA",
+            k=5,
+            panel_type="species_unique",
+            species_name="Alpha",
+            clade="Demo",
+            source_genomes="g1",
+            source_contigs="c1",
+            example_position=0,
+        )
+        panel = {5: {"AAAAA": [diagnostic]}}
+        records = [
+            SequenceRecord(
+                identifier=f"read{i}",
+                description=f"read{i}",
+                sequence="GGGAAAAATTT",
+            )
+            for i in range(10, 0, -1)
+        ]
+        small_chunks = screen_records_for_species_kmers(
+            records=records,
+            panel_index=panel,
+            sample_id="sample1",
+            sequence_type="read",
+            threads=2,
+            chunk_size=1,
+        )
+        large_chunks = screen_records_for_species_kmers(
+            records=records,
+            panel_index=panel,
+            sample_id="sample1",
+            sequence_type="read",
+            threads=2,
+            chunk_size=4,
+        )
+        self.assertEqual(
+            [hit.to_record() for hit in small_chunks],
+            [hit.to_record() for hit in large_chunks],
+        )
+
+
+class TestScreenFileDecompression(unittest.TestCase):
+    """Tests for decompressor propagation into file-level screening."""
+
+    def test_screen_gzip_fastq_with_python_decompressor(self) -> None:
+        """File-level screening should read gzipped FASTQ via Python gzip."""
+        import gzip
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        from kmersutra.screen_reads import screen_file_for_panel_index
+
+        diagnostic = DiagnosticKmer(
+            kmer="AAAAA",
+            k=5,
+            panel_type="species_unique",
+            species_name="Alpha",
+            clade="Demo",
+            source_genomes="g1",
+            source_contigs="c1",
+            example_position=0,
+        )
+        panel = {5: {"AAAAA": [diagnostic]}}
+        with TemporaryDirectory() as tmpdir:
+            fastq_path = Path(tmpdir) / "reads.fastq.gz"
+            with gzip.open(fastq_path, "wt", encoding="utf-8") as handle:
+                handle.write("@read1\nGGGAAAAATTT\n+\n!!!!!!!!!!!\n")
+            hits = screen_file_for_panel_index(
+                input_path=fastq_path,
+                panel_index=panel,
+                sample_id="sample1",
+                input_format="fastq",
+                decompressor="python",
+            )
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0].sequence_id, "read1")
+        self.assertEqual(hits[0].species_name, "Alpha")
