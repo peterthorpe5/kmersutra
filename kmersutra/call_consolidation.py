@@ -50,6 +50,8 @@ CONSOLIDATED_CALL_FIELDNAMES = [
     "primary_unique_kmers",
     "primary_to_candidate_unique_margin",
     "primary_to_candidate_unique_ratio",
+    "primary_to_candidate_unique_fraction",
+    "same_genus_reportable_min_fraction",
     "is_background_candidate",
 ]
 
@@ -268,6 +270,7 @@ def consolidate_species_calls(
     demote_same_genus_neighbours: bool = True,
     dominant_species_min_margin: int = 25,
     dominant_species_min_ratio: float = 2.0,
+    same_genus_reportable_min_fraction: float = 0.0,
     logger: logging.Logger | None = None,
 ) -> list[dict[str, object]]:
     """Consolidate raw species calls into reportable interpretation layers.
@@ -286,6 +289,13 @@ def consolidate_species_calls(
         Minimum unique-k-mer margin required for same-genus demotion.
     dominant_species_min_ratio : float, optional
         Minimum primary/candidate unique-k-mer ratio required for demotion.
+    same_genus_reportable_min_fraction : float, optional
+        Optional co-dominance gate for same-genus reportable species. When set
+        above zero, a non-primary same-genus species must have at least this
+        fraction of the primary species unique-k-mer support to remain a
+        reportable species call. Species below the fraction are retained as
+        ``neighbour_lineage_evidence`` rather than discarded. The default of
+        zero preserves existing behaviour.
     logger : logging.Logger or None, optional
         Optional logger for summary messages.
 
@@ -296,6 +306,10 @@ def consolidate_species_calls(
         ``pre_consolidation_call`` and the reportable call is written to
         ``call``.
     """
+    if not 0.0 <= same_genus_reportable_min_fraction <= 1.0:
+        raise ValueError(
+            "same_genus_reportable_min_fraction must be between 0 and 1"
+        )
     background_taxa = {
         normalise_taxon_name(value=taxon) for taxon in (background_candidate_taxa or [])
     }
@@ -315,6 +329,7 @@ def consolidate_species_calls(
 
     output: list[dict[str, object]] = []
     demoted = 0
+    fraction_demoted = 0
     background = 0
     for row in rows:
         species_name = str(row.get("species_name", ""))
@@ -329,6 +344,7 @@ def consolidate_species_calls(
         primary_unique = ""
         margin_value: float | str = ""
         ratio_value: float | str = ""
+        fraction_value: float | str = ""
         is_background = taxon_norm in background_taxa
 
         if is_background and is_reportable_species_call(call=original_call):
@@ -347,9 +363,24 @@ def consolidate_species_calls(
                 )
                 primary_species = str(primary.get("species_name", ""))
                 primary_unique = int(numeric_value(row=primary, key="n_unique_kmers"))
+                candidate_unique = numeric_value(row=row, key="n_unique_kmers")
                 margin_value = round(margin, 4)
                 ratio_value = "inf" if math.isinf(ratio) else round(ratio, 4)
-                if dominated:
+                if primary_unique <= 0:
+                    fraction = 0.0
+                else:
+                    fraction = candidate_unique / primary_unique
+                fraction_value = round(fraction, 4)
+                if (
+                    same_genus_reportable_min_fraction > 0
+                    and fraction < same_genus_reportable_min_fraction
+                ):
+                    call = NEIGHBOUR_LINEAGE_CALL
+                    report_layer = "neighbour_lineage_evidence"
+                    reason = "below_same_genus_reportable_fraction"
+                    demoted += 1
+                    fraction_demoted += 1
+                elif dominated:
                     call = NEIGHBOUR_LINEAGE_CALL
                     report_layer = "neighbour_lineage_evidence"
                     reason = "dominated_same_genus_neighbour"
@@ -376,14 +407,18 @@ def consolidate_species_calls(
         row["primary_unique_kmers"] = primary_unique
         row["primary_to_candidate_unique_margin"] = margin_value
         row["primary_to_candidate_unique_ratio"] = ratio_value
+        row["primary_to_candidate_unique_fraction"] = fraction_value
+        row["same_genus_reportable_min_fraction"] = same_genus_reportable_min_fraction
         row["is_background_candidate"] = int(is_background)
         output.append(row)
 
     if logger is not None:
         logger.info(
-            "Consolidated %d species calls; demoted_same_genus=%d; background_candidates=%d",
+            "Consolidated %d species calls; demoted_same_genus=%d; "
+            "fraction_demoted=%d; background_candidates=%d",
             len(output),
             demoted,
+            fraction_demoted,
             background,
         )
     return output

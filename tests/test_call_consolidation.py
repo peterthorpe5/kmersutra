@@ -154,6 +154,116 @@ class TestCallConsolidation(unittest.TestCase):
             {"present_high_confidence"},
         )
 
+    def test_same_genus_fraction_gate_demotes_weak_non_primary_species(self) -> None:
+        """A weak same-genus species can be retained as lineage evidence."""
+        rows = [
+            {
+                "sample_id": "s1",
+                "species_name": "Plasmodium vivax",
+                "call": "present_in_mixed_sample",
+                "n_unique_kmers": 100,
+                "n_positive_sequences": 20,
+                "best_k": 101,
+            },
+            {
+                "sample_id": "s1",
+                "species_name": "Plasmodium simium",
+                "call": "present_in_mixed_sample",
+                "n_unique_kmers": 49,
+                "n_positive_sequences": 15,
+                "best_k": 101,
+            },
+        ]
+        observed = consolidate_species_calls(
+            species_calls=rows,
+            dominant_species_min_margin=999,
+            dominant_species_min_ratio=999.0,
+            same_genus_reportable_min_fraction=0.50,
+        )
+        calls = {row["species_name"]: row for row in observed}
+
+        self.assertEqual(calls["Plasmodium vivax"]["call"], "present_in_mixed_sample")
+        self.assertEqual(calls["Plasmodium simium"]["call"], NEIGHBOUR_LINEAGE_CALL)
+        self.assertEqual(
+            calls["Plasmodium simium"]["consolidation_reason"],
+            "below_same_genus_reportable_fraction",
+        )
+        self.assertEqual(
+            calls["Plasmodium simium"]["primary_to_candidate_unique_fraction"],
+            0.49,
+        )
+
+    def test_same_genus_fraction_gate_preserves_co_dominant_species(self) -> None:
+        """Co-dominant same-genus species should remain reportable."""
+        rows = [
+            {
+                "sample_id": "s1",
+                "species_name": "Plasmodium falciparum",
+                "call": "present_in_mixed_sample",
+                "n_unique_kmers": 100,
+                "n_positive_sequences": 20,
+                "best_k": 101,
+            },
+            {
+                "sample_id": "s1",
+                "species_name": "Plasmodium knowlesi",
+                "call": "present_in_mixed_sample",
+                "n_unique_kmers": 55,
+                "n_positive_sequences": 15,
+                "best_k": 101,
+            },
+        ]
+        observed = consolidate_species_calls(
+            species_calls=rows,
+            dominant_species_min_margin=999,
+            dominant_species_min_ratio=999.0,
+            same_genus_reportable_min_fraction=0.50,
+        )
+
+        self.assertEqual(
+            {row["call"] for row in observed},
+            {"present_in_mixed_sample"},
+        )
+
+    def test_same_genus_fraction_gate_defaults_to_existing_behaviour(self) -> None:
+        """The new fraction gate should be inactive unless requested."""
+        rows = [
+            {
+                "sample_id": "s1",
+                "species_name": "Plasmodium vivax",
+                "call": "present_in_mixed_sample",
+                "n_unique_kmers": 100,
+                "n_positive_sequences": 20,
+                "best_k": 101,
+            },
+            {
+                "sample_id": "s1",
+                "species_name": "Plasmodium simium",
+                "call": "present_in_mixed_sample",
+                "n_unique_kmers": 49,
+                "n_positive_sequences": 15,
+                "best_k": 101,
+            },
+        ]
+        observed = consolidate_species_calls(
+            species_calls=rows,
+            dominant_species_min_margin=999,
+            dominant_species_min_ratio=999.0,
+        )
+
+        self.assertEqual(
+            {row["call"] for row in observed},
+            {"present_in_mixed_sample"},
+        )
+
+    def test_same_genus_fraction_gate_validates_fraction_bounds(self) -> None:
+        """Invalid fraction gates should fail clearly."""
+        with self.assertRaises(ValueError):
+            consolidate_species_calls(
+                species_calls=[],
+                same_genus_reportable_min_fraction=1.1,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

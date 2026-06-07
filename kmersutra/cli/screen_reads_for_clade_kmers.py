@@ -339,6 +339,18 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--same_genus_reportable_min_fraction",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional co-dominance gate for reportable same-genus species. "
+            "When greater than zero, a non-primary same-genus species must have "
+            "at least this fraction of the primary species unique-k-mer support "
+            "to remain reportable; otherwise it is retained as "
+            "neighbour_lineage_evidence. Default 0 preserves existing behaviour."
+        ),
+    )
+    parser.add_argument(
         "--write_parquet_outputs",
         action="store_true",
         help=(
@@ -801,6 +813,10 @@ def main() -> None:
         args.dominant_species_min_margin,
         args.dominant_species_min_ratio,
     )
+    logger.info(
+        "Same-genus reportable minimum support fraction: %.4f",
+        args.same_genus_reportable_min_fraction,
+    )
     logger.info("Write Parquet outputs: %s", args.write_parquet_outputs)
 
     profiler = WorkflowProfiler() if args.profile else None
@@ -901,6 +917,7 @@ def main() -> None:
             demote_same_genus_neighbours=not args.disable_same_genus_neighbour_demotion,
             dominant_species_min_margin=args.dominant_species_min_margin,
             dominant_species_min_ratio=args.dominant_species_min_ratio,
+            same_genus_reportable_min_fraction=args.same_genus_reportable_min_fraction,
             logger=logger,
         )
     logger.info("Built %d report-layer species detection-call rows", len(detection_calls))

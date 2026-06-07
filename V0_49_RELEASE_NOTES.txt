@@ -1,0 +1,108 @@
+KmerSutra v0.49.0 release notes
+Date: 2026-06-07
+
+Purpose
+=======
+
+This release adds a conservative, optional report-layer improvement for closely
+related same-genus species without changing the core database build, marker
+selection, exact screening path, pigz support, panel cache behaviour, Parquet
+outputs, LCA outputs, or existing default call behaviour.
+
+The release deliberately does not add empirical background FASTQ k-mer exclusion
+as a default or recommended method, because that can overfit benchmark negatives
+and would not be a fair assumption for real unknown samples.
+
+Main change
+===========
+
+v0.49 adds an optional same-genus reportable co-dominance gate:
+
+    --same_genus_reportable_min_fraction FLOAT
+
+When used together with --consolidate_species_calls, any non-primary same-genus
+species must have at least this fraction of the primary species unique-k-mer
+support to remain a reportable species call. Species below the fraction are not
+discarded. They are retained as:
+
+    neighbour_lineage_evidence
+
+This keeps the evidence auditable while reducing over-reporting of weak same-
+genus neighbours as reportable species in real unknown-sample settings.
+
+Default behaviour is unchanged:
+
+    --same_genus_reportable_min_fraction 0.0
+
+A value of 0.0 disables the new gate and preserves v0.48 behaviour.
+
+Why this is scientifically safer
+================================
+
+The previous idea of excluding k-mers found in a benchmark background FASTQ was
+not implemented, because a real unknown sample will not have a known pathogen-
+free matched background. Excluding k-mers from a benchmark-specific background
+could force results to fit the test and is not the strongest general solution.
+
+The v0.49 approach instead changes only the interpretation layer. It keeps weak
+same-genus evidence visible but requires co-dominance before reporting multiple
+same-genus species as species-level positives. This is more appropriate for real
+unknown samples, where strain diversity can make strict species-private markers
+imperfect.
+
+New output fields
+=================
+
+Consolidated species-call outputs now include:
+
+    primary_to_candidate_unique_fraction
+    same_genus_reportable_min_fraction
+
+These fields document the co-dominance calculation used for any same-genus
+reportable-species decision.
+
+Updated shell wrapper
+=====================
+
+run_kmersutra_comparable_array_tmpdir.sh now accepts:
+
+    SAME_GENUS_REPORTABLE_MIN_FRACTION
+
+Example conservative report-layer test:
+
+    export CONSOLIDATE_SPECIES_CALLS="true"
+    export SAME_GENUS_REPORTABLE_MIN_FRACTION="0.50"
+
+Recommended first benchmark sweep
+=================================
+
+Do not immediately assume 0.50 is optimal. Recommended values to test are:
+
+    0.00  preserves v0.48 behaviour
+    0.25  mild co-dominance gate
+    0.50  stricter species-reportable gate
+
+Accept the stricter setting only if it reduces reportable off-target species
+without materially worsening tracked-target sensitivity, LOD95/LOD100, three-
+genome P. vivax recovery, or runtime.
+
+Testing
+=======
+
+The release includes new unittest coverage for:
+
+    - weak same-genus species demotion by the fraction gate
+    - co-dominant same-genus species preservation
+    - default inactive behaviour matching v0.48
+    - invalid fraction bounds
+
+Full unittest discovery was run with:
+
+    python -m unittest discover -s tests -v
+
+Result:
+
+    Ran 367 tests in 7.578s
+    OK (skipped=1)
+
+No nose2 tests were used.
