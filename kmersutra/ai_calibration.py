@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 from collections import Counter, defaultdict
 from collections.abc import Iterable
 from pathlib import Path
@@ -40,6 +41,79 @@ CALL_FEATURE_COLUMNS = [
     "spike_n_per_genome",
     "total_spike_n",
 ]
+
+LEAKAGE_RISK_FEATURE_COLUMNS = [
+    "spike_n",
+    "spike_n_per_genome",
+    "total_spike_n",
+]
+
+SAFE_CALL_FEATURE_COLUMNS = [
+    column for column in CALL_FEATURE_COLUMNS
+    if column not in LEAKAGE_RISK_FEATURE_COLUMNS
+]
+
+BINARY_DERIVED_CALL_FEATURE_COLUMNS = [
+    "has_long_k_support",
+    "has_multi_k_support",
+    "exact_hit_fraction",
+]
+
+LOG1P_SOURCE_CALL_FEATURE_COLUMNS = [
+    "n_hits",
+    "n_unique_kmers",
+    "n_positive_sequences",
+    "best_k",
+    "n_exact_hits",
+    "n_fuzzy_hits",
+    "conflicting_unique_kmers",
+    "reportable_conflicting_unique_kmers",
+]
+
+LOG1P_DERIVED_CALL_FEATURE_COLUMNS = [
+    f"log1p_{column}" for column in LOG1P_SOURCE_CALL_FEATURE_COLUMNS
+]
+
+RATIO_DERIVED_CALL_FEATURE_COLUMNS = [
+    "positive_sequences_per_unique_kmer",
+    "unique_kmers_per_positive_sequence",
+    "exact_hits_per_unique_kmer",
+    "fuzzy_hit_fraction",
+    "conflicting_unique_kmer_fraction",
+    "reportable_conflicting_unique_kmer_fraction",
+]
+
+SAFE_TRANSFORMED_CALL_FEATURE_COLUMNS = [
+    "log1p_n_hits",
+    "log1p_n_unique_kmers",
+    "log1p_n_positive_sequences",
+    "n_k_values_positive",
+    "log1p_best_k",
+    "log1p_n_exact_hits",
+    "log1p_n_fuzzy_hits",
+    "log1p_conflicting_unique_kmers",
+    "conflict_ratio",
+    "log1p_reportable_conflicting_unique_kmers",
+    "reportable_conflict_ratio",
+    "mixed_species_support_fraction",
+    "confidence_score",
+    "signal_confidence_score",
+    "has_long_k_support",
+    "has_multi_k_support",
+    "exact_hit_fraction",
+    "fuzzy_hit_fraction",
+    "positive_sequences_per_unique_kmer",
+    "unique_kmers_per_positive_sequence",
+    "exact_hits_per_unique_kmer",
+    "conflicting_unique_kmer_fraction",
+    "reportable_conflicting_unique_kmer_fraction",
+]
+
+CALL_FEATURE_PROFILES = {
+    "legacy": CALL_FEATURE_COLUMNS + BINARY_DERIVED_CALL_FEATURE_COLUMNS,
+    "safe_raw": SAFE_CALL_FEATURE_COLUMNS + BINARY_DERIVED_CALL_FEATURE_COLUMNS,
+    "safe_transformed": SAFE_TRANSFORMED_CALL_FEATURE_COLUMNS,
+}
 
 DEFAULT_LABEL_COLUMN = "ml_report_label"
 DEFAULT_UNKNOWN_LABEL = "unknown_or_unresolved"
@@ -107,6 +181,139 @@ def normalise_float(value: object) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+
+
+def safe_divide(*, numerator: float, denominator: float) -> float:
+    """Return a defensive ratio with zero-denominator handling.
+
+    Parameters
+    ----------
+    numerator : float
+        Numerator.
+    denominator : float
+        Denominator.
+
+    Returns
+    -------
+    float
+        ``numerator / denominator`` when possible, otherwise zero.
+    """
+    if denominator == 0.0:
+        return 0.0
+    return numerator / denominator
+
+
+def add_transformed_call_features(*, feature_record: dict[str, object]) -> None:
+    """Add log-transformed and ratio evidence features in-place.
+
+    The raw KmerSutra count features can differ by orders of magnitude between
+    small spike-in benchmarks and large empirical mock communities. These
+    derived features provide a scale-compressed, leakage-safe profile for
+    cross-domain AI calibration tests while preserving the original raw fields.
+
+    Parameters
+    ----------
+    feature_record : dict[str, object]
+        AI feature record containing the raw call-evidence fields.
+    """
+    for column in LOG1P_SOURCE_CALL_FEATURE_COLUMNS:
+        value = max(0.0, normalise_float(feature_record.get(column, 0.0)))
+        feature_record[f"log1p_{column}"] = math.log1p(value)
+
+    n_hits = normalise_float(feature_record.get("n_hits", 0.0))
+    n_unique = normalise_float(feature_record.get("n_unique_kmers", 0.0))
+    n_sequences = normalise_float(feature_record.get("n_positive_sequences", 0.0))
+    n_exact = normalise_float(feature_record.get("n_exact_hits", 0.0))
+    n_fuzzy = normalise_float(feature_record.get("n_fuzzy_hits", 0.0))
+    n_conflict = normalise_float(
+        feature_record.get("conflicting_unique_kmers", 0.0)
+    )
+    n_reportable_conflict = normalise_float(
+        feature_record.get("reportable_conflicting_unique_kmers", 0.0)
+    )
+
+    feature_record["positive_sequences_per_unique_kmer"] = safe_divide(
+        numerator=n_sequences,
+        denominator=n_unique,
+    )
+    feature_record["unique_kmers_per_positive_sequence"] = safe_divide(
+        numerator=n_unique,
+        denominator=n_sequences,
+    )
+    feature_record["exact_hits_per_unique_kmer"] = safe_divide(
+        numerator=n_exact,
+        denominator=n_unique,
+    )
+    feature_record["fuzzy_hit_fraction"] = safe_divide(
+        numerator=n_fuzzy,
+        denominator=n_hits,
+    )
+    feature_record["conflicting_unique_kmer_fraction"] = safe_divide(
+        numerator=n_conflict,
+        denominator=n_unique + n_conflict,
+    )
+    feature_record["reportable_conflicting_unique_kmer_fraction"] = safe_divide(
+        numerator=n_reportable_conflict,
+        denominator=n_unique + n_reportable_conflict,
+    )
+
+
+def get_call_feature_columns(*, profile: str = "legacy") -> list[str]:
+    """Return configured AI call-calibration feature columns.
+
+    Parameters
+    ----------
+    profile : str, optional
+        Feature profile. ``legacy`` preserves the original raw feature set,
+        ``safe_raw`` excludes benchmark spike-in columns, and
+        ``safe_transformed`` uses log1p-transformed count features plus
+        leakage-safe ratio features.
+
+    Returns
+    -------
+    list[str]
+        Feature columns for the requested profile.
+
+    Raises
+    ------
+    ValueError
+        If the profile is not recognised.
+    """
+    key = str(profile or "legacy").strip().lower()
+    if key not in CALL_FEATURE_PROFILES:
+        raise ValueError(
+            "Unknown call feature profile: "
+            f"{profile}. Expected one of: "
+            f"{', '.join(sorted(CALL_FEATURE_PROFILES))}"
+        )
+    return list(CALL_FEATURE_PROFILES[key])
+
+
+def filter_present_feature_columns(
+    *,
+    records: list[dict[str, object]],
+    feature_columns: list[str],
+) -> list[str]:
+    """Return configured feature columns present in the table.
+
+    Parameters
+    ----------
+    records : list of dict
+        Feature records.
+    feature_columns : list[str]
+        Requested feature columns.
+
+    Returns
+    -------
+    list[str]
+        Requested columns that exist in the first record.
+    """
+    if not records:
+        return []
+    observed = set(records[0])
+    return [column for column in feature_columns if column in observed]
 
 
 def infer_report_label(*, record: dict[str, object]) -> str:
@@ -294,13 +501,21 @@ def add_lca_features_to_training_records(
     return rows
 
 
-def infer_numeric_feature_columns(*, records: list[dict[str, object]]) -> list[str]:
+def infer_numeric_feature_columns(
+    *,
+    records: list[dict[str, object]],
+    feature_profile: str = "legacy",
+) -> list[str]:
     """Infer numeric feature columns for AI training.
 
     Parameters
     ----------
     records : list of dict
         Training records.
+    feature_profile : str, optional
+        Call-feature profile. ``legacy`` preserves the original raw feature
+        set, while ``safe_transformed`` favours log1p and ratio features for
+        cross-domain validation.
 
     Returns
     -------
@@ -309,16 +524,15 @@ def infer_numeric_feature_columns(*, records: list[dict[str, object]]) -> list[s
     """
     if not records:
         return []
-    base_features = [
-        column for column in CALL_FEATURE_COLUMNS
-        if column in records[0]
-    ] + ["has_long_k_support", "has_multi_k_support", "exact_hit_fraction"]
+    base_features = filter_present_feature_columns(
+        records=records,
+        feature_columns=get_call_feature_columns(profile=feature_profile),
+    )
     lca_features = sorted(
         column for column in records[0]
         if column.startswith("lca_")
     )
     return base_features + lca_features
-
 
 def build_call_feature_record(
     *,
@@ -361,6 +575,7 @@ def build_call_feature_record(
         if feature_record["n_hits"] > 0
         else 0.0
     )
+    add_transformed_call_features(feature_record=feature_record)
     return feature_record
 
 
@@ -682,6 +897,7 @@ def train_evaluate_call_calibrator(
     evaluation_table: str | Path | None = None,
     label_column: str = DEFAULT_LABEL_COLUMN,
     feature_columns: list[str] | None = None,
+    feature_profile: str = "legacy",
     test_fraction: float = 0.2,
     group_columns: list[str] | None = None,
     distance_quantile: float = 0.95,
@@ -711,6 +927,8 @@ def train_evaluate_call_calibrator(
         True label column.
     feature_columns : list[str] or None, optional
         Explicit feature columns. Defaults to AI numeric features.
+    feature_profile : str, optional
+        Feature profile used when feature columns are not supplied.
     test_fraction : float, optional
         Grouped test fraction.
     group_columns : list[str] or None, optional
@@ -739,7 +957,10 @@ def train_evaluate_call_calibrator(
     records = read_records_table(input_path=resolved_training_table, logger=logger)
     if not records:
         raise ValueError("Cannot train call calibrator from zero records")
-    features = feature_columns or infer_numeric_feature_columns(records=records)
+    features = feature_columns or infer_numeric_feature_columns(
+        records=records,
+        feature_profile=feature_profile,
+    )
     train_records, test_records = split_records_by_group(
         records=records,
         group_columns=group_columns,

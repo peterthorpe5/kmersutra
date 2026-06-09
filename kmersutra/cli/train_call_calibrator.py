@@ -62,6 +62,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--label_column", default="ml_report_label")
     parser.add_argument("--feature_columns", nargs="+", default=None)
+    parser.add_argument(
+        "--feature_profile",
+        choices=["legacy", "safe_raw", "safe_transformed"],
+        default="legacy",
+        help=(
+            "Feature profile used when --feature_columns is not supplied. "
+            "Use safe_transformed for log1p count features and leakage-safe "
+            "ratio features in cross-domain validation."
+        ),
+    )
     parser.add_argument("--group_columns", nargs="+", default=["sample_id"])
     parser.add_argument("--test_fraction", type=float, default=0.2)
     parser.add_argument("--distance_quantile", type=float, default=0.95)
@@ -87,6 +97,7 @@ def main() -> None:
     logger = configure_logging(log_file=model_path.with_suffix(".log"), verbose=args.verbose)
     logger.info("Starting KmerSutra AI call-calibrator training")
     logger.info("Training table: %s", training_table)
+    logger.info("Feature profile: %s", args.feature_profile)
     model, predictions, metrics = train_evaluate_call_calibrator(
         training_table=training_table,
         model_json=args.out_model_json,
@@ -94,6 +105,7 @@ def main() -> None:
         evaluation_table=evaluation_table,
         label_column=args.label_column,
         feature_columns=args.feature_columns,
+        feature_profile=args.feature_profile,
         test_fraction=args.test_fraction,
         group_columns=args.group_columns,
         distance_quantile=args.distance_quantile,

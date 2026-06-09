@@ -1,0 +1,103 @@
+KmerSutra v0.50.0 release notes
+===============================
+
+Purpose
+-------
+This release adds a publication-ready AI validation layer for KmerSutra
+call-calibration experiments. The work was motivated by external testing where
+an internal Plasmodium-trained prototype calibrator was too conservative when
+applied directly to the public ZymoBIOMICS D6300 ONT/Q20 mock community. The
+main change is to support leakage-safe, scale-compressed feature profiles and
+cleaner external Zymo truth labelling.
+
+Major additions
+---------------
+1. Transformed AI call features
+
+   KmerSutra AI call-training records now include additional derived features:
+
+   - log1p_n_hits
+   - log1p_n_unique_kmers
+   - log1p_n_positive_sequences
+   - log1p_best_k
+   - log1p_n_exact_hits
+   - log1p_n_fuzzy_hits
+   - log1p_conflicting_unique_kmers
+   - log1p_reportable_conflicting_unique_kmers
+   - positive_sequences_per_unique_kmer
+   - unique_kmers_per_positive_sequence
+   - exact_hits_per_unique_kmer
+   - fuzzy_hit_fraction
+   - conflicting_unique_kmer_fraction
+   - reportable_conflicting_unique_kmer_fraction
+
+   These features reduce count-scale differences between small Plasmodium
+   spike-in tables and large empirical bacterial/fungal mock-community tables.
+
+2. Feature profiles
+
+   kmersutra-train-call-calibrator now accepts:
+
+   --feature_profile legacy
+   --feature_profile safe_raw
+   --feature_profile safe_transformed
+
+   The safe_transformed profile excludes benchmark truth/leakage-risk columns
+   such as spike_n, spike_n_per_genome and total_spike_n.
+
+3. Full internal holdout validation CLI
+
+   New command:
+
+   kmersutra-validate-call-calibrator
+
+   This runs grouped sample-hash validation, leave-one-benchmark-family-out,
+   leave-one-panel-out, leave-one-species-out and leave-one-expected-target-
+   species-out validation, then trains a final model on all supplied records.
+
+4. Zymo truth labelling CLI
+
+   New command:
+
+   kmersutra-label-zymo-calls
+
+   This separates public Zymo rows into fine categories:
+
+   - expected_species
+   - expected_reference_label
+   - same_species_compatible_reference
+   - near_neighbour_evidence
+   - non_target_background_evidence
+   - unresolved_non_target_evidence
+   - true_off_target_reportable
+   - not_detected
+
+   It also writes a coarse ml_report_label compatible with KmerSutra's
+   call-calibrator labels.
+
+5. Prediction evaluation CLI
+
+   New command:
+
+   kmersutra-evaluate-call-predictions
+
+   This evaluates prediction tables and writes metrics plus label/prediction
+   count tables.
+
+6. Publication-style qsub wrappers
+
+   New shell wrappers were added under scripts/. These call package CLIs only;
+   they do not embed Python source code in the shell script.
+
+Testing
+-------
+The full unittest suite was run with:
+
+python3 -m unittest discover -s tests
+
+Result:
+
+Ran 373 tests in 8.134s
+OK (skipped=1)
+
+See test_results_v0_50_0.txt.

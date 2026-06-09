@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kmersutra"
-version = "0.49.0"
+version = "0.50.0"
 description = "Outgroup-aware k-mer framework for clade and species-resolved metagenomic detection"
 requires-python = ">=3.10"
 dependencies = ["pandas"]
@@ -29,6 +29,9 @@ kmersutra-download-taxonomy = "kmersutra.cli.download_taxonomy:main"
 kmersutra-merge-panels = "kmersutra.cli.merge_panels:main"
 kmersutra-merge-modules = "kmersutra.cli.merge_modules:main"
 kmersutra-validate-panel = "kmersutra.cli.validate_panel:main"
+kmersutra-validate-call-calibrator = "kmersutra.cli.validate_call_calibrator:main"
+kmersutra-label-zymo-calls = "kmersutra.cli.label_zymo_calls:main"
+kmersutra-evaluate-call-predictions = "kmersutra.cli.evaluate_call_predictions:main"
 
 [project.optional-dependencies]
 dev = []
