@@ -109,10 +109,34 @@ SAFE_TRANSFORMED_CALL_FEATURE_COLUMNS = [
     "reportable_conflicting_unique_kmer_fraction",
 ]
 
+SAFE_TRANSFORMED_BOUNDED_CALL_FEATURE_COLUMNS = [
+    "log1p_n_hits",
+    "log1p_n_unique_kmers",
+    "log1p_n_positive_sequences",
+    "n_k_values_positive",
+    "log1p_best_k",
+    "log1p_n_exact_hits",
+    "log1p_n_fuzzy_hits",
+    "log1p_conflicting_unique_kmers",
+    "conflict_ratio",
+    "log1p_reportable_conflicting_unique_kmers",
+    "reportable_conflict_ratio",
+    "mixed_species_support_fraction",
+    "confidence_score",
+    "signal_confidence_score",
+    "has_long_k_support",
+    "has_multi_k_support",
+    "exact_hit_fraction",
+    "fuzzy_hit_fraction",
+    "conflicting_unique_kmer_fraction",
+    "reportable_conflicting_unique_kmer_fraction",
+]
+
 CALL_FEATURE_PROFILES = {
     "legacy": CALL_FEATURE_COLUMNS + BINARY_DERIVED_CALL_FEATURE_COLUMNS,
     "safe_raw": SAFE_CALL_FEATURE_COLUMNS + BINARY_DERIVED_CALL_FEATURE_COLUMNS,
     "safe_transformed": SAFE_TRANSFORMED_CALL_FEATURE_COLUMNS,
+    "safe_transformed_bounded": SAFE_TRANSFORMED_BOUNDED_CALL_FEATURE_COLUMNS,
 }
 
 DEFAULT_LABEL_COLUMN = "ml_report_label"
@@ -269,7 +293,8 @@ def get_call_feature_columns(*, profile: str = "legacy") -> list[str]:
         Feature profile. ``legacy`` preserves the original raw feature set,
         ``safe_raw`` excludes benchmark spike-in columns, and
         ``safe_transformed`` uses log1p-transformed count features plus
-        leakage-safe ratio features.
+        leakage-safe ratio features. ``safe_transformed_bounded`` removes
+        unbounded ratio features that can dominate cross-domain distances.
 
     Returns
     -------

@@ -4,8 +4,9 @@ The public Zymo mock-community screen is a species-level external validation
 stress test. KmerSutra rows may represent an official expected organism, an
 official expected reference label, another reference from the same expected
 species, a near-neighbour, or a true non-target/off-target row. This module
-keeps those fine-grained categories separate while also providing a coarse
-``ml_report_label`` compatible with the KmerSutra call-calibration model.
+keeps strict expected species/reference labels separate from compatible
+same-species alternatives so external validation metrics do not credit
+same-species competitor rows as official expected-target calls.
 """
 
 from __future__ import annotations
@@ -436,7 +437,7 @@ def classify_zymo_truth_category(
         coarse_label = "expected_target"
     elif is_expected_species and reference_label and has_evidence:
         fine_category = "same_species_compatible_reference"
-        coarse_label = "expected_target"
+        coarse_label = "same_species_compatible_reference"
     elif is_reportable and not is_expected_species:
         fine_category = "true_off_target_reportable"
         coarse_label = "reportable_off_target_species"

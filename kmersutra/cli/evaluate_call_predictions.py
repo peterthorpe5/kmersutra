@@ -50,6 +50,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out_label_counts", required=True)
     parser.add_argument("--label_column", default="ml_report_label")
     parser.add_argument("--prediction_column", default="prediction")
+    parser.add_argument(
+        "--include_label",
+        action="append",
+        default=[],
+        help="Optional truth label to include. May be supplied more than once.",
+    )
+    parser.add_argument(
+        "--exclude_label",
+        action="append",
+        default=[],
+        help="Optional truth label to exclude. May be supplied more than once.",
+    )
     parser.add_argument("--verbose", action="store_true")
     return parser.parse_args()
 
@@ -65,6 +77,20 @@ def main() -> None:
     )
     logger.info("Reading prediction table: %s", args.predictions_table)
     records = read_records_table(input_path=args.predictions_table, logger=logger)
+    include_labels = set(args.include_label or [])
+    exclude_labels = set(args.exclude_label or [])
+    if include_labels:
+        records = [
+            row for row in records
+            if str(row.get(args.label_column, "")) in include_labels
+        ]
+        logger.info("Filtered to %d rows using include labels", len(records))
+    if exclude_labels:
+        records = [
+            row for row in records
+            if str(row.get(args.label_column, "")) not in exclude_labels
+        ]
+        logger.info("Filtered to %d rows after excluding labels", len(records))
     metrics = evaluate_predictions(
         predictions=records,
         label_column=args.label_column,

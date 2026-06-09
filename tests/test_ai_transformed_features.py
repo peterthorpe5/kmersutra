@@ -83,6 +83,16 @@ class TestAITransformedFeatures(unittest.TestCase):
         self.assertNotIn("spike_n_per_genome", features)
         self.assertNotIn("total_spike_n", features)
 
+    def test_bounded_transformed_profile_excludes_unbounded_ratios(self) -> None:
+        """The bounded profile should drop high-magnitude ratio features."""
+        features = get_call_feature_columns(profile="safe_transformed_bounded")
+        self.assertIn("log1p_n_hits", features)
+        self.assertIn("exact_hit_fraction", features)
+        self.assertNotIn("positive_sequences_per_unique_kmer", features)
+        self.assertNotIn("unique_kmers_per_positive_sequence", features)
+        self.assertNotIn("exact_hits_per_unique_kmer", features)
+        self.assertNotIn("spike_n", features)
+
     def test_build_feature_record_adds_log_and_ratio_features(self) -> None:
         """Feature construction should add log1p and ratio features."""
         record = build_call_feature_record(record=CALL_ROWS[0])
@@ -120,7 +130,7 @@ class TestAITransformedFeatures(unittest.TestCase):
                 model_json=model,
                 summary_table=summary,
                 evaluation_table=evaluation,
-                feature_profile="safe_transformed",
+                feature_profile="safe_transformed_bounded",
                 test_fraction=0.25,
                 distance_quantile=1.0,
             )

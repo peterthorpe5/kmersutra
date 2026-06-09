@@ -106,6 +106,8 @@ class TestZymoTruth(unittest.TestCase):
 
         self.assertEqual(expected_reference["zymo_truth_category"], "expected_reference_label")
         self.assertEqual(same_species["zymo_truth_category"], "same_species_compatible_reference")
+        self.assertEqual(same_species["ml_report_label"], "same_species_compatible_reference")
+        self.assertEqual(expected_reference["ml_report_label"], "expected_target")
         self.assertEqual(near_neighbour["zymo_truth_category"], "near_neighbour_evidence")
         self.assertEqual(off_target["zymo_truth_category"], "true_off_target_reportable")
         self.assertEqual(absent["zymo_truth_category"], "not_detected")
