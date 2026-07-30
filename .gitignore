@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/
+
+# Environments and editors
+.venv/
+venv/
+.idea/
+.vscode/
+*~
+*.swp
+.DS_Store
+._*
+
+# Generated KmerSutra data
+*.log
+*.out
+*.err
+*.sqlite
+*.sqlite3
+*.parquet
+*.pickle
+*.pkl
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.fasta
+*.fasta.gz
+*.fa
+*.fa.gz
+*.fna.gz
+*.bam
+*.bai
+*.sra
+*.zip
+*.tar
+*.tar.gz
+benchmark_runs/
+stage_work/
+
+# Keep deliberately versioned small examples and benchmark specifications.
+!examples/*.fna
+!benchmarks/**/*.tsv
+!benchmarks/**/*.json
+!benchmarks/**/*.md
+
+# Site-specific benchmark paths should remain local.
+benchmarks/**/config.cluster.json

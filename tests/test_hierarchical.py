@@ -17,7 +17,6 @@ from kmersutra.hierarchical import (
     load_module_manifest,
     order_modules_by_parentage,
     screen_file_hierarchical,
-    split_gate_hits_by_module,
     summarise_gate_hits,
 )
 from kmersutra.io import read_tsv, write_tsv

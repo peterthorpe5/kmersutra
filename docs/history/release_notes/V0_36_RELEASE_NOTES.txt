@@ -1,0 +1,69 @@
+KmerSutra v0.36.0 release notes
+=================================
+
+Purpose
+-------
+This is a minor production-build logging and monitoring release. It is intended
+to be installed while the v0.34 database build continues, then used for future
+builds and downstream benchmarking. It does not change the scientific marker
+selection rules, taxonomic evidence assignment, LCA reporting, or AI feature
+logic introduced in v0.34/v0.35.
+
+Main changes
+------------
+1. Reduced production build logging volume.
+   - The build-panel CLI default for --global_index_progress_interval is now
+     5,000,000 attempted observations rather than 1,000,000.
+   - The v0.36 global-candidate TMPDIR build wrapper also defaults
+     GLOBAL_INDEX_PROGRESS_INTERVAL to 5,000,000.
+   - Debug-style verbose logging can still be requested by exporting a smaller
+     GLOBAL_INDEX_PROGRESS_INTERVAL before submitting a build.
+
+2. Suppressed repeated unchanged candidate-progress messages.
+   - Candidate sampling and candidate-hit annotation now log progress when the
+     informative count changes after the configured interval.
+   - If the informative count does not change, a heartbeat progress message is
+     still emitted after several intervals so long scans do not look dead.
+   - This reduces repeated log lines such as many consecutive messages with the
+     same candidate-hit count, without skipping the underlying complete scan.
+
+3. Preserved conservative full conflict/source annotation.
+   - v0.36 deliberately does not early-stop candidate-hit annotation, because a
+     late hit in a near-neighbour or outgroup can be biologically important and
+     may downgrade a marker from species-level evidence to genus-, family-, or
+     broader lineage-level evidence.
+   - Future early-stop logic should be limited to safe sampling-stage saturated
+     bins, or explicitly labelled approximate/non-manuscript modes.
+
+4. Added a v0.36 build wrapper.
+   - run_kmersutra_build_global_candidate_v036_tmpdir.sh is copied from the
+     v0.34 build wrapper but uses the quieter default progress interval and
+     v0.36 output naming.
+
+Testing
+-------
+The package was tested using unittest only.
+
+    python -m unittest discover -s tests -v
+
+Result:
+
+    Ran 301 tests in 9.590s
+    OK
+
+Recommended use
+---------------
+Allow the current v0.34 database build to complete and benchmark it, because it
+is the first major assembly-aware, independent multi-k, v4-config build. Use
+v0.36 for future builds or reruns where less chatty production logging is
+preferred.
+
+For future v0.36 builds:
+
+    export GLOBAL_INDEX_PROGRESS_INTERVAL=5000000
+    qsub run_kmersutra_build_global_candidate_v036_tmpdir.sh
+
+For detailed debugging only:
+
+    export GLOBAL_INDEX_PROGRESS_INTERVAL=100000
+    qsub run_kmersutra_build_global_candidate_v036_tmpdir.sh

@@ -1,0 +1,126 @@
+KmerSutra v0.42.0 release notes
+================================
+
+Purpose
+-------
+
+v0.42.0 fixes a second raw-read marker-build problem identified after testing
+v0.40 and v0.41 on public bacterial and Plasmodium benchmark panels.
+
+v0.40 changed candidate sampling from long-to-short to short-to-long, but this
+over-corrected and allowed k=51 to starve k=101/k=151 through the global
+cross-k position blocker. v0.41 added per-k per-bin quotas, preventing one k
+value from consuming all bin capacity. However, v0.41 deliberately disabled the
+global cross-k blocker, which can allow nested k-mers from the same local locus
+(for example, a 51-mer contained inside a 77-mer) to be retained as apparent
+multi-k support.
+
+v0.42 adds a locus-aware raw ONT build profile that keeps the per-k quotas from
+v0.41 but reintroduces a small interval-aware cross-k separation distance. This
+is intended to retain a balanced multi-k ladder while avoiding nested markers
+from the same local sequence patch being treated as independent evidence.
+
+New build profile
+-----------------
+
+    --marker_profile raw_ont_multik_locus_balanced
+
+Default settings for this profile:
+
+    --candidate_k_order auto
+        resolves to input order, so the requested k ladder is respected.
+
+    --max_per_genome_bin_by_k 51:3,77:3,101:2,151:2
+        protects each k value from starvation within each genome/bin.
+
+    --min_cross_k_marker_distance 250
+        applies interval/locus-aware separation between markers from different
+        k values. This is not merely start-position spacing. A candidate is
+        rejected if its interval overlaps, is nested within, or is within 250 bp
+        of a retained marker from a different k value on the same contig.
+
+The older profiles are retained for compatibility, but the recommended raw ONT
+profile for the next bacterial and Plasmodium benchmark builds is now:
+
+    raw_ont_multik_locus_balanced
+
+New or changed implementation details
+-------------------------------------
+
+1. Cross-k de-correlation is now interval-aware.
+
+   Earlier checks used start-position distance only. v0.42 calculates the gap
+   between half-open marker intervals:
+
+       [position, position + k)
+
+   This catches contained/nested k-mers as well as nearby cross-k loci.
+
+2. The global candidate-universe sampler uses an indexed interval-aware check.
+
+   The spatial index now stores selected start positions and k values, expands
+   the nearby bucket search radius according to the largest observed k and the
+   requested cross-k locus distance, and rejects overlapping/nearby intervals
+   from different k values.
+
+3. Marker-selection helper logic was updated consistently.
+
+   The post-collection independent multi-k marker selector now uses the same
+   interval-aware separation concept.
+
+4. The release package removes old build wrapper scripts.
+
+   Only the current recommended wrapper is included:
+
+       run_kmersutra_build_global_candidate_v042_raw_ont_multik_locus_balanced_tmpdir.sh
+
+   This avoids confusion from old v0.22-v0.41 wrapper scripts.
+
+5. Shell defaults no longer hard-code a username.
+
+   The v0.42 wrapper uses:
+
+       /home/${USER}/data/...
+
+   rather than a hard-coded user name.
+
+Testing
+-------
+
+The full unittest suite passed:
+
+    python -m unittest discover -s tests -p 'test*.py'
+
+    Ran 335 tests in 20.369s
+    OK
+
+New tests cover:
+
+    raw_ont_multik_locus_balanced profile defaults
+    interval-aware rejection of nested cross-k markers
+    interval-aware acceptance of distant cross-k markers
+    candidate-universe sampling retaining all k values under per-k quotas and
+        locus separation
+    marker-selection interval-aware de-correlation
+
+Recommended next workflow
+-------------------------
+
+1. Stop the currently running v0.41 build.
+2. Install/pull v0.42.
+3. Submit:
+
+       qsub run_kmersutra_build_global_candidate_v042_raw_ont_multik_locus_balanced_tmpdir.sh
+
+4. Before screening, inspect the final per-species k profile.
+5. Confirm k=51 does not starve k=77/k=101/k=151.
+6. Confirm k=101/k=151 are represented meaningfully but not simply nested at the
+   same local loci.
+7. Only then run the comparable spike-in benchmark.
+
+Important interpretation
+------------------------
+
+v0.42 is intended to build a better raw-read taxonomic fingerprint panel. It is
+not just a threshold change. The aim is to preserve sensitivity through k=51 and
+k=77 while retaining more specific k=101/k=151 evidence from distinct loci.

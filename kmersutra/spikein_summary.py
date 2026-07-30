@@ -14,7 +14,6 @@ The script intentionally writes tab-separated outputs rather than CSV files.
 from __future__ import annotations
 
 import argparse
-import html
 import logging
 import math
 import re

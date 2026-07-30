@@ -1,0 +1,52 @@
+KmerSutra v0.46.0 release notes
+=================================
+
+Purpose
+-------
+v0.46.0 moves away from whole-sample fuzzy screening as the primary route for raw ONT sensitivity. The v0.43-v0.45 fuzzy rescue experiments showed that one-mismatch long-k rescue can be biologically sensible but is too slow for scalable routine screening when applied across full FASTQ files.
+
+The main v0.46 change is a new exact-screening database build profile:
+
+    --marker_profile raw_ont_lod_balanced
+
+This profile is designed to improve low-depth raw-read sensitivity while keeping the screening path exact and fast.
+
+New profile
+-----------
+raw_ont_lod_balanced uses:
+
+    candidate_k_order: input
+    min_cross_k_marker_distance: 150
+    max_per_genome_bin_by_k: 51:4,77:6,101:4,151:1
+
+Rationale:
+
+* k=77 and k=101 are weighted more heavily because they are more likely than k=151 to survive noisy raw reads while remaining more specific than k=51 alone.
+* k=151 is retained as high-specificity evidence but is no longer allowed to dominate panel capacity.
+* k=51 is retained for sensitivity but not allowed to swamp the mid-k evidence.
+* A 150 bp cross-k locus-separation default aims to reduce nested same-locus markers while avoiding the overly sparse behaviour that would hurt LOD.
+
+Recommended use
+---------------
+Build a new exact-screening panel using the v0.46 profile, then screen with the fast exact path. Do not use whole-sample fuzzy screening as the routine benchmark mode unless it is later reworked with a much stronger read-level prefilter.
+
+Recommended build wrapper included:
+
+    run_kmersutra_build_global_candidate_v046_raw_ont_lod_balanced_tmpdir.sh
+
+Recommended screening after building:
+
+    SCREEN_PRESET=exact
+    CALL_PRESET=raw_ont_sensitive
+
+or an equivalent exact screen with the current sensitive call settings.
+
+Tests
+-----
+Unit tests were added for the raw_ont_lod_balanced profile defaults and candidate-universe retention of mid-k evidence.
+
+Test result:
+
+    python -m unittest discover -s tests -p 'test*.py'
+    Ran 349 tests
+    OK

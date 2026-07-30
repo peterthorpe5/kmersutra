@@ -1,0 +1,19 @@
+KmerSutra v0.43.0 package inventory
+====================================
+
+Key updated files:
+- kmersutra/thresholds.py
+- kmersutra/cli/screen_reads_for_clade_kmers.py
+- tests/test_raw_ont_sensitive_screening.py
+- prepare_submit_kmersutra_v015_conservative_comparable_array.sh
+- run_kmersutra_comparable_array_tmpdir.sh
+- V0_43_RELEASE_NOTES.txt
+- KmerSutra_v043_handover_for_public_benchmark_chat.txt
+- test_results_v0_43_0.txt
+
+Purpose:
+- Adds controlled raw-ONT one-mismatch long-k screening preset.
+- Adds compatible raw_ont_sensitive call preset.
+- Adds min_total_hits so fuzzy evidence can contribute without requiring exact hits.
+- Adds a generic TMPDIR-aware comparable-array worker that accepts the new settings.
+- Cleans public wrapper path defaults to use ${USER} rather than a hard-coded username.

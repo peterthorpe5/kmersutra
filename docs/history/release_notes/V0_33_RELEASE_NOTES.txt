@@ -1,0 +1,80 @@
+KmerSutra v0.33.0 release notes
+=================================
+
+Purpose
+-------
+This version adds a conservative lowest-common-ancestor (LCA) reporting layer.
+The LCA layer is intended to support unknown-sample interpretation without
+replacing the existing rule-based KmerSutra species, neighbour-lineage and
+background-candidate calls.
+
+Main additions
+--------------
+1. New module: kmersutra.lca_reporting
+   - Builds name-to-taxid mappings from genome configuration or mapping tables.
+   - Resolves taxids from KmerSutra evidence/call rows where possible.
+   - Computes sample-level LCA reports using the existing TaxonomyDatabase.
+   - Writes multiple auditable LCA scopes per sample:
+       dominant_lineage
+       all_supported_evidence
+       background_candidate
+       neighbour_lineage
+       reportable_positive
+   - The dominant-lineage LCA deliberately avoids allowing weak distant evidence
+     to collapse an otherwise coherent species/genus-level signal.
+
+2. New command-line tool: kmersutra-summarise-lca
+   Example:
+
+       kmersutra-summarise-lca \
+         --evidence_table summary_v030_expected_lineage_hammondia/kmersutra_detection_calls_long.tsv.gz \
+         --taxon_map_table /home/pthorpe001/data/databases/kmersutra_db/ncbi_genomes_plasmodium_outgroups_v4/kmersutra_genome_config.tsv \
+         --taxonomy_dir /home/pthorpe001/data/databases/kmersutra_db/taxonomy \
+         --out_table summary_v030_expected_lineage_hammondia/kmersutra_lca_summary.tsv.gz \
+         --taxon_name_column species_name \
+         --taxon_map_name_column species_name \
+         --taxon_map_taxid_column taxid \
+         --min_unique_kmers 1 \
+         --min_positive_sequences 1 \
+         --min_best_k 0 \
+         --verbose
+
+   The tool supports .tsv, .tsv.gz and .parquet tables through the existing
+   suffix-driven table I/O layer.
+
+3. New tests
+   - Name-to-taxid mapping, including conflict detection.
+   - Dominant-lineage LCA behaviour.
+   - All-supported-evidence LCA behaviour.
+   - Background-candidate LCA scope.
+   - Retention of samples with no supported taxonomic placement.
+   - End-to-end table round-trip using a minimal taxdump and taxon map.
+   - CLI import test for kmersutra-summarise-lca.
+
+Test status
+-----------
+The unittest suite was run in the development sandbox:
+
+    python -m unittest discover -s tests -v
+
+Result:
+
+    Ran 286 tests in 11.458s
+    OK
+
+Scientific interpretation
+-------------------------
+This LCA layer should be treated as an interpretation and audit layer. It is not
+a black-box classifier and does not replace the rule-based KmerSutra evidence.
+The all_supported_evidence scope is deliberately conservative and may collapse
+to a broader rank if distant background signal is present. The dominant_lineage
+scope is intended to report the most coherent strong lineage while preserving
+background and neighbour-lineage evidence in separate scopes.
+
+Recommended next use
+--------------------
+After the v0.32/v0.33 v4 panel build and comparable benchmark summary complete,
+run kmersutra-summarise-lca on the long detection or evidence table using the
+v4 genome configuration as the taxon map. Inspect dominant_lineage,
+all_supported_evidence, background_candidate and neighbour_lineage rows before
+adding LCA results to the manuscript.

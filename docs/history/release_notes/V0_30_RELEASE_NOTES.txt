@@ -1,0 +1,55 @@
+KmerSutra v0.30.0 release notes
+================================
+
+Purpose
+-------
+This release is a software/reporting-layer update. It does not require a new
+KmerSutra database build and is intended to re-summarise existing v0.29 screen
+outputs.
+
+Main changes
+------------
+1. Added benchmark-aware expected-genus neighbour reporting.
+   - In positive spike-in samples, non-expected species from the same genus as
+     an expected target can be counted as expected-lineage neighbour evidence
+     rather than strict reportable off-target species.
+   - Example: in a Plasmodium vivax spike-in sample, Plasmodium simium can be
+     summarised as neighbour-lineage evidence while raw evidence is retained.
+   - This behaviour is optional in the Python summary script and enabled by
+     default in the supplied run_kmersutra_comparable_summary.sh wrapper.
+
+2. Added kmersutra.benchmark_reporting.
+   - Defensive helper functions for taxon normalisation, expected-genus
+     inference, expected-genus neighbour classification and report-layer
+     labelling.
+
+3. Extended summarise_kmersutra_comparable_benchmark.py.
+   - Added --demote_expected_genus_neighbours.
+   - Added neighbour_lineage_summary.tsv.
+   - Added neighbour-lineage counts and labels to sample summaries.
+   - Added neighbour-lineage rates and means to real-world summaries.
+   - Preserved raw off-target evidence columns for auditability.
+
+4. Updated run_kmersutra_comparable_summary.sh.
+   - Added DEMOTE_EXPECTED_GENUS_NEIGHBOURS=true by default.
+   - Fixed background candidate taxa with spaces so values such as
+     "Hammondia hammondi" are passed as one argument rather than split into two
+     words.
+
+Testing
+-------
+The full unittest suite was run in the sandbox:
+
+    python -m unittest discover -s tests -v
+
+Result:
+
+    Ran 253 tests in 4.621s
+    OK
+
+Notes
+-----
+This release keeps raw KmerSutra calls untouched. It changes how the comparable
+benchmark summary classifies positive species into expected targets, empirical
+background candidates, expected-genus neighbour-lineage evidence, and strict
+reportable off-target species.

@@ -1,0 +1,21 @@
+name: kmersutra
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - pip
+  - pandas
+  - numpy
+  - scipy
+  - scikit-learn
+  - joblib
+  - matplotlib-base
+  - openpyxl
+  - pyarrow
+  - requests
+  - biopython
+  - sra-tools
+  - pigz
+  - pip:
+      - -e .[dev,reporting,ncbi,ml,parquet]

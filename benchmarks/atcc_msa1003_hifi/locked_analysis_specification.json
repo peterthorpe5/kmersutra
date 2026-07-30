@@ -1,0 +1,44 @@
+{
+  "allow_primary_threshold_tuning": false,
+  "benchmark_id": "atcc_msa1003_hifi_srr9328980_locked_v1",
+  "dataset": {
+    "input_format": "fastq",
+    "sra_accession": "SRR9328980"
+  },
+  "depth": {
+    "fractions": [
+      0.01,
+      0.05,
+      0.1,
+      0.25
+    ],
+    "seeds": [
+      1001,
+      1002,
+      1003
+    ]
+  },
+  "primary_analysis": "full_depth_flat_panel",
+  "screen": {
+    "call_preset": "lineage_aware",
+    "k_values": [
+      51,
+      77,
+      101,
+      151
+    ],
+    "max_mismatches": 0,
+    "same_genus_reportable_min_fraction": 0.05,
+    "screen_preset": "exact"
+  },
+  "secondary_analyses": [
+    "depth_series",
+    "single_k_ablation",
+    "hierarchical_screen",
+    "frozen_ai_calibration"
+  ],
+  "ai": {
+    "novelty_scale": 2.9,
+    "retraining_permitted": false
+  }
+}

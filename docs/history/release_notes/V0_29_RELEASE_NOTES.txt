@@ -1,0 +1,56 @@
+KmerSutra v0.29.0 release notes
+=================================
+
+Focus
+-----
+This release adds the first explicit post-threshold interpretation layer for
+background-aware and hierarchical species-call reporting. It is intended to
+support the Plasmodium v028 global-candidate benchmark interpretation without
+changing the underlying raw k-mer evidence.
+
+Main changes
+------------
+1. Added ``kmersutra.call_consolidation``.
+   - Keeps raw species threshold calls auditable.
+   - Optionally demotes dominated same-genus species to
+     ``neighbour_lineage_evidence``.
+   - Optionally labels supplied taxa, such as plausible empirical background
+     taxa, as ``background_candidate_signal`` rather than ordinary off-target
+     species calls.
+
+2. Extended ``kmersutra-screen``.
+   - New ``--consolidate_species_calls`` flag.
+   - New ``--background_candidate_taxa`` and ``--background_candidate_file``.
+   - New same-genus demotion controls:
+     ``--dominant_species_min_margin`` and ``--dominant_species_min_ratio``.
+   - New ``--write_parquet_outputs`` flag for optional Parquet companions for
+     key screening outputs.
+   - When consolidation is enabled, raw calls are written to
+     ``species_detection_calls_raw.tsv`` and consolidated calls remain in the
+     compatibility path ``species_detection_calls.tsv``.
+
+3. Added generic optional Parquet output helpers.
+   - New ``kmersutra.table_parquet`` module.
+   - Parquet writing remains optional and fails gracefully with a logged warning
+     if ``pyarrow`` is unavailable.
+
+4. Updated comparable benchmark summary scripts.
+   - Background candidate taxa can now be provided to the summary step.
+   - Output now includes ``background_candidate_summary.tsv``.
+   - Real-world summaries now separate strict cleanliness including background
+     candidates from background-aware cleanliness.
+
+5. Updated SGE helper scripts.
+   - The v0.15 TMPDIR worker can pass the new consolidation/background/Parquet
+     options to ``kmersutra-screen``.
+   - The v0.15 prepare wrapper no longer requests ``h_rt`` by default, avoiding
+     queues where users cannot modify that resource.
+
+Testing
+-------
+New unit tests were added for:
+- call consolidation
+- generic Parquet helper behaviour
+- background-aware comparable summary reporting
+
+All delimited output remains tab-separated.

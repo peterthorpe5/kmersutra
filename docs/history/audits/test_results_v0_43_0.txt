@@ -1,0 +1,10 @@
+Command:
+python -m unittest discover -s tests -p 'test*.py'
+
+Result:
+Ran 340 tests in 12.332s
+
+OK
+
+Notes:
+The test suite was run in the sandbox against the v0.43.0 package update. Warnings about optional pyarrow being unavailable are expected in the minimal test environment and do not indicate test failure.

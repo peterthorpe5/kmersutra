@@ -1,0 +1,30 @@
+KmerSutra v0.50.1 release notes
+
+Purpose
+-------
+This patch refines the experimental AI call-calibration validation layer after
+internal Plasmodium and public Zymo external validation runs.
+
+Changes
+-------
+1. Adds the safe_transformed_bounded call-feature profile. This profile uses
+   log1p-compressed count features and bounded/fractional evidence features,
+   while excluding unbounded ratio features that dominated cross-domain
+   distances in public Zymo testing.
+2. Revises public Zymo truth labelling so same-species compatible reference
+   rows are not collapsed into strict expected_target labels. Official expected
+   species/reference rows remain expected_target, while same-species compatible
+   rows are labelled same_species_compatible_reference.
+3. Extends kmersutra-evaluate-call-predictions with --include_label and
+   --exclude_label filters. This allows strict Zymo metrics to exclude
+   same-species compatible rows while retaining full metrics separately.
+4. Adds v0.50.1 qsub wrappers for internal Plasmodium and external Zymo AI
+   validation. The shell wrappers call package CLIs and do not embed Python.
+5. Adds/updates unittest coverage for bounded transformed features and strict
+   Zymo truth labelling.
+
+Test result
+-----------
+python -m unittest discover -s tests
+Ran 374 tests in 8.703s
+OK (skipped=1)

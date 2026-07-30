@@ -1,0 +1,129 @@
+KmerSutra v0.39.0 release notes
+=================================
+
+Purpose
+-------
+This release is a package-level update for comparable benchmark reporting and
+threshold diagnostics. It does not change the core k-mer screening algorithm or
+rebuild any database. It is designed to help decide whether a more permissive
+call-promotion setting is worth a full 532-sample rerun after the v0.34
+Plasmodium/outgroup panel showed weaker LOD50/LOD100 values than the earlier
+v0.30 benchmark.
+
+Main additions
+--------------
+1. Adds an installed comparable benchmark summary command:
+
+       kmersutra-summarise-comparable-benchmark
+
+   This exposes the comparable summary workflow directly through the package.
+
+2. Updates the existing kmersutra-summarise-run command to dispatch comparable
+   benchmark arguments such as --out_root, --manifest and --out_dir to the
+   comparable summary workflow, while preserving the old --summary_tsv / --out_xlsx
+   / --out_html behaviour for legacy summary formatting.
+
+3. Adds a new threshold-sweep diagnostic command:
+
+       kmersutra-threshold-sweep
+
+   This command reads an existing kmersutra_detection_calls_long.tsv or
+   .tsv.gz table and reinterprets the same evidence under several candidate
+   call-promotion thresholds. It does not rerun read screening.
+
+4. Promotes the comparable summary implementation into the package as:
+
+       kmersutra.comparable_benchmark_summary
+
+   The top-level and summary-folder scripts are retained as compatibility
+   wrappers around the package module.
+
+5. The threshold-sweep command writes:
+
+       threshold_sweep_target_performance.tsv
+       threshold_sweep_real_world_summary.tsv
+       threshold_sweep_by_family_spike.tsv
+       threshold_sweep_off_target_summary.tsv
+       threshold_sweep_neighbour_lineage_summary.tsv
+       threshold_sweep_by_sample.tsv
+       kmersutra_threshold_sweep.xlsx
+       kmersutra_threshold_sweep.html
+       kmersutra_threshold_sweep.log
+
+Default threshold sets
+----------------------
+The default sweep compares:
+
+    current_sensitive:
+        MIN_K_VALUES_POSITIVE=1
+        MIN_UNIQUE_KMERS=10
+        MIN_POSITIVE_SEQUENCES=2
+        MIN_EXACT_HITS=10
+        MIN_BEST_K=101
+        MIN_CONFIDENCE_SCORE=0.50
+        MAX_CONFLICT_RATIO=0.10
+
+    final_stress:
+        MIN_K_VALUES_POSITIVE=1
+        MIN_UNIQUE_KMERS=8
+        MIN_POSITIVE_SEQUENCES=1
+        MIN_EXACT_HITS=8
+        MIN_BEST_K=101
+        MIN_CONFIDENCE_SCORE=0.50
+        MAX_CONFLICT_RATIO=0.10
+
+    audit_u5_p1_e5:
+        MIN_K_VALUES_POSITIVE=1
+        MIN_UNIQUE_KMERS=5
+        MIN_POSITIVE_SEQUENCES=1
+        MIN_EXACT_HITS=5
+        MIN_BEST_K=101
+        MIN_CONFIDENCE_SCORE=0.50
+        MAX_CONFLICT_RATIO=0.10
+
+    audit_bestk77:
+        MIN_K_VALUES_POSITIVE=1
+        MIN_UNIQUE_KMERS=8
+        MIN_POSITIVE_SEQUENCES=1
+        MIN_EXACT_HITS=8
+        MIN_BEST_K=77
+        MIN_CONFIDENCE_SCORE=0.50
+        MAX_CONFLICT_RATIO=0.10
+
+Recommended command for the current v0.34 sensitive run
+-------------------------------------------------------
+
+    cd /home/pthorpe001/data/2026_plasmodium_kraken_sensitivity
+    conda activate kraken16s
+
+    SUMMARY_DIR="/home/pthorpe001/data/2026_plasmodium_kraken_sensitivity/runs_kmersutra_v034_sensitive_k1_u10_p2_e10_20260603_091237/summary_sensitive_expected_lineage_hammondia"
+
+    kmersutra-threshold-sweep \
+      --calls_table "${SUMMARY_DIR}/kmersutra_detection_calls_long.tsv.gz" \
+      --out_dir "${SUMMARY_DIR}/threshold_sweep_v039" \
+      --verbose
+
+Decision rule
+-------------
+A final full screen at u8_p1_e8 is only worth running if the threshold sweep
+predicts a meaningful LOD/sensitivity improvement while keeping shuffled
+negative samples clean, tracked-target specificity at or near 1.0, no broad
+non-Plasmodium off-target expansion, and same-genus Plasmodium signals limited
+to interpretable neighbour-lineage evidence.
+
+Testing
+-------
+The package was tested using unittest:
+
+    python -m unittest discover -s tests -p 'test*.py'
+
+Result:
+
+    Ran 317 tests in 8.772s
+    OK
+
+Repository hygiene
+------------------
+This is a package release. It intentionally avoids adding ad hoc rescue scripts.
+Temporary analysis scripts should remain outside the GitHub-managed package
+repository unless they become tested, documented package code.

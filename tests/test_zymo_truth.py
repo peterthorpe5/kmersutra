@@ -9,7 +9,6 @@ from pathlib import Path
 from kmersutra.table_io import read_records_table, write_records_table
 from kmersutra.zymo_truth import (
     classify_zymo_truth_category,
-    read_reference_label_map,
     write_zymo_ai_feature_table,
 )
 

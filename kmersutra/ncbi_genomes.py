@@ -153,6 +153,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--exclude_accessions_table",
+        default=None,
+        help=(
+            "Optional TSV, TSV.GZ or Parquet table of truth accessions that "
+            "must not enter the reference panel. Recognised columns include "
+            "assembly_accession, truth_assembly_accessions, sequence_accession, "
+            "truth_sequence_accessions and truth_reference_accession. Multiple "
+            "values in one cell must be separated by semicolons."
+        ),
+    )
+    parser.add_argument(
         "--allow_missing_custom_fastas",
         action="store_true",
         help=(
@@ -385,6 +396,126 @@ def read_tsv(path: Path) -> list[dict[str, str]]:
                 values = values[: len(header)]
             rows.append(dict(zip(header, values)))
     return rows
+
+
+EXCLUSION_ACCESSION_COLUMNS = {
+    "assembly_accession",
+    "truth_assembly_accession",
+    "truth_assembly_accessions",
+    "sequence_accession",
+    "truth_sequence_accession",
+    "truth_sequence_accessions",
+    "truth_reference_accession",
+}
+
+
+def normalise_accession(value: Any) -> str:
+    """Return an upper-case accession without a version suffix.
+
+    Args:
+        value: Assembly or sequence accession.
+
+    Returns:
+        Normalised accession.
+    """
+    return str(value or "").strip().upper().split(".", 1)[0]
+
+
+def load_excluded_accessions(path: str | Path | None) -> set[str]:
+    """Load accession exclusions from a tabular manifest.
+
+    Args:
+        path: Optional TSV, TSV.GZ or Parquet table.
+
+    Returns:
+        Normalised accession exclusions.
+
+    Raises:
+        ValueError: If the table has no recognised accession columns.
+    """
+    if path is None:
+        return set()
+    from kmersutra.table_io import read_records_table
+
+    rows = read_records_table(input_path=path)
+    if not rows:
+        raise ValueError(f"Accession exclusion table contains no rows: {path}")
+    observed = EXCLUSION_ACCESSION_COLUMNS.intersection(rows[0])
+    if not observed:
+        raise ValueError(
+            "Accession exclusion table has no recognised columns. Expected one "
+            "of: " + ", ".join(sorted(EXCLUSION_ACCESSION_COLUMNS))
+        )
+    accessions: set[str] = set()
+    for row in rows:
+        for column in observed:
+            for value in str(row.get(column, "") or "").split(";"):
+                accession = normalise_accession(value)
+                if accession:
+                    accessions.add(accession)
+    LOGGER.info("Loaded %d explicit truth-accession exclusions", len(accessions))
+    return accessions
+
+
+def exclude_records_by_accession(
+    *,
+    records: list[AssemblyRecord],
+    audit_rows: list[dict[str, Any]],
+    excluded_accessions: set[str],
+) -> list[AssemblyRecord]:
+    """Remove candidate assemblies listed in an exclusion manifest.
+
+    Args:
+        records: Candidate assemblies.
+        audit_rows: Candidate audit rows to update in place.
+        excluded_accessions: Normalised accessions that must be excluded.
+
+    Returns:
+        Records not explicitly excluded.
+    """
+    if not excluded_accessions:
+        return records
+    retained: list[AssemblyRecord] = []
+    excluded: set[str] = set()
+    for record in records:
+        accession = normalise_accession(record.assembly_accession)
+        if accession and accession in excluded_accessions:
+            excluded.add(record.assembly_accession)
+            continue
+        retained.append(record)
+    for row in audit_rows:
+        if str(row.get("assembly_accession", "")) in excluded:
+            row["filter_status"] = "excluded"
+            row["filter_reason"] = "excluded_by_accession_table"
+    if excluded:
+        LOGGER.info(
+            "Excluded %d candidate assemblies by explicit accession",
+            len(excluded),
+        )
+    return retained
+
+
+def fasta_excluded_accessions(
+    *,
+    fasta_path: str | Path,
+    excluded_accessions: set[str],
+) -> set[str]:
+    """Return truth accessions found in FASTA headers.
+
+    Args:
+        fasta_path: Panel FASTA path.
+        excluded_accessions: Normalised truth accessions.
+
+    Returns:
+        Matching accessions.
+    """
+    if not excluded_accessions:
+        return set()
+    from kmersutra.reference_audit import fasta_header_accessions
+
+    return fasta_header_accessions(Path(fasta_path)).intersection(
+        excluded_accessions
+    )
 
 
 def write_tsv(path: Path, rows: list[dict[str, Any]], header: list[str]) -> None:
@@ -1372,6 +1503,7 @@ def custom_rows_to_metadata_rows(rows: list[dict[str, Any]]) -> list[dict[str, A
 def collect_records_for_plan(
     plan: TaxonPlan,
     args: argparse.Namespace,
+    excluded_accessions: set[str] | None = None,
 ) -> tuple[list[AssemblyRecord], list[dict[str, Any]]]:
     """Search, fetch, convert, filter, and select records for one taxon plan.
 
@@ -1417,6 +1549,11 @@ def collect_records_for_plan(
         min_scaffold_n50=plan.min_scaffold_n50 or args.min_scaffold_n50,
         min_contig_n50=plan.min_contig_n50 or args.min_contig_n50,
     )
+    records = exclude_records_by_accession(
+        records=records,
+        audit_rows=audit_rows,
+        excluded_accessions=excluded_accessions or set(),
+    )
     best_n = plan.best_per_species or args.best_per_species
     records_after_best = select_best_per_species(records=records, best_per_species=best_n)
     best_selected = {record.assembly_accession for record in records_after_best}
@@ -1456,12 +1593,17 @@ def main(argv: list[str] | None = None) -> int:
 
     out_dir.mkdir(parents=True, exist_ok=True)
     write_run_config(path=out_dir / "run_config.json", args=args, plans=plans)
+    excluded_accessions = load_excluded_accessions(args.exclude_accessions_table)
 
     all_records: list[AssemblyRecord] = []
     candidate_audit_rows: list[dict[str, Any]] = []
     for plan in plans:
         LOGGER.info("Processing taxid %s", plan.taxid)
-        retained_records, audit_rows = collect_records_for_plan(plan=plan, args=args)
+        retained_records, audit_rows = collect_records_for_plan(
+            plan=plan,
+            args=args,
+            excluded_accessions=excluded_accessions,
+        )
         all_records.extend(retained_records)
         candidate_audit_rows.extend(audit_rows)
 
@@ -1510,7 +1652,26 @@ def main(argv: list[str] | None = None) -> int:
                 if audit_row.get("assembly_accession") == record.assembly_accession:
                     audit_row["filter_status"] = "excluded"
                     audit_row["filter_reason"] = "download_failed"
-        metadata_rows.append(record_to_metadata_row(record=record, file_info=file_info))
+        metadata_row = record_to_metadata_row(record=record, file_info=file_info)
+        genome_fasta = str(metadata_row.get("genome_fasta", "") or "")
+        matching_accessions: set[str] = set()
+        if genome_fasta and Path(genome_fasta).is_file():
+            matching_accessions = fasta_excluded_accessions(
+                fasta_path=genome_fasta,
+                excluded_accessions=excluded_accessions,
+            )
+        if matching_accessions:
+            LOGGER.warning(
+                "Excluding %s after FASTA-header truth-accession match: %s",
+                record.assembly_accession,
+                ", ".join(sorted(matching_accessions)),
+            )
+            for audit_row in candidate_audit_rows:
+                if audit_row.get("assembly_accession") == record.assembly_accession:
+                    audit_row["filter_status"] = "excluded"
+                    audit_row["filter_reason"] = "excluded_by_sequence_accession_table"
+            continue
+        metadata_rows.append(metadata_row)
 
     custom_config_rows: list[dict[str, Any]] = []
     if args.custom_genome_config:

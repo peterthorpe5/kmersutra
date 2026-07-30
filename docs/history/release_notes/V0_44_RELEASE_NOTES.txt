@@ -1,0 +1,75 @@
+KmerSutra v0.44.0 release notes
+=================================
+
+Purpose
+-------
+This update speeds up the raw-ONT-sensitive one-mismatch long-k screening mode
+introduced in v0.43. The command-line interface is intentionally unchanged so
+existing shell wrappers can continue to use:
+
+  --screen_preset raw_ont_sensitive
+  --call_preset raw_ont_sensitive
+
+The motivation was the Plasmodium comparable benchmark, where exact long-k
+matching was too brittle for noisy raw reads, but the first fuzzy rescue
+implementation was expected to add substantial CPU overhead.
+
+Main change
+-----------
+One-mismatch fuzzy matching now uses an accelerated half-seed index.
+
+For each fuzzy-eligible panel k-mer, KmerSutra stores left-half and right-half
+exact seeds. A query k-mer with one substitution must share at least one of
+these halves with a matching panel k-mer. Therefore the screen can retrieve a
+small candidate set and verify it by Hamming distance, rather than generating
+all 3*k one-mismatch neighbours for every query window.
+
+This keeps the same biological behaviour for one-mismatch long-k rescue but is
+expected to be substantially faster on large FASTQ files.
+
+Implementation details
+----------------------
+New code in kmersutra/screen_reads.py:
+
+  - OneMismatchSeedIndex dataclass.
+  - build_one_mismatch_seed_index().
+  - _fuzzy_hits() now accepts an optional one_mismatch_seed_index.
+  - screen_records_for_species_kmers() builds the seed index automatically
+    when max_mismatches == 1.
+  - max_mismatches > 1 still falls back to the existing neighbourhood
+    generation code path.
+
+Logging
+-------
+When the accelerated path is active, logs now report:
+
+  Using accelerated one-mismatch seed-index fuzzy path for k >= <N> with <M> seed keys
+
+This replaces the more worrying generic message that the screen had switched to
+canonical/fuzzy screening for max_mismatches=1.
+
+Tests
+-----
+The unittest suite passed:
+
+  python -m unittest discover -s tests -p 'test*.py'
+  Ran 343 tests in 12.674s
+  OK
+
+New tests cover:
+
+  - one-mismatch seed-index fuzzy hit recovery;
+  - rejection of two-mismatch candidates under the one-mismatch seed path;
+  - record-level raw-read screening avoiding neighbourhood generation when
+    max_mismatches == 1.
+
+Compatibility
+-------------
+The existing v0.43 benchmarking command can be reused. No shell command change
+is required if the wrapper already passes:
+
+  SCREEN_PRESET=raw_ont_sensitive
+  CALL_PRESET=raw_ont_sensitive
+
+If explicit MAX_MISMATCHES and FUZZY_MIN_K are left empty, the preset still
+resolves to one mismatch for k >= 101.

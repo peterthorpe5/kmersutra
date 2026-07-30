@@ -4,10 +4,35 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kmersutra"
-version = "0.50.1"
+version = "0.51.0"
 description = "Outgroup-aware k-mer framework for clade and species-resolved metagenomic detection"
+readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["pandas"]
+authors = [
+    {name = "Peter Thorpe"},
+]
+keywords = [
+    "bioinformatics",
+    "k-mers",
+    "metagenomics",
+    "pathogen-detection",
+    "taxonomy",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = ["pandas", "openpyxl"]
+
+[project.urls]
+Homepage = "https://github.com/peterthorpe5/kmersutra"
+Repository = "https://github.com/peterthorpe5/kmersutra"
+Issues = "https://github.com/peterthorpe5/kmersutra/issues"
 
 [project.scripts]
 kmersutra-build-panel = "kmersutra.cli.build_clade_kmer_panel:main"
@@ -32,9 +57,19 @@ kmersutra-validate-panel = "kmersutra.cli.validate_panel:main"
 kmersutra-validate-call-calibrator = "kmersutra.cli.validate_call_calibrator:main"
 kmersutra-label-zymo-calls = "kmersutra.cli.label_zymo_calls:main"
 kmersutra-evaluate-call-predictions = "kmersutra.cli.evaluate_call_predictions:main"
+kmersutra-label-mock-calls = "kmersutra.cli.label_mock_community_calls:main"
+kmersutra-audit-reference-panel = "kmersutra.cli.audit_reference_panel:main"
+kmersutra-subset-reads = "kmersutra.cli.subset_reads:main"
+kmersutra-run-benchmark = "kmersutra.cli.run_benchmark:main"
+kmersutra-summarise-mock-benchmark = "kmersutra.cli.summarise_mock_benchmark:main"
 
 [project.optional-dependencies]
-dev = []
+dev = [
+    "build>=1.2",
+    "coverage[toml]>=7.6",
+    "matplotlib",
+    "ruff>=0.12",
+]
 reporting = ["matplotlib", "openpyxl"]
 interactive = ["plotly"]
 stats = ["scipy"]
@@ -45,7 +80,34 @@ all = ["matplotlib", "openpyxl", "plotly", "scipy", "pyarrow", "requests", "biop
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["kmersutra*"]
+include = ["kmersutra", "kmersutra.*"]
+exclude = ["tests*", "kmersutra_ai_validation*"]
 
 [tool.nose2]
 start-dir = "tests"
+
+[tool.coverage.run]
+branch = true
+source = ["kmersutra"]
+omit = [
+    "kmersutra/cli/*",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+# The historical codebase starts this release at 76% branch coverage. Keep CI
+# above a ratcheted floor while new work advances towards the 90% target.
+fail_under = 75
+show_missing = true
+skip_covered = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

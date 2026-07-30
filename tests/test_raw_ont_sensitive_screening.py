@@ -3,11 +3,21 @@
 import logging
 import unittest
 from argparse import Namespace
+from unittest.mock import patch
 
 from kmersutra.build_panel import DiagnosticKmer
-from kmersutra.cli.screen_reads_for_clade_kmers import resolve_screening_preset
+from kmersutra.cli.screen_reads_for_clade_kmers import (
+    resolve_screening_preset,
+    select_fuzzy_rescue_species,
+)
 from kmersutra.fasta import SequenceRecord
-from kmersutra.screen_reads import screen_sequence_for_kmers
+from kmersutra.screen_reads import (
+    build_one_mismatch_seed_index,
+    deduplicate_hits,
+    filter_panel_index_by_species,
+    screen_records_for_species_kmers,
+    screen_sequence_for_kmers,
+)
 from kmersutra.summarise_hits import (
     summarise_sample_species_evidence,
     summarise_species_hits,
@@ -121,17 +131,6 @@ class TestRawOntSensitiveScreening(unittest.TestCase):
         self.assertEqual(evidence[0]["n_exact_hits"], 0)
         self.assertEqual(evidence[0]["n_fuzzy_hits"], 1)
         self.assertEqual(evidence[0]["best_k"], 101)
-
-
-if __name__ == "__main__":
-    unittest.main()
-
-from unittest.mock import patch
-
-from kmersutra.screen_reads import (
-    build_one_mismatch_seed_index,
-    screen_records_for_species_kmers,
-)
 
 
 class TestRawOntSensitiveSeedAcceleration(unittest.TestCase):
@@ -253,10 +252,6 @@ class TestRawOntSensitiveSeedAcceleration(unittest.TestCase):
         self.assertEqual(len(hits), 1)
         self.assertEqual(hits[0].mismatches, 1)
 
-from kmersutra.cli.screen_reads_for_clade_kmers import select_fuzzy_rescue_species
-from kmersutra.screen_reads import deduplicate_hits, filter_panel_index_by_species
-
-
 class TestRawOntSensitiveTwoStageRescue(unittest.TestCase):
     """Tests for exact-first fuzzy rescue candidate selection."""
 
@@ -365,3 +360,7 @@ class TestRawOntSensitiveTwoStageRescue(unittest.TestCase):
         )
         combined = deduplicate_hits(hits=[*hits, *hits])
         self.assertEqual(len(combined), 1)
+
+
+if __name__ == "__main__":
+    unittest.main()

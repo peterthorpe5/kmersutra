@@ -1748,9 +1748,6 @@ def collect_global_kmer_sources_sqlite(
         raise ValueError("genome_bin_size must be positive")
     if max_per_genome_bin <= 0:
         raise ValueError("max_per_genome_bin must be positive")
-    formatted_bin_quotas = format_max_per_genome_bin_by_k(
-        quotas=max_per_genome_bin_by_k
-    )
     if min_cross_k_marker_distance < 0:
         raise ValueError("min_cross_k_marker_distance must be non-negative")
     if source_index_mode not in VALID_GLOBAL_SOURCE_INDEX_MODES:
@@ -1829,7 +1826,6 @@ def collect_global_kmer_sources_sqlite(
                     config.role,
                 )
             attempted = 0
-            committed_at = 0
             last_logged_at = 0
             buffer: list[tuple[object, ...]] = []
             for record in read_fasta_records(
@@ -1866,7 +1862,6 @@ def collect_global_kmer_sources_sqlite(
                                 source_index_mode=source_index_mode,
                             )
                             connection.commit()
-                            committed_at = attempted
                         if logger and attempted - last_logged_at >= progress_interval:
                             logger.info(
                                 "Indexed %d attempted k-mer observations from %s",

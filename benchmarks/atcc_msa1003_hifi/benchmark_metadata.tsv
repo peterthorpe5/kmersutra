@@ -1,0 +1,14 @@
+field	value	source
+benchmark_id	atcc_msa1003_hifi_srr9328980_locked_v1	KmerSutra registered analysis
+mock_community	ATCC MSA-1003	ATCC
+sra_accession	SRR9328980	NCBI SRA
+bioproject	PRJNA546278	NCBI SRA
+experiment	SRX6095783	NCBI SRA
+platform	PacBio Sequel II System	PacBio public dataset catalogue
+sequencing	1 SMRT Cell 8M	PacBio public dataset catalogue
+total_reads	2419037	PacBio public dataset catalogue
+mean_read_length_kb	8.4	PacBio public dataset catalogue
+total_data_gb	20.5	PacBio public dataset catalogue
+median_quality	Q36	PacBio public dataset catalogue
+atcc_url	https://www.atcc.org/products/msa-1003	ATCC
+pacbio_catalogue_url	https://github.com/PacificBiosciences/pb-metagenomics-tools/blob/master/docs/PacBio-Data.md	PacBio

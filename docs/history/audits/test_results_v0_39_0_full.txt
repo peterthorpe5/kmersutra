@@ -1,0 +1,16 @@
+.......................................................................2026-06-03 12:16:37 WARNING [kmersutra] pyarrow is not available; keeping TSV.GZ screen panels only
+2026-06-03 12:16:37 WARNING [kmersutra] Skipping hierarchical module export because the final panel has no diagnostic records: /tmp/tmpe49u77vg/panel/species_kmer_panel.tsv.gz
+....No detection calls were read. This is not a valid benchmark summary. First missing paths:
+        sample_id  ...  screen_status
+0  missing_sample  ...  missing_calls
+
+[1 rows x 5 columns]
+..................................................................................................................2026-06-03 12:16:38 WARNING [download_ncbi_genomes_for_kmersutra] mock esummary batch failed on attempt 1/2: IncompleteRead(7 bytes read)
+...........................................................2026-06-03 12:16:38 WARNING [kmersutra] Could not write Parquet output /tmp/tmppyqee6bp/out/sample_taxonomic_kmer_evidence.parquet because pyarrow is unavailable: Parquet module storage requires the optional pyarrow dependency. Install KmerSutra with the parquet extra, for example: pip install '.[parquet]', or install pyarrow in the active environment.
+2026-06-03 12:16:38 WARNING [kmersutra] Could not write Parquet output /tmp/tmppyqee6bp/out/species_detection_calls.parquet because pyarrow is unavailable: Parquet module storage requires the optional pyarrow dependency. Install KmerSutra with the parquet extra, for example: pip install '.[parquet]', or install pyarrow in the active environment.
+2026-06-03 12:16:38 WARNING [kmersutra] Could not write Parquet output /tmp/tmppyqee6bp/out/sample_lineage_interpretation.parquet because pyarrow is unavailable: Parquet module storage requires the optional pyarrow dependency. Install KmerSutra with the parquet extra, for example: pip install '.[parquet]', or install pyarrow in the active environment.
+.....................................................................
+----------------------------------------------------------------------
+Ran 317 tests in 8.588s
+
+OK

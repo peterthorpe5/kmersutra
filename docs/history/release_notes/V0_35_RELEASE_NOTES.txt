@@ -1,0 +1,107 @@
+KmerSutra v0.35.0 release notes
+=================================
+
+Purpose
+-------
+v0.35.0 is a post-build benchmarking and reporting release. It deliberately
+leaves the v0.34 database-build behaviour unchanged so that an active v0.34
+build can finish. The new code focuses on the downstream steps that happen after
+screening: LCA summarisation, AI training-table preparation, optional AI
+call-calibrator training, and combined Excel/HTML reporting.
+
+Main additions
+--------------
+
+1. New benchmark post-processing module
+   - Added kmersutra.benchmark_postprocess.
+   - This module combines existing KmerSutra comparable summary outputs with
+     LCA reporting and AI training-table preparation.
+   - It keeps database construction separate from AI preparation, because AI
+     training requires benchmark/screening outputs rather than the database
+     alone.
+
+2. New CLI command
+   - Added kmersutra-benchmark-postprocess.
+   - The command can auto-detect kmersutra_detection_calls_long.tsv.gz,
+     kmersutra_detection_calls_long.tsv or kmersutra_detection_calls_long.parquet
+     from a comparable-summary directory.
+   - It writes:
+       kmersutra_lca_summary.tsv.gz
+       ai_call_training.tsv.gz
+       kmersutra_benchmark_postprocess.html
+       kmersutra_benchmark_postprocess.xlsx
+   - With --train_calibrator, it also writes:
+       kmersutra_call_calibrator.json
+       kmersutra_call_calibrator_training_summary.tsv.gz
+       kmersutra_call_calibrator_evaluation.tsv.gz
+
+3. LCA-aware AI preparation
+   - The command runs the LCA summary and passes the resulting LCA table into
+     AI training-table construction.
+   - The AI training table therefore includes numeric lca_* feature columns.
+   - These features allow the call calibrator to learn from rank/placement
+     information such as species-, genus-, higher-rank and unresolved placements.
+
+4. Combined Excel and HTML handover report
+   - Added a benchmark post-processing HTML report.
+   - Added a formatted XLSX workbook using the optional reporting dependency
+     openpyxl.
+   - The report includes:
+       LCA scope summary
+       AI label counts
+       LCA-derived AI feature summary
+       LCA summary preview
+       AI training preview
+       Optional AI training/evaluation summaries when --train_calibrator is used
+   - Very large tables are previewed rather than fully expanded in the report.
+     Full TSV.GZ outputs are still written for analysis.
+
+5. Defensive behaviour
+   - Explicit, named CLI arguments only.
+   - Clear failure if no call table can be found.
+   - Clear failure if taxonomy_dir or taxon_map_table is missing.
+   - Works with TSV, TSV.GZ and Parquet call tables through existing table I/O.
+
+Testing
+-------
+The v0.35.0 unittest suite was run with:
+
+    python -m unittest discover -s tests -v
+
+Result:
+
+    Ran 295 tests in 7.760s
+    OK
+
+No nose2 testing was used for this release.
+
+Suggested use after v0.34 screening and comparable summary
+----------------------------------------------------------
+
+    kmersutra-benchmark-postprocess \
+      --summary_dir summary_v034_expected_lineage_hammondia \
+      --out_dir summary_v034_expected_lineage_hammondia/postprocess_v035 \
+      --taxonomy_dir /home/pthorpe001/data/databases/kmersutra_db/ncbi_taxonomy \
+      --taxon_map_table /home/pthorpe001/data/databases/kmersutra_db/ncbi_genomes_plasmodium_outgroups_v4/kmersutra_genome_config.tsv \
+      --taxon_name_column species_name \
+      --taxon_map_name_column species_name \
+      --taxon_map_taxid_column taxid \
+      --max_not_detected 50000 \
+      --verbose
+
+To also train/evaluate the call calibrator:
+
+    kmersutra-benchmark-postprocess \
+      --summary_dir summary_v034_expected_lineage_hammondia \
+      --out_dir summary_v034_expected_lineage_hammondia/postprocess_v035_ai \
+      --taxonomy_dir /home/pthorpe001/data/databases/kmersutra_db/ncbi_taxonomy \
+      --taxon_map_table /home/pthorpe001/data/databases/kmersutra_db/ncbi_genomes_plasmodium_outgroups_v4/kmersutra_genome_config.tsv \
+      --taxon_name_column species_name \
+      --taxon_map_name_column species_name \
+      --taxon_map_taxid_column taxid \
+      --max_not_detected 50000 \
+      --train_calibrator \
+      --group_columns sample_id \
+      --test_fraction 0.2 \
+      --distance_quantile 0.95 \
+      --verbose

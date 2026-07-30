@@ -1,0 +1,136 @@
+KmerSutra v0.48.0 optional pigz decompression and safe screening I/O update
+==========================================================================
+
+Release date
+------------
+2026-06-06
+
+Release purpose
+---------------
+
+KmerSutra v0.48.0 is a behaviour-preserving performance release built on top
+of v0.47.0. It keeps the v0.47 interval-indexed marker-selection speed-up,
+robust panel-cache validation, deterministic screening-hit ordering, and the
+v0.46 raw_ont_lod_balanced biological profile unchanged.
+
+The main addition is an optional pigz decompression path for gzip-compressed
+FASTA/FASTQ screening inputs. This is intended to reduce input I/O overhead in
+large exact-screening array jobs without changing k-mer matching, thresholds,
+reporting rules, output schemas, or biological interpretation.
+
+Version
+-------
+
+Package version: 0.48.0
+
+Main changes
+------------
+
+1. Optional pigz input decompression
+
+   kmersutra-screen now supports:
+
+       --decompressor python
+       --decompressor pigz
+       --decompressor auto
+
+   Behaviour:
+
+   - python: default; preserves the historical Python gzip path.
+   - pigz: uses external "pigz -dc" for gzip FASTA/FASTQ inputs and fails
+     clearly if pigz is not installed.
+   - auto: uses pigz when it is available on PATH and falls back to Python gzip
+     otherwise.
+
+   Plain uncompressed inputs are opened normally regardless of decompressor
+   setting.
+
+2. Decompressor propagation through all screening paths
+
+   The decompressor option is passed through:
+
+   - direct single-panel screening;
+   - exact-first/two-stage rescue screening;
+   - pre-loaded panel-index screening;
+   - hierarchical gate screening;
+   - hierarchical activated-module screening.
+
+3. Array worker support
+
+   The comparable-benchmark TMPDIR worker now accepts:
+
+       DECOMPRESSOR=python|pigz|auto
+
+   and passes it to kmersutra-screen via --decompressor.
+
+   The submission helper records the selected decompressor in run_metadata.tsv.
+   The default remains DECOMPRESSOR=python to avoid changing existing workflows.
+
+4. Logging and profiling
+
+   Screening logs now record the requested input decompressor. The input iterator
+   profiling detail records both input format and decompressor setting.
+
+5. Unit tests
+
+   Added unittest coverage for:
+
+   - Python gzip input reading through the new open_text_reader helper;
+   - auto fallback when pigz is unavailable;
+   - explicit pigz failure when pigz is requested but not installed;
+   - plain input behaviour when a decompressor is specified;
+   - gzip FASTQ parsing through the parser decompressor option;
+   - gzip FASTA parsing through the parser decompressor option;
+   - file-level screening of gzip FASTQ with explicit Python decompression;
+   - pigz versus Python gzip equivalence when pigz is installed on the test host.
+
+Behaviour preserved
+-------------------
+
+This release does not change:
+
+- marker-selection biological semantics;
+- raw_ont_lod_balanced marker-profile defaults;
+- exact k-mer matching behaviour;
+- fuzzy/two-stage rescue behaviour;
+- species-call thresholds;
+- report-layer consolidation;
+- output schemas;
+- TSV/TSV.GZ output convention;
+- panel-cache validation semantics.
+
+Recommended use in current benchmark arrays
+-------------------------------------------
+
+For maximum backward compatibility, keep the default:
+
+    DECOMPRESSOR="python"
+
+For faster gzip FASTQ reading on the cluster if pigz is installed:
+
+    export DECOMPRESSOR="pigz"
+
+or, for a safe fallback:
+
+    export DECOMPRESSOR="auto"
+
+The rest of the v0.46/v0.47 exact-screening command structure can remain the
+same.
+
+Testing
+-------
+
+Full unittest suite result on the packaged release:
+
+    Ran 363 tests in 8.677s
+    OK (skipped=1)
+
+The skipped test is the pigz-vs-Python equivalence test on hosts where pigz is
+not installed. It runs automatically when pigz is available.
+
+Notes
+-----
+
+pigz is an external executable and is not a Python package dependency. It should
+be installed or made available on PATH by the cluster/module environment if the
+explicit pigz mode is used.

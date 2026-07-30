@@ -1,0 +1,10 @@
+Command:
+python -m unittest discover -s tests -v
+
+Result:
+Ran 301 tests in 9.590s
+OK
+
+Notes:
+- unittest only; nose2 was not used.
+- v0.36.0 changes production progress logging defaults and throttling.

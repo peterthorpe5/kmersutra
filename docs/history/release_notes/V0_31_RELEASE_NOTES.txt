@@ -1,0 +1,100 @@
+KmerSutra v0.31.0 release notes
+================================
+
+Main purpose
+------------
+This release implements independent multi-k marker sampling as the default
+build behaviour and makes the AI/call-calibration workflow ready for testing on
+KmerSutra benchmark outputs and future public ONT datasets.
+
+Major changes
+-------------
+
+1. Independent multi-k marker sampling is now the default
+   - Default marker selection is now independent_multik_genome_spread.
+   - Different k values use deterministic phase-shifted genome bins.
+   - Retained markers from different k values within the same evidence bucket
+     are prevented from coming from the same local genome/contig interval by
+     --min_cross_k_marker_distance, default 5000 bp.
+   - This reduces the chance that k=51, 77, 101 and 151 markers are simply
+     nested evidence from the same locus.
+   - The older genome_spread and first_seen modes are still available for
+     reproducibility checks, but independent multi-k sampling should be used for
+     new builds.
+
+2. Candidate-universe global builds now use shifted cross-k sampling
+   - candidate_universe sampling now uses k-specific shifted bins.
+   - Longer k values are considered first during candidate sampling, so stricter
+     species-specific evidence is not displaced by shorter permissive k values.
+   - Candidate-sampling summaries now include min_cross_k_marker_distance and
+     sampling_bin_phase.
+
+3. AI/call-calibration workflow is ready to test
+   - Added kmersutra.ai_calibration.
+   - Added kmersutra-build-call-training.
+   - Added kmersutra-train-call-calibrator.
+   - The AI layer is intentionally interpretable: it uses the existing
+     centroid-based open-set model to calibrate report-layer calls rather than
+     replacing the rule-based evidence framework.
+   - Training labels are inferred as expected_target, background_candidate_signal,
+     neighbour_lineage_evidence, reportable_off_target_species,
+     observed_below_threshold, positive_unclassified, or not_detected.
+
+4. Build scripts
+   - Added run_kmersutra_build_global_candidate_v031_tmpdir.sh.
+   - Updated the v028_1 build helper default marker selection to the v0.31
+     independent multi-k mode to avoid accidental reuse of old genome_spread
+     behaviour.
+
+Testing
+-------
+The full unittest suite was run in the sandbox:
+
+    python -m unittest discover -s tests -v
+
+Result:
+
+    Ran 267 tests in 7.223s
+    OK
+
+nose2 was not available in the sandbox, but the suite is standard unittest and
+should also run with nose2 on the cluster.
+
+Suggested install and test
+--------------------------
+
+    cd /home/pthorpe001/data/2026_plasmodium_kraken_sensitivity/kmersutra
+    pip install -e ".[dev,reporting,ncbi,ml,parquet]"
+    nose2 -v
+
+Suggested new database build settings
+-------------------------------------
+
+    export MARKER_SELECTION="independent_multik_genome_spread"
+    export MIN_CROSS_K_MARKER_DISTANCE="5000"
+
+The v0.31 build helper already uses these defaults.
+
+Suggested AI test workflow after a v0.30/v0.31 summary exists
+-------------------------------------------------------------
+
+    kmersutra-build-call-training \
+      --calls_tsv summary_v030_expected_lineage_hammondia/kmersutra_detection_calls_long.tsv \
+      --out_tsv ai_call_training.tsv \
+      --max_not_detected 50000 \
+      --verbose
+
+    kmersutra-train-call-calibrator \
+      --training_tsv ai_call_training.tsv \
+      --out_model_json kmersutra_call_calibrator.json \
+      --out_summary_tsv kmersutra_call_calibrator_training_summary.tsv \
+      --out_evaluation_tsv kmersutra_call_calibrator_evaluation.tsv \
+      --group_columns sample_id \
+      --test_fraction 0.2 \
+      --distance_quantile 0.95 \
+      --verbose
+
+Important interpretation note
+-----------------------------
+The AI component should be described as an optional calibration/evaluation layer.
+The core KmerSutra result remains auditable and rule-based.

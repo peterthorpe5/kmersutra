@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
-from kmersutra.parquet_modules import OptionalParquetDependencyError, require_pyarrow
+from kmersutra.parquet_modules import require_pyarrow
 
 
 def infer_fieldnames(*, records: Sequence[Mapping[str, object]]) -> list[str]:

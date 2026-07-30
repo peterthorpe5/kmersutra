@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import html
 import logging
-from collections import Counter, defaultdict
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
