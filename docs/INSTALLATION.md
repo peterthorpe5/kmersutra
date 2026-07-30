@@ -12,7 +12,7 @@ conda run --name kmersutra kmersutra-screen --help
 ## Reinstall after a Git pull
 
 ```bash
-REPO="/home/pthorpe001/github_repos/kmersutra"
+REPO="/path/to/kmersutra"
 
 cd "${REPO}"
 
@@ -39,17 +39,21 @@ Automatic retrieval of SRR9328980 requires `prefetch` and `fasterq-dump` from
 SRA Tools. `pigz` is used when available. Supplying a local
 `dataset.input_reads` path avoids the SRA download stage.
 
-## Database root
+## Benchmark paths
 
-The recommended cluster database root is:
-
-```text
-/home/pthorpe001/data/databases/kmersutra_db
-```
-
-Set it before using the supplied ATCC example configuration:
+Keep private cluster paths outside the tracked example configuration. Supply
+them as named options:
 
 ```bash
-export KMERSUTRA_DB_ROOT="/home/pthorpe001/data/databases/kmersutra_db"
-export KMERSUTRA_AI_MODEL="/absolute/path/to/final_internal_calibrator_all_training.json"
+kmersutra-run-benchmark \
+    --config benchmarks/atcc_msa1003_hifi/config.example.json \
+    --database-root /path/to/kmersutra_db \
+    --ai-model /path/to/final_internal_calibrator_all_training.json \
+    --output-root /path/to/benchmark_outputs \
+    --stop-after 00_preflight \
+    --resume
 ```
+
+The environment variables `KMERSUTRA_DB_ROOT` and `KMERSUTRA_AI_MODEL` remain
+supported for compatibility. Named options are preferred because the paths are
+shown in the recorded command and checked before Slurm submission.

@@ -1,0 +1,244 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KmerSutra documentation &mdash; KmerSutra 0.51.1</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=1cd31b6b"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Quick start" href="quickstart.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="#" class="icon icon-home">
+            KmerSutra
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="concepts.html">Scientific concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="panel_building.html">Building reference panels</a></li>
+<li class="toctree-l1"><a class="reference internal" href="screening.html">Screening reads</a></li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Output guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hpc.html">Slurm execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reproducibility.html">Reproducibility and provenance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Benchmarks</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="benchmarks/index.html">Benchmark workflows</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="cli_reference.html">Command reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="development.html">Development and testing</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="#">KmerSutra</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">KmerSutra documentation</li>
+      <li class="wy-breadcrumbs-aside">
+              <a href="https://github.com/peterthorpe5/kmersutra/blob/main/docs/source/index.rst" class="fa fa-github"> Edit on GitHub</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="kmersutra-documentation">
+<h1>KmerSutra documentation<a class="headerlink" href="#kmersutra-documentation" title="Link to this heading"></a></h1>
+<p>KmerSutra is a conservative, taxonomy-aware, multi-k-mer evidence framework
+for species-resolved interpretation of long-read metagenomic data. It was
+developed in response to a practical problem: sensitive general-purpose
+classifiers can detect low-abundance targets while still producing numerous
+plausible-looking off-target species labels. KmerSutra occupies a different
+operating point, prioritising auditable evidence and clean reporting.</p>
+<p>The deterministic evidence and reporting layers are the scientific core. The
+optional calibration model is downstream of those rules and does not replace
+them.</p>
+<section id="start-here">
+<h2>Start here<a class="headerlink" href="#start-here" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="quickstart.html"><span class="doc">Quick start</span></a> — install KmerSutra and run a small screen.</p></li>
+<li><p><a class="reference internal" href="concepts.html"><span class="doc">Scientific concepts</span></a> — understand marker ranks, raw evidence and reportable calls.</p></li>
+<li><p><a class="reference internal" href="panel_building.html"><span class="doc">Building reference panels</span></a> — construct an outgroup-aware multi-k panel.</p></li>
+<li><p><a class="reference internal" href="screening.html"><span class="doc">Screening reads</span></a> — screen reads and interpret the output tables.</p></li>
+<li><p><a class="reference internal" href="hpc.html"><span class="doc">Slurm execution</span></a> — run reproducibly on Slurm.</p></li>
+<li><p><a class="reference internal" href="benchmarks/index.html"><span class="doc">Benchmark workflows</span></a> — reproduce the Zymo and locked ATCC benchmarks.</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>KmerSutra is not intended to maximise read assignment or claim the earliest
+possible detection. Use it when conservative, inspectable species-level
+evidence is more important than permissive classification.</p>
+</div>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">User guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick start</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#install">Install</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#screen-an-existing-panel">Screen an existing panel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#next-steps">Next steps</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="concepts.html">Scientific concepts</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="concepts.html#why-kmersutra-exists">Why KmerSutra exists</a></li>
+<li class="toctree-l2"><a class="reference internal" href="concepts.html#outgroup-aware-markers">Outgroup-aware markers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="concepts.html#multiple-k-values">Multiple k values</a></li>
+<li class="toctree-l2"><a class="reference internal" href="concepts.html#raw-evidence-versus-reportable-detection">Raw evidence versus reportable detection</a></li>
+<li class="toctree-l2"><a class="reference internal" href="concepts.html#optional-calibration">Optional calibration</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#supported-environment">Supported environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#conda-installation">Conda installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#pip-installation">Pip installation</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="panel_building.html">Building reference panels</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="panel_building.html#genome-configuration">Genome configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="panel_building.html#typical-build">Typical build</a></li>
+<li class="toctree-l2"><a class="reference internal" href="panel_building.html#reference-leakage">Reference leakage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="panel_building.html#validation">Validation</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="screening.html">Screening reads</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="screening.html#exact-and-rescue-modes">Exact and rescue modes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="screening.html#flat-and-hierarchical-modes">Flat and hierarchical modes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="screening.html#report-layer-controls">Report-layer controls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="screening.html#performance">Performance</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Output guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="outputs.html#primary-screening-tables">Primary screening tables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="outputs.html#interpretation-order">Interpretation order</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="hpc.html">Slurm execution</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="hpc.html#atcc-benchmark">ATCC benchmark</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hpc.html#zymo-benchmark">Zymo benchmark</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hpc.html#resuming">Resuming</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hpc.html#resource-reporting">Resource reporting</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="reproducibility.html">Reproducibility and provenance</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="reproducibility.html#benchmark-settings">Benchmark settings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reproducibility.html#testing-artefacts">Testing artefacts</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html#unresolved-configuration-variable">Unresolved configuration variable</a></li>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html#reference-leakage-failure">Reference leakage failure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html#only-13-tests-appear">Only 13 tests appear</a></li>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html#nose2-configuration-error"><code class="docutils literal notranslate"><span class="pre">nose2</span></code> configuration error</a></li>
+<li class="toctree-l2"><a class="reference internal" href="troubleshooting.html#slurm-command-cannot-find-conda">Slurm command cannot find Conda</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Benchmarks</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="benchmarks/index.html">Benchmark workflows</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="benchmarks/atcc_msa1003.html">ATCC MSA-1003 PacBio HiFi</a></li>
+<li class="toctree-l2"><a class="reference internal" href="benchmarks/zymo_d6300.html">ONT ZymoBIOMICS D6300</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="cli_reference.html">Command reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="cli_reference.html#core-commands">Core commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli_reference.html#panel-and-module-commands">Panel and module commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cli_reference.html#reporting-and-calibration-commands">Reporting and calibration commands</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Python API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-kmersutra.benchmark_workflow">Benchmark workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-kmersutra.mock_community">Mock-community truth</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-kmersutra.reference_audit">Reference audit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#module-kmersutra.package_inventory">Package inventory</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="development.html">Development and testing</a></li>
+</ul>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="quickstart.html" class="btn btn-neutral float-right" title="Quick start" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Peter Thorpe.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

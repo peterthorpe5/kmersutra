@@ -1,0 +1,469 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>kmersutra.reference_audit &mdash; KmerSutra 0.51.1</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=1cd31b6b"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            KmerSutra
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../quickstart.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../concepts.html">Scientific concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../panel_building.html">Building reference panels</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../screening.html">Screening reads</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../outputs.html">Output guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../hpc.html">Slurm execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../reproducibility.html">Reproducibility and provenance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Benchmarks</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../benchmarks/index.html">Benchmark workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../benchmarks/atcc_msa1003.html">ATCC MSA-1003 PacBio HiFi</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../benchmarks/zymo_d6300.html">ONT ZymoBIOMICS D6300</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../cli_reference.html">Command reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../development.html">Development and testing</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">KmerSutra</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">kmersutra.reference_audit</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for kmersutra.reference_audit</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Reference-panel leakage auditing for independent benchmarks.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">gzip</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">kmersutra.mock_community</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">MockCommunityTruth</span><span class="p">,</span>
+    <span class="n">load_truth_manifest</span><span class="p">,</span>
+    <span class="n">normalise_accession</span><span class="p">,</span>
+    <span class="n">normalise_species_key</span><span class="p">,</span>
+    <span class="n">sha256_file</span><span class="p">,</span>
+    <span class="n">truth_by_species</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">kmersutra.table_io</span><span class="w"> </span><span class="kn">import</span> <span class="n">read_records_table</span><span class="p">,</span> <span class="n">write_records_table</span>
+
+<span class="n">ACCESSION_PATTERN</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;\b(?:GC[AF]_\d+|[A-Z]{1,4}_?[A-Z0-9]*\d+)(?:\.\d+)?\b&quot;</span><span class="p">)</span>
+
+<span class="n">AUDIT_FIELDNAMES</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;genome_fasta&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;species_name&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;assembly_accession&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;normalised_assembly_accession&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;matched_truth_species&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;matched_truth_organism_id&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;same_species_reference&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;assembly_accession_leakage&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;sequence_accession_leakage&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;checksum_leakage&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;matched_truth_accessions&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;panel_fasta_sha256&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;fasta_status&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;audit_status&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;audit_reason&quot;</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<div class="viewcode-block" id="open_text_auto">
+<a class="viewcode-back" href="../../api.html#kmersutra.reference_audit.open_text_auto">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">open_text_auto</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Open a plain or gzip-compressed text file.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        path: Text file path.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Readable text handle.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">suffix</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;.gz&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">gzip</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s2">&quot;rt&quot;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;replace&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">path</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">&quot;r&quot;</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">&quot;utf-8&quot;</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="s2">&quot;replace&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="fasta_header_accessions">
+<a class="viewcode-back" href="../../api.html#kmersutra.reference_audit.fasta_header_accessions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">fasta_header_accessions</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Collect normalised accession-like tokens from FASTA headers.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        path: FASTA or FASTA.GZ file.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Normalised accession tokens found in header lines.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">accessions</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">with</span> <span class="n">open_text_auto</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="k">as</span> <span class="n">handle</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">handle</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;&gt;&quot;</span><span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="k">for</span> <span class="n">match</span> <span class="ow">in</span> <span class="n">ACCESSION_PATTERN</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="n">line</span><span class="p">):</span>
+                <span class="n">accession</span> <span class="o">=</span> <span class="n">normalise_accession</span><span class="p">(</span><span class="n">match</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">accession</span><span class="p">:</span>
+                    <span class="n">accessions</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">accession</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">accessions</span></div>
+
+
+
+<div class="viewcode-block" id="truth_accession_sets">
+<a class="viewcode-back" href="../../api.html#kmersutra.reference_audit.truth_accession_sets">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">truth_accession_sets</span><span class="p">(</span>
+    <span class="n">truth_records</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">MockCommunityTruth</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Collect truth assembly and sequence accession sets.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        truth_records: Truth records.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Assembly accession set and sequence accession set.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">assembly_accessions</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="n">sequence_accessions</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">truth_records</span><span class="p">:</span>
+        <span class="n">assembly_accessions</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">truth_assembly_accessions</span><span class="p">)</span>
+        <span class="n">sequence_accessions</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">truth_sequence_accessions</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">assembly_accessions</span><span class="p">,</span> <span class="n">sequence_accessions</span></div>
+
+
+
+<div class="viewcode-block" id="truth_checksums">
+<a class="viewcode-back" href="../../api.html#kmersutra.reference_audit.truth_checksums">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">truth_checksums</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">truth_records</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">MockCommunityTruth</span><span class="p">],</span>
+    <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MockCommunityTruth</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolve exact truth FASTA checksums.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        truth_records: Truth records.</span>
+<span class="sd">        logger: Optional logger.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Mapping from SHA-256 digest to truth record.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        FileNotFoundError: If a declared truth FASTA is missing.</span>
+<span class="sd">        ValueError: If a declared truth checksum does not match its FASTA.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">checksums</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MockCommunityTruth</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">truth_records</span><span class="p">:</span>
+        <span class="n">declared</span> <span class="o">=</span> <span class="n">record</span><span class="o">.</span><span class="n">truth_fasta_sha256</span>
+        <span class="n">observed</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">record</span><span class="o">.</span><span class="n">truth_fasta</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">record</span><span class="o">.</span><span class="n">truth_fasta</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
+                <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Truth FASTA is missing for </span><span class="si">{</span><span class="n">record</span><span class="o">.</span><span class="n">species_name</span><span class="si">}</span><span class="s2">: &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">record</span><span class="o">.</span><span class="n">truth_fasta</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+            <span class="n">observed</span> <span class="o">=</span> <span class="n">sha256_file</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">truth_fasta</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">declared</span> <span class="ow">and</span> <span class="n">observed</span> <span class="o">!=</span> <span class="n">declared</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Truth FASTA checksum mismatch for </span><span class="si">{</span><span class="n">record</span><span class="o">.</span><span class="n">species_name</span><span class="si">}</span><span class="s2">: &quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;declared=</span><span class="si">{</span><span class="n">declared</span><span class="si">}</span><span class="s2">, observed=</span><span class="si">{</span><span class="n">observed</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+        <span class="n">checksum</span> <span class="o">=</span> <span class="n">declared</span> <span class="ow">or</span> <span class="n">observed</span>
+        <span class="k">if</span> <span class="n">checksum</span><span class="p">:</span>
+            <span class="n">checksums</span><span class="p">[</span><span class="n">checksum</span><span class="p">]</span> <span class="o">=</span> <span class="n">record</span>
+            <span class="k">if</span> <span class="n">logger</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                    <span class="s2">&quot;Registered truth checksum for </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+                    <span class="n">record</span><span class="o">.</span><span class="n">species_name</span><span class="p">,</span>
+                    <span class="n">checksum</span><span class="p">,</span>
+                <span class="p">)</span>
+    <span class="k">return</span> <span class="n">checksums</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_fasta_path</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">genome_config</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolve a genome FASTA path relative to its configuration.&quot;&quot;&quot;</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">text</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">text</span><span class="p">)</span><span class="o">.</span><span class="n">expanduser</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">is_absolute</span><span class="p">():</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">genome_config</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="n">path</span>
+    <span class="k">return</span> <span class="n">path</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="audit_reference_panel">
+<a class="viewcode-back" href="../../api.html#kmersutra.reference_audit.audit_reference_panel">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">audit_reference_panel</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">genome_config</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">truth_manifest</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">allow_missing_fastas</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Audit a KmerSutra genome configuration for benchmark leakage.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        genome_config: KmerSutra genome configuration table.</span>
+<span class="sd">        truth_manifest: Mock-community truth manifest.</span>
+<span class="sd">        allow_missing_fastas: Keep metadata-only rows when FASTAs are missing.</span>
+<span class="sd">        logger: Optional logger.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        One audit row per panel genome.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If the genome configuration is empty or invalid.</span>
+<span class="sd">        FileNotFoundError: If a required panel FASTA is missing.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">config_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">genome_config</span><span class="p">)</span><span class="o">.</span><span class="n">expanduser</span><span class="p">()</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="n">read_records_table</span><span class="p">(</span>
+        <span class="n">input_path</span><span class="o">=</span><span class="n">config_path</span><span class="p">,</span>
+        <span class="n">required_columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;genome_fasta&quot;</span><span class="p">,</span> <span class="s2">&quot;species_name&quot;</span><span class="p">,</span> <span class="s2">&quot;assembly_accession&quot;</span><span class="p">],</span>
+        <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">rows</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Genome configuration contains no rows: </span><span class="si">{</span><span class="n">config_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">truth_records</span> <span class="o">=</span> <span class="n">load_truth_manifest</span><span class="p">(</span>
+        <span class="n">manifest_path</span><span class="o">=</span><span class="n">truth_manifest</span><span class="p">,</span>
+        <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">species_mapping</span> <span class="o">=</span> <span class="n">truth_by_species</span><span class="p">(</span><span class="n">truth_records</span><span class="o">=</span><span class="n">truth_records</span><span class="p">)</span>
+    <span class="n">assembly_truth</span><span class="p">,</span> <span class="n">sequence_truth</span> <span class="o">=</span> <span class="n">truth_accession_sets</span><span class="p">(</span><span class="n">truth_records</span><span class="p">)</span>
+    <span class="n">checksum_truth</span> <span class="o">=</span> <span class="n">truth_checksums</span><span class="p">(</span>
+        <span class="n">truth_records</span><span class="o">=</span><span class="n">truth_records</span><span class="p">,</span>
+        <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">audit_rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">:</span>
+        <span class="n">species_name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;species_name&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="n">truth</span> <span class="o">=</span> <span class="n">species_mapping</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">normalise_species_key</span><span class="p">(</span><span class="n">species_name</span><span class="p">))</span>
+        <span class="n">assembly_accession</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;assembly_accession&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="n">normalised_assembly</span> <span class="o">=</span> <span class="n">normalise_accession</span><span class="p">(</span><span class="n">assembly_accession</span><span class="p">)</span>
+        <span class="n">assembly_leakage</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span>
+            <span class="n">normalised_assembly</span> <span class="ow">and</span> <span class="n">normalised_assembly</span> <span class="ow">in</span> <span class="n">assembly_truth</span>
+        <span class="p">)</span>
+        <span class="n">fasta_path</span> <span class="o">=</span> <span class="n">_resolve_fasta_path</span><span class="p">(</span>
+            <span class="n">genome_config</span><span class="o">=</span><span class="n">config_path</span><span class="p">,</span>
+            <span class="n">value</span><span class="o">=</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;genome_fasta&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">fasta_status</span> <span class="o">=</span> <span class="s2">&quot;not_declared&quot;</span>
+        <span class="n">panel_checksum</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">matching_sequence_accessions</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="n">checksum_leakage</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="n">fasta_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">fasta_path</span><span class="o">.</span><span class="n">is_file</span><span class="p">()</span> <span class="ow">or</span> <span class="n">fasta_path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">fasta_status</span> <span class="o">=</span> <span class="s2">&quot;missing_or_empty&quot;</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">allow_missing_fastas</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Panel FASTA is missing or empty: </span><span class="si">{</span><span class="n">fasta_path</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">fasta_status</span> <span class="o">=</span> <span class="s2">&quot;present&quot;</span>
+                <span class="n">header_accessions</span> <span class="o">=</span> <span class="n">fasta_header_accessions</span><span class="p">(</span><span class="n">fasta_path</span><span class="p">)</span>
+                <span class="n">matching_sequence_accessions</span> <span class="o">=</span> <span class="n">header_accessions</span><span class="o">.</span><span class="n">intersection</span><span class="p">(</span>
+                    <span class="n">sequence_truth</span>
+                <span class="p">)</span>
+                <span class="n">panel_checksum</span> <span class="o">=</span> <span class="n">sha256_file</span><span class="p">(</span><span class="n">fasta_path</span><span class="p">)</span>
+                <span class="n">checksum_leakage</span> <span class="o">=</span> <span class="n">panel_checksum</span> <span class="ow">in</span> <span class="n">checksum_truth</span>
+
+        <span class="n">sequence_leakage</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">matching_sequence_accessions</span><span class="p">)</span>
+        <span class="n">leakage_reasons</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="n">assembly_leakage</span><span class="p">:</span>
+            <span class="n">leakage_reasons</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;truth_assembly_accession&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">sequence_leakage</span><span class="p">:</span>
+            <span class="n">leakage_reasons</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;truth_sequence_accession&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">checksum_leakage</span><span class="p">:</span>
+            <span class="n">leakage_reasons</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;truth_fasta_checksum&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">leakage_reasons</span><span class="p">:</span>
+            <span class="n">status</span> <span class="o">=</span> <span class="s2">&quot;leakage&quot;</span>
+            <span class="n">reason</span> <span class="o">=</span> <span class="s2">&quot;;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">leakage_reasons</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">fasta_status</span> <span class="o">==</span> <span class="s2">&quot;missing_or_empty&quot;</span><span class="p">:</span>
+            <span class="n">status</span> <span class="o">=</span> <span class="s2">&quot;incomplete&quot;</span>
+            <span class="n">reason</span> <span class="o">=</span> <span class="s2">&quot;panel_fasta_missing_or_empty&quot;</span>
+        <span class="k">elif</span> <span class="n">truth</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">status</span> <span class="o">=</span> <span class="s2">&quot;same_species_reference&quot;</span>
+            <span class="n">reason</span> <span class="o">=</span> <span class="s2">&quot;held_out_same_species_reference&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">status</span> <span class="o">=</span> <span class="s2">&quot;clear&quot;</span>
+            <span class="n">reason</span> <span class="o">=</span> <span class="s2">&quot;no_exact_truth_identity&quot;</span>
+
+        <span class="n">audit_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="s2">&quot;genome_fasta&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">fasta_path</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">),</span>
+                <span class="s2">&quot;species_name&quot;</span><span class="p">:</span> <span class="n">species_name</span><span class="p">,</span>
+                <span class="s2">&quot;assembly_accession&quot;</span><span class="p">:</span> <span class="n">assembly_accession</span><span class="p">,</span>
+                <span class="s2">&quot;normalised_assembly_accession&quot;</span><span class="p">:</span> <span class="n">normalised_assembly</span><span class="p">,</span>
+                <span class="s2">&quot;matched_truth_species&quot;</span><span class="p">:</span> <span class="n">truth</span><span class="o">.</span><span class="n">species_name</span> <span class="k">if</span> <span class="n">truth</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;matched_truth_organism_id&quot;</span><span class="p">:</span> <span class="n">truth</span><span class="o">.</span><span class="n">organism_id</span> <span class="k">if</span> <span class="n">truth</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;same_species_reference&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="nb">bool</span><span class="p">(</span><span class="n">truth</span><span class="p">)),</span>
+                <span class="s2">&quot;assembly_accession_leakage&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">assembly_leakage</span><span class="p">),</span>
+                <span class="s2">&quot;sequence_accession_leakage&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">sequence_leakage</span><span class="p">),</span>
+                <span class="s2">&quot;checksum_leakage&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">checksum_leakage</span><span class="p">),</span>
+                <span class="s2">&quot;matched_truth_accessions&quot;</span><span class="p">:</span> <span class="s2">&quot;;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                    <span class="nb">sorted</span><span class="p">(</span><span class="n">matching_sequence_accessions</span><span class="p">)</span>
+                <span class="p">),</span>
+                <span class="s2">&quot;panel_fasta_sha256&quot;</span><span class="p">:</span> <span class="n">panel_checksum</span><span class="p">,</span>
+                <span class="s2">&quot;fasta_status&quot;</span><span class="p">:</span> <span class="n">fasta_status</span><span class="p">,</span>
+                <span class="s2">&quot;audit_status&quot;</span><span class="p">:</span> <span class="n">status</span><span class="p">,</span>
+                <span class="s2">&quot;audit_reason&quot;</span><span class="p">:</span> <span class="n">reason</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">logger</span><span class="p">:</span>
+        <span class="n">leakage_count</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span>
+            <span class="n">row</span><span class="p">[</span><span class="s2">&quot;audit_status&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;leakage&quot;</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">audit_rows</span>
+        <span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Reference audit completed: </span><span class="si">%d</span><span class="s2"> rows, </span><span class="si">%d</span><span class="s2"> leakage rows&quot;</span><span class="p">,</span>
+            <span class="nb">len</span><span class="p">(</span><span class="n">audit_rows</span><span class="p">),</span>
+            <span class="n">leakage_count</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">audit_rows</span></div>
+
+
+
+<div class="viewcode-block" id="write_reference_panel_audit">
+<a class="viewcode-back" href="../../api.html#kmersutra.reference_audit.write_reference_panel_audit">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">write_reference_panel_audit</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">genome_config</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">truth_manifest</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">output_table</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">allow_missing_fastas</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">fail_on_leakage</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Run and write a reference-panel leakage audit.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        genome_config: KmerSutra genome configuration table.</span>
+<span class="sd">        truth_manifest: Mock-community truth manifest.</span>
+<span class="sd">        output_table: Audit output table.</span>
+<span class="sd">        allow_missing_fastas: Permit metadata-only audit rows.</span>
+<span class="sd">        fail_on_leakage: Raise when exact truth identity is found.</span>
+<span class="sd">        logger: Optional logger.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Written audit rows.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If ``fail_on_leakage`` is true and leakage is detected.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="n">audit_reference_panel</span><span class="p">(</span>
+        <span class="n">genome_config</span><span class="o">=</span><span class="n">genome_config</span><span class="p">,</span>
+        <span class="n">truth_manifest</span><span class="o">=</span><span class="n">truth_manifest</span><span class="p">,</span>
+        <span class="n">allow_missing_fastas</span><span class="o">=</span><span class="n">allow_missing_fastas</span><span class="p">,</span>
+        <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">write_records_table</span><span class="p">(</span>
+        <span class="n">records</span><span class="o">=</span><span class="n">rows</span><span class="p">,</span>
+        <span class="n">output_path</span><span class="o">=</span><span class="n">output_table</span><span class="p">,</span>
+        <span class="n">fieldnames</span><span class="o">=</span><span class="n">AUDIT_FIELDNAMES</span><span class="p">,</span>
+        <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">leaking</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">row</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span> <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;audit_status&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span> <span class="o">==</span> <span class="s2">&quot;leakage&quot;</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="n">fail_on_leakage</span> <span class="ow">and</span> <span class="n">leaking</span><span class="p">:</span>
+        <span class="n">identifiers</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;assembly_accession&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;genome_fasta&quot;</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">leaking</span><span class="p">[:</span><span class="mi">10</span><span class="p">]</span>
+        <span class="p">]</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Reference-panel leakage detected in &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">leaking</span><span class="p">)</span><span class="si">}</span><span class="s2"> row(s): </span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">identifiers</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">rows</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Peter Thorpe.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

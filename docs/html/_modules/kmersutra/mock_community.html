@@ -1,0 +1,675 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>kmersutra.mock_community &mdash; KmerSutra 0.51.1</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=1cd31b6b"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            KmerSutra
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../quickstart.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../concepts.html">Scientific concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../panel_building.html">Building reference panels</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../screening.html">Screening reads</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../outputs.html">Output guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../hpc.html">Slurm execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../reproducibility.html">Reproducibility and provenance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Benchmarks</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../benchmarks/index.html">Benchmark workflows</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../benchmarks/atcc_msa1003.html">ATCC MSA-1003 PacBio HiFi</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../benchmarks/zymo_d6300.html">ONT ZymoBIOMICS D6300</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../cli_reference.html">Command reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../development.html">Development and testing</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">KmerSutra</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">kmersutra.mock_community</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for kmersutra.mock_community</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Manifest-driven truth labelling for mock-community benchmarks.&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">Counter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">kmersutra.ai_calibration</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_call_feature_record</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">kmersutra.table_io</span><span class="w"> </span><span class="kn">import</span> <span class="n">read_records_table</span><span class="p">,</span> <span class="n">write_records_table</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">kmersutra.zymo_truth</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">first_non_empty</span><span class="p">,</span>
+    <span class="n">infer_species_name</span><span class="p">,</span>
+    <span class="n">row_has_evidence</span><span class="p">,</span>
+    <span class="n">row_is_reportable</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">TRUTH_REQUIRED_COLUMNS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;benchmark_id&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;species_name&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;expected_abundance_fraction&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;abundance_tier&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<div class="viewcode-block" id="MockCommunityTruth">
+<a class="viewcode-back" href="../../api.html#kmersutra.mock_community.MockCommunityTruth">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">MockCommunityTruth</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;One expected or deliberately absent organism in a benchmark.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        benchmark_id: Stable benchmark identifier.</span>
+<span class="sd">        organism_id: Stable organism identifier within the benchmark.</span>
+<span class="sd">        species_name: Canonical species name used in outputs.</span>
+<span class="sd">        accepted_species_names: Normalised canonical name and accepted aliases.</span>
+<span class="sd">        expected: Whether the organism is expected to be present.</span>
+<span class="sd">        expected_abundance_fraction: Expected fraction between zero and one.</span>
+<span class="sd">        abundance_tier: Pre-specified abundance tier label.</span>
+<span class="sd">        ncbi_taxid: Optional NCBI taxonomy identifier.</span>
+<span class="sd">        truth_strain: Reference-material strain label.</span>
+<span class="sd">        truth_assembly_accessions: Assembly accessions that must be excluded.</span>
+<span class="sd">        truth_sequence_accessions: Sequence accessions that must be excluded.</span>
+<span class="sd">        truth_fasta: Optional local truth FASTA used for exact checksum auditing.</span>
+<span class="sd">        truth_fasta_sha256: Optional expected SHA-256 for ``truth_fasta``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">benchmark_id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">organism_id</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">species_name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">accepted_species_names</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="n">expected</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">expected_abundance_fraction</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">abundance_tier</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">ncbi_taxid</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">truth_strain</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">truth_assembly_accessions</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="n">truth_sequence_accessions</span><span class="p">:</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="n">truth_fasta</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="n">truth_fasta_sha256</span><span class="p">:</span> <span class="nb">str</span></div>
+
+
+
+<div class="viewcode-block" id="normalise_species_key">
+<a class="viewcode-back" href="../../api.html#kmersutra.mock_community.normalise_species_key">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">normalise_species_key</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalise a species label for robust exact matching.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        value: Species-like value.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Case-folded, whitespace-normalised species label.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">value</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;_&quot;</span><span class="p">,</span> <span class="s2">&quot; &quot;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">())</span></div>
+
+
+
+<div class="viewcode-block" id="parse_bool">
+<a class="viewcode-back" href="../../api.html#kmersutra.mock_community.parse_bool">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">parse_bool</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse a conservative boolean value.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        value: Boolean-like value.</span>
+<span class="sd">        default: Value returned for blank input.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Parsed boolean.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If a non-blank value is not recognised.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">text</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">default</span>
+    <span class="k">if</span> <span class="n">text</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;1&quot;</span><span class="p">,</span> <span class="s2">&quot;true&quot;</span><span class="p">,</span> <span class="s2">&quot;yes&quot;</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">,</span> <span class="s2">&quot;expected&quot;</span><span class="p">,</span> <span class="s2">&quot;present&quot;</span><span class="p">}:</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">if</span> <span class="n">text</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;0&quot;</span><span class="p">,</span> <span class="s2">&quot;false&quot;</span><span class="p">,</span> <span class="s2">&quot;no&quot;</span><span class="p">,</span> <span class="s2">&quot;n&quot;</span><span class="p">,</span> <span class="s2">&quot;absent&quot;</span><span class="p">,</span> <span class="s2">&quot;negative&quot;</span><span class="p">}:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported boolean value: </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="parse_fraction">
+<a class="viewcode-back" href="../../api.html#kmersutra.mock_community.parse_fraction">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">parse_fraction</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">field_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse a fraction bounded between zero and one.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        value: Numeric fraction.</span>
+<span class="sd">        field_name: Field name used in diagnostics.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Parsed floating-point fraction.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If the value is missing, non-numeric or outside [0, 1].</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">fraction</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">field_name</span><span class="si">}</span><span class="s2"> must be numeric: </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">fraction</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">field_name</span><span class="si">}</span><span class="s2"> must be between zero and one: </span><span class="si">{</span><span class="n">fraction</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">fraction</span></div>
+
+
+
+<div class="viewcode-block" id="split_values">
+<a class="viewcode-back" href="../../api.html#kmersutra.mock_community.split_values">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">split_values</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">frozenset</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Split semicolon-delimited manifest values.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        value: Semicolon-delimited text.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Non-empty stripped values.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">frozenset</span><span class="p">(</span>
+        <span class="n">item</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;;&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">item</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="normalise_accession">
+<a class="viewcode-back" href="../../api.html#kmersutra.mock_community.normalise_accession">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">normalise_accession</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Return an upper-case accession without a version suffix.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        value: Assembly or sequence accession.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Normalised accession.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="sha256_file">
+<a class="viewcode-back" href="../../api.html#kmersutra.mock_community.sha256_file">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">sha256_file</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculate a file SHA-256 digest.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        path: File to hash.</span>
+<span class="sd">        chunk_size: Read size in bytes.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Lower-case hexadecimal SHA-256 digest.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If ``chunk_size`` is not positive.</span>
+<span class="sd">        FileNotFoundError: If the file does not exist.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">chunk_size</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;chunk_size must be positive&quot;</span><span class="p">)</span>
+    <span class="n">digest</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">()</span>
+    <span class="k">with</span> <span class="n">path</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">handle</span><span class="p">:</span>
+        <span class="k">while</span> <span class="n">chunk</span> <span class="o">:=</span> <span class="n">handle</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">chunk_size</span><span class="p">):</span>
+            <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">chunk</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">digest</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_resolve_truth_fasta</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">manifest_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Resolve an optional truth FASTA relative to its manifest.&quot;&quot;&quot;</span>
+    <span class="n">text</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">text</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">text</span><span class="p">)</span><span class="o">.</span><span class="n">expanduser</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">is_absolute</span><span class="p">():</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">manifest_path</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="n">path</span>
+    <span class="k">return</span> <span class="n">path</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span>
+
+
+<div class="viewcode-block" id="load_truth_manifest">
+<a class="viewcode-back" href="../../api.html#kmersutra.mock_community.load_truth_manifest">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_truth_manifest</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">manifest_path</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">require_expected</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">MockCommunityTruth</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load and validate a mock-community truth manifest.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        manifest_path: TSV, TSV.GZ or Parquet truth manifest.</span>
+<span class="sd">        require_expected: Require at least one expected organism.</span>
+<span class="sd">        logger: Optional logger.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Validated truth records.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If the manifest is empty or internally inconsistent.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">manifest_path</span><span class="p">)</span><span class="o">.</span><span class="n">expanduser</span><span class="p">()</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="n">read_records_table</span><span class="p">(</span><span class="n">input_path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">rows</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Truth manifest contains no records: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">missing</span> <span class="o">=</span> <span class="n">TRUTH_REQUIRED_COLUMNS</span><span class="o">.</span><span class="n">difference</span><span class="p">(</span><span class="n">rows</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Truth manifest is missing required columns: &quot;</span>
+            <span class="o">+</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">missing</span><span class="p">))</span>
+        <span class="p">)</span>
+
+    <span class="n">records</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">MockCommunityTruth</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">seen_organisms</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">line_number</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">any</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">value</span> <span class="ow">or</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">row</span><span class="o">.</span><span class="n">values</span><span class="p">()):</span>
+            <span class="k">continue</span>
+        <span class="n">benchmark_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;benchmark_id&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="n">species_name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;species_name&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="n">organism_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;organism_id&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="ow">or</span> <span class="n">species_name</span>
+        <span class="n">abundance_tier</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;abundance_tier&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">benchmark_id</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Blank benchmark_id at manifest row </span><span class="si">{</span><span class="n">line_number</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">species_name</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Blank species_name at manifest row </span><span class="si">{</span><span class="n">line_number</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">abundance_tier</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Blank abundance_tier at manifest row </span><span class="si">{</span><span class="n">line_number</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="n">benchmark_id</span><span class="p">,</span> <span class="n">organism_id</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">seen_organisms</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Duplicate truth organism </span><span class="si">{</span><span class="n">key</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">seen_organisms</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+        <span class="n">accepted_names</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">normalise_species_key</span><span class="p">(</span><span class="n">species_name</span><span class="p">),</span>
+            <span class="o">*</span><span class="p">(</span>
+                <span class="n">normalise_species_key</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">split_values</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;accepted_species_names&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span>
+            <span class="p">),</span>
+        <span class="p">}</span>
+        <span class="n">accepted_names</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">truth_fasta</span> <span class="o">=</span> <span class="n">_resolve_truth_fasta</span><span class="p">(</span>
+            <span class="n">manifest_path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span>
+            <span class="n">value</span><span class="o">=</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;truth_fasta&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">truth_fasta_sha256</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;truth_fasta_sha256&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">truth_fasta_sha256</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">truth_fasta_sha256</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">64</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;truth_fasta_sha256 must contain 64 hexadecimal characters &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;at row </span><span class="si">{</span><span class="n">line_number</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+        <span class="n">records</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">MockCommunityTruth</span><span class="p">(</span>
+                <span class="n">benchmark_id</span><span class="o">=</span><span class="n">benchmark_id</span><span class="p">,</span>
+                <span class="n">organism_id</span><span class="o">=</span><span class="n">organism_id</span><span class="p">,</span>
+                <span class="n">species_name</span><span class="o">=</span><span class="n">species_name</span><span class="p">,</span>
+                <span class="n">accepted_species_names</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span><span class="n">accepted_names</span><span class="p">),</span>
+                <span class="n">expected</span><span class="o">=</span><span class="n">parse_bool</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;expected&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span> <span class="n">default</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+                <span class="n">expected_abundance_fraction</span><span class="o">=</span><span class="n">parse_fraction</span><span class="p">(</span>
+                    <span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;expected_abundance_fraction&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">),</span>
+                    <span class="n">field_name</span><span class="o">=</span><span class="s2">&quot;expected_abundance_fraction&quot;</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">abundance_tier</span><span class="o">=</span><span class="n">abundance_tier</span><span class="p">,</span>
+                <span class="n">ncbi_taxid</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ncbi_taxid&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span>
+                <span class="n">truth_strain</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;truth_strain&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span>
+                <span class="n">truth_assembly_accessions</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span>
+                    <span class="n">normalise_accession</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">split_values</span><span class="p">(</span>
+                        <span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;truth_assembly_accessions&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">normalise_accession</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+                <span class="p">),</span>
+                <span class="n">truth_sequence_accessions</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">(</span>
+                    <span class="n">normalise_accession</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">split_values</span><span class="p">(</span>
+                        <span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;truth_sequence_accessions&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+                    <span class="p">)</span>
+                    <span class="k">if</span> <span class="n">normalise_accession</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+                <span class="p">),</span>
+                <span class="n">truth_fasta</span><span class="o">=</span><span class="n">truth_fasta</span><span class="p">,</span>
+                <span class="n">truth_fasta_sha256</span><span class="o">=</span><span class="n">truth_fasta_sha256</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+    <span class="n">expected</span> <span class="o">=</span> <span class="p">[</span><span class="n">record</span> <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">records</span> <span class="k">if</span> <span class="n">record</span><span class="o">.</span><span class="n">expected</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">require_expected</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">expected</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Truth manifest has no expected organisms&quot;</span><span class="p">)</span>
+    <span class="n">total_fraction</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">record</span><span class="o">.</span><span class="n">expected_abundance_fraction</span> <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">expected</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">total_fraction</span> <span class="o">&gt;</span> <span class="mf">1.000001</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Expected abundance fractions exceed one: &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">total_fraction</span><span class="si">:</span><span class="s2">.8f</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="n">benchmark_ids</span> <span class="o">=</span> <span class="p">{</span><span class="n">record</span><span class="o">.</span><span class="n">benchmark_id</span> <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">records</span><span class="p">}</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">benchmark_ids</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;One truth manifest must describe exactly one benchmark_id; found &quot;</span>
+            <span class="o">+</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">benchmark_ids</span><span class="p">))</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">logger</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Loaded </span><span class="si">%d</span><span class="s2"> truth records (</span><span class="si">%d</span><span class="s2"> expected) for </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="nb">len</span><span class="p">(</span><span class="n">records</span><span class="p">),</span>
+            <span class="nb">len</span><span class="p">(</span><span class="n">expected</span><span class="p">),</span>
+            <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">benchmark_ids</span><span class="p">)),</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">records</span></div>
+
+
+
+<div class="viewcode-block" id="truth_by_species">
+<a class="viewcode-back" href="../../api.html#kmersutra.mock_community.truth_by_species">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">truth_by_species</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">truth_records</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">MockCommunityTruth</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MockCommunityTruth</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Map canonical and accepted species labels to truth records.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        truth_records: Validated truth records.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Mapping from normalised species label to truth record.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If the same accepted name maps to multiple truth records.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">mapping</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MockCommunityTruth</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">truth_records</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">species_key</span> <span class="ow">in</span> <span class="n">record</span><span class="o">.</span><span class="n">accepted_species_names</span><span class="p">:</span>
+            <span class="n">previous</span> <span class="o">=</span> <span class="n">mapping</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">species_key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">previous</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">previous</span><span class="o">.</span><span class="n">organism_id</span> <span class="o">!=</span> <span class="n">record</span><span class="o">.</span><span class="n">organism_id</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Accepted species name </span><span class="si">{</span><span class="n">species_key</span><span class="si">!r}</span><span class="s2"> maps to multiple organisms&quot;</span>
+                <span class="p">)</span>
+            <span class="n">mapping</span><span class="p">[</span><span class="n">species_key</span><span class="p">]</span> <span class="o">=</span> <span class="n">record</span>
+    <span class="k">return</span> <span class="n">mapping</span></div>
+
+
+
+<div class="viewcode-block" id="classify_mock_truth_category">
+<a class="viewcode-back" href="../../api.html#kmersutra.mock_community.classify_mock_truth_category">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">classify_mock_truth_category</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">record</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">],</span>
+    <span class="n">truth_mapping</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">MockCommunityTruth</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Classify one KmerSutra call row against mock-community truth.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        record: KmerSutra species-call row.</span>
+<span class="sd">        truth_mapping: Mapping returned by :func:`truth_by_species`.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Truth categories and benchmark metadata for the call row.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">species_name</span> <span class="o">=</span> <span class="n">infer_species_name</span><span class="p">(</span><span class="n">record</span><span class="o">=</span><span class="n">record</span><span class="p">)</span>
+    <span class="n">truth</span> <span class="o">=</span> <span class="n">truth_mapping</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">normalise_species_key</span><span class="p">(</span><span class="n">species_name</span><span class="p">))</span>
+    <span class="n">has_evidence</span> <span class="o">=</span> <span class="n">row_has_evidence</span><span class="p">(</span><span class="n">record</span><span class="o">=</span><span class="n">record</span><span class="p">)</span>
+    <span class="n">is_reportable</span> <span class="o">=</span> <span class="n">row_is_reportable</span><span class="p">(</span><span class="n">record</span><span class="o">=</span><span class="n">record</span><span class="p">)</span>
+    <span class="n">is_expected</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">truth</span> <span class="ow">and</span> <span class="n">truth</span><span class="o">.</span><span class="n">expected</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">is_expected</span> <span class="ow">and</span> <span class="n">is_reportable</span><span class="p">:</span>
+        <span class="n">fine_category</span> <span class="o">=</span> <span class="s2">&quot;expected_species_reportable&quot;</span>
+        <span class="n">coarse_label</span> <span class="o">=</span> <span class="s2">&quot;expected_target&quot;</span>
+    <span class="k">elif</span> <span class="n">is_expected</span> <span class="ow">and</span> <span class="n">has_evidence</span><span class="p">:</span>
+        <span class="n">fine_category</span> <span class="o">=</span> <span class="s2">&quot;expected_species_below_threshold&quot;</span>
+        <span class="n">coarse_label</span> <span class="o">=</span> <span class="s2">&quot;observed_below_threshold&quot;</span>
+    <span class="k">elif</span> <span class="n">is_expected</span><span class="p">:</span>
+        <span class="n">fine_category</span> <span class="o">=</span> <span class="s2">&quot;expected_species_not_detected&quot;</span>
+        <span class="n">coarse_label</span> <span class="o">=</span> <span class="s2">&quot;not_detected&quot;</span>
+    <span class="k">elif</span> <span class="n">is_reportable</span><span class="p">:</span>
+        <span class="n">fine_category</span> <span class="o">=</span> <span class="s2">&quot;unexpected_species_reportable&quot;</span>
+        <span class="n">coarse_label</span> <span class="o">=</span> <span class="s2">&quot;reportable_off_target_species&quot;</span>
+    <span class="k">elif</span> <span class="n">has_evidence</span><span class="p">:</span>
+        <span class="n">fine_category</span> <span class="o">=</span> <span class="s2">&quot;unexpected_species_below_threshold&quot;</span>
+        <span class="n">coarse_label</span> <span class="o">=</span> <span class="s2">&quot;observed_below_threshold&quot;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">fine_category</span> <span class="o">=</span> <span class="s2">&quot;not_detected&quot;</span>
+        <span class="n">coarse_label</span> <span class="o">=</span> <span class="s2">&quot;not_detected&quot;</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">&quot;mock_truth_category&quot;</span><span class="p">:</span> <span class="n">fine_category</span><span class="p">,</span>
+        <span class="s2">&quot;ml_report_label&quot;</span><span class="p">:</span> <span class="n">coarse_label</span><span class="p">,</span>
+        <span class="s2">&quot;benchmark_id&quot;</span><span class="p">:</span> <span class="n">truth</span><span class="o">.</span><span class="n">benchmark_id</span> <span class="k">if</span> <span class="n">truth</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;truth_organism_id&quot;</span><span class="p">:</span> <span class="n">truth</span><span class="o">.</span><span class="n">organism_id</span> <span class="k">if</span> <span class="n">truth</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;truth_species_name&quot;</span><span class="p">:</span> <span class="n">truth</span><span class="o">.</span><span class="n">species_name</span> <span class="k">if</span> <span class="n">truth</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;expected_abundance_fraction&quot;</span><span class="p">:</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">truth</span><span class="o">.</span><span class="n">expected_abundance_fraction</span><span class="si">:</span><span class="s2">.8f</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">truth</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;abundance_tier&quot;</span><span class="p">:</span> <span class="n">truth</span><span class="o">.</span><span class="n">abundance_tier</span> <span class="k">if</span> <span class="n">truth</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;is_expected_species&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">is_expected</span><span class="p">),</span>
+        <span class="s2">&quot;has_mock_evidence&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="nb">bool</span><span class="p">(</span><span class="n">has_evidence</span><span class="p">)),</span>
+        <span class="s2">&quot;is_mock_reportable&quot;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="nb">bool</span><span class="p">(</span><span class="n">is_reportable</span><span class="p">)),</span>
+    <span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="build_mock_ai_feature_records">
+<a class="viewcode-back" href="../../api.html#kmersutra.mock_community.build_mock_ai_feature_records">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_mock_ai_feature_records</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">records</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]],</span>
+    <span class="n">truth_records</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">MockCommunityTruth</span><span class="p">],</span>
+    <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build AI-ready records with generic mock-community truth labels.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        records: KmerSutra call rows.</span>
+<span class="sd">        truth_records: Validated truth records.</span>
+<span class="sd">        logger: Optional logger.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        AI-ready records with truth metadata.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">truth_mapping</span> <span class="o">=</span> <span class="n">truth_by_species</span><span class="p">(</span><span class="n">truth_records</span><span class="o">=</span><span class="n">truth_records</span><span class="p">)</span>
+    <span class="n">output</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">records</span><span class="p">:</span>
+        <span class="n">feature_record</span> <span class="o">=</span> <span class="n">build_call_feature_record</span><span class="p">(</span><span class="n">record</span><span class="o">=</span><span class="n">record</span><span class="p">)</span>
+        <span class="n">feature_record</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+            <span class="n">classify_mock_truth_category</span><span class="p">(</span>
+                <span class="n">record</span><span class="o">=</span><span class="n">record</span><span class="p">,</span>
+                <span class="n">truth_mapping</span><span class="o">=</span><span class="n">truth_mapping</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">feature_record</span><span class="p">[</span><span class="s2">&quot;public_call&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">first_non_empty</span><span class="p">(</span>
+            <span class="n">record</span><span class="o">=</span><span class="n">record</span><span class="p">,</span>
+            <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;call&quot;</span><span class="p">,</span> <span class="s2">&quot;call_status&quot;</span><span class="p">,</span> <span class="s2">&quot;species_call&quot;</span><span class="p">,</span> <span class="s2">&quot;report_call&quot;</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="n">feature_record</span><span class="p">[</span><span class="s2">&quot;public_species_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">infer_species_name</span><span class="p">(</span><span class="n">record</span><span class="o">=</span><span class="n">record</span><span class="p">)</span>
+        <span class="n">feature_record</span><span class="p">[</span><span class="s2">&quot;public_report_label&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;report_label&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">feature_record</span><span class="p">[</span><span class="s2">&quot;public_reference_label&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;reference_label&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="n">output</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">feature_record</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">logger</span><span class="p">:</span>
+        <span class="n">counts</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;mock_truth_category&quot;</span><span class="p">])</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">output</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">category</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">counts</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Mock truth category </span><span class="si">%s</span><span class="s2">: </span><span class="si">%d</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">category</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">output</span></div>
+
+
+
+<div class="viewcode-block" id="count_records_by_column">
+<a class="viewcode-back" href="../../api.html#kmersutra.mock_community.count_records_by_column">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">count_records_by_column</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">records</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]],</span>
+    <span class="n">column</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Count records by one output column.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        records: Input rows.</span>
+<span class="sd">        column: Column to count.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Sorted count records.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">counts</span> <span class="o">=</span> <span class="n">Counter</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">column</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">))</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">records</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="p">{</span><span class="n">column</span><span class="p">:</span> <span class="n">value</span><span class="p">,</span> <span class="s2">&quot;n_records&quot;</span><span class="p">:</span> <span class="n">count</span><span class="p">}</span>
+        <span class="k">for</span> <span class="n">value</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">counts</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+    <span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="write_mock_ai_feature_table">
+<a class="viewcode-back" href="../../api.html#kmersutra.mock_community.write_mock_ai_feature_table">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">write_mock_ai_feature_table</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">calls_table</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">truth_manifest</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">output_table</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span><span class="p">,</span>
+    <span class="n">category_counts_table</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">coarse_label_counts_table</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Label a call table using a generic mock-community manifest.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        calls_table: KmerSutra species-call table.</span>
+<span class="sd">        truth_manifest: Mock-community truth manifest.</span>
+<span class="sd">        output_table: Labelled AI feature table.</span>
+<span class="sd">        category_counts_table: Optional fine-category count output.</span>
+<span class="sd">        coarse_label_counts_table: Optional coarse-label count output.</span>
+<span class="sd">        logger: Optional logger.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Written feature records.</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If no feature records are generated.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">truth_records</span> <span class="o">=</span> <span class="n">load_truth_manifest</span><span class="p">(</span>
+        <span class="n">manifest_path</span><span class="o">=</span><span class="n">truth_manifest</span><span class="p">,</span>
+        <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">call_records</span> <span class="o">=</span> <span class="n">read_records_table</span><span class="p">(</span><span class="n">input_path</span><span class="o">=</span><span class="n">calls_table</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+    <span class="n">feature_records</span> <span class="o">=</span> <span class="n">build_mock_ai_feature_records</span><span class="p">(</span>
+        <span class="n">records</span><span class="o">=</span><span class="n">call_records</span><span class="p">,</span>
+        <span class="n">truth_records</span><span class="o">=</span><span class="n">truth_records</span><span class="p">,</span>
+        <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">feature_records</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No mock-community feature records were generated&quot;</span><span class="p">)</span>
+    <span class="n">fieldnames</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">feature_records</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">write_records_table</span><span class="p">(</span>
+        <span class="n">records</span><span class="o">=</span><span class="n">feature_records</span><span class="p">,</span>
+        <span class="n">output_path</span><span class="o">=</span><span class="n">output_table</span><span class="p">,</span>
+        <span class="n">fieldnames</span><span class="o">=</span><span class="n">fieldnames</span><span class="p">,</span>
+        <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">category_counts_table</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">write_records_table</span><span class="p">(</span>
+            <span class="n">records</span><span class="o">=</span><span class="n">count_records_by_column</span><span class="p">(</span>
+                <span class="n">records</span><span class="o">=</span><span class="n">feature_records</span><span class="p">,</span>
+                <span class="n">column</span><span class="o">=</span><span class="s2">&quot;mock_truth_category&quot;</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">output_path</span><span class="o">=</span><span class="n">category_counts_table</span><span class="p">,</span>
+            <span class="n">fieldnames</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;mock_truth_category&quot;</span><span class="p">,</span> <span class="s2">&quot;n_records&quot;</span><span class="p">],</span>
+            <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">coarse_label_counts_table</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">write_records_table</span><span class="p">(</span>
+            <span class="n">records</span><span class="o">=</span><span class="n">count_records_by_column</span><span class="p">(</span>
+                <span class="n">records</span><span class="o">=</span><span class="n">feature_records</span><span class="p">,</span>
+                <span class="n">column</span><span class="o">=</span><span class="s2">&quot;ml_report_label&quot;</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">output_path</span><span class="o">=</span><span class="n">coarse_label_counts_table</span><span class="p">,</span>
+            <span class="n">fieldnames</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;ml_report_label&quot;</span><span class="p">,</span> <span class="s2">&quot;n_records&quot;</span><span class="p">],</span>
+            <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">feature_records</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Peter Thorpe.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

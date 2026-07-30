@@ -10,6 +10,8 @@ usage() {
     echo "Required:"
     echo "  --config FILE          Locked benchmark JSON configuration."
     echo "  --output-root DIR      Durable benchmark output root."
+    echo "  --database-root DIR    KmerSutra database root."
+    echo "  --ai-model FILE        Frozen calibrator JSON."
     echo
     echo "Options:"
     echo "  --run-name NAME        Override config run_name."
@@ -29,6 +31,8 @@ usage() {
 
 CONFIG=""
 OUTPUT_ROOT=""
+DATABASE_ROOT="${KMERSUTRA_DB_ROOT:-}"
+AI_MODEL="${KMERSUTRA_AI_MODEL:-}"
 RUN_NAME=""
 ACCOUNT="barton"
 PARTITION="barton"
@@ -50,6 +54,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --output-root)
             OUTPUT_ROOT="${2:?Missing value for --output-root}"
+            shift 2
+            ;;
+        --database-root)
+            DATABASE_ROOT="${2:?Missing value for --database-root}"
+            shift 2
+            ;;
+        --ai-model)
+            AI_MODEL="${2:?Missing value for --ai-model}"
             shift 2
             ;;
         --run-name)
@@ -112,8 +124,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ -z "${CONFIG}" || -z "${OUTPUT_ROOT}" ]]; then
-    echo "ERROR: --config and --output-root are required" >&2
+if [[ -z "${CONFIG}" || -z "${OUTPUT_ROOT}" || -z "${DATABASE_ROOT}" || -z "${AI_MODEL}" ]]; then
+    echo "ERROR: --config, --output-root, --database-root and --ai-model are required" >&2
     usage >&2
     exit 2
 fi
@@ -124,6 +136,14 @@ fi
 if [[ ! "${THREADS}" =~ ^[1-9][0-9]*$ ]]; then
     echo "ERROR: --threads must be a positive integer" >&2
     exit 2
+fi
+if [[ ! -d "${DATABASE_ROOT}" ]]; then
+    echo "ERROR: database root does not exist: ${DATABASE_ROOT}" >&2
+    exit 1
+fi
+if [[ ! -s "${AI_MODEL}" ]]; then
+    echo "ERROR: AI model is missing or empty: ${AI_MODEL}" >&2
+    exit 1
 fi
 if ! command -v sbatch >/dev/null 2>&1; then
     echo "ERROR: sbatch is not available; run this command on a Slurm login node" >&2
@@ -141,6 +161,8 @@ mkdir -p "${OUTPUT_ROOT}/submission_logs"
 
 export KS_CONFIG="$(cd "$(dirname "${CONFIG}")" && pwd)/$(basename "${CONFIG}")"
 export KS_OUTPUT_ROOT="$(cd "${OUTPUT_ROOT}" && pwd)"
+export KS_DATABASE_ROOT="$(cd "${DATABASE_ROOT}" && pwd)"
+export KS_AI_MODEL="$(cd "$(dirname "${AI_MODEL}")" && pwd)/$(basename "${AI_MODEL}")"
 export KS_RUN_NAME="${RUN_NAME}"
 export KS_THREADS="${THREADS}"
 export KS_CONDA_ENV="${CONDA_ENV}"
@@ -165,6 +187,8 @@ SBATCH_COMMAND=(
 )
 
 echo "Submitting locked ATCC MSA-1003 benchmark"
+echo "Database root: ${KS_DATABASE_ROOT}"
+echo "AI model: ${KS_AI_MODEL}"
 printf ' %q' "${SBATCH_COMMAND[@]}"
 echo
 

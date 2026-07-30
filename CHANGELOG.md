@@ -3,6 +3,41 @@
 All notable user-facing changes are recorded here. Historical release notes are
 retained under [`docs/history/release_notes`](docs/history/release_notes).
 
+## 0.51.1 - 2026-07-30
+
+### Fixed
+
+- ATCC benchmark submission now requires explicit `--database-root` and
+  `--ai-model` paths, while retaining environment-variable compatibility.
+- Unresolved `${VARIABLE}` placeholders fail before stage execution with the
+  missing variable names and corrective guidance.
+- Removed the invalid `nose2` table that caused third-party `nose2` to fail
+  while reading `pyproject.toml`; KmerSutra continues to use `unittest`.
+- Restored the public ONT Zymo D6300 screening workflow as a current
+  Slurm-native wrapper.
+
+### Added
+
+- Read the Docs-style Sphinx source, offline HTML build and automated
+  documentation validation.
+- A browsable guide covering installation, concepts, panel construction,
+  screening, outputs, Slurm, reproducibility, troubleshooting, ATCC and Zymo.
+- Named-output test and quality scripts that collect all generated artefacts
+  beneath a dated result directory.
+- Deterministic `kmersutra-package-inventory` TSV generation.
+- Shell syntax and benchmark-interface regression tests.
+- Expanded compressed-I/O, deterministic depth-subset, Parquet and taxonomy
+  tests, raising whole-package branch coverage from 78% to 80%.
+
+### Changed
+
+- Package version increased from 0.51.0 to 0.51.1.
+- Generated test logs, coverage outputs and package inventories no longer
+  belong in the repository root or the user's home directory.
+- Historical shell workflows are documented separately from current benchmark
+  entry points.
+- The enforced branch-coverage floor is ratcheted from 75% to 80%.
+
 ## 0.51.0 - 2026-07-30
 
 ### Added

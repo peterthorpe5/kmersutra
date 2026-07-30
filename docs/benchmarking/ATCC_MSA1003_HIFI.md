@@ -64,25 +64,26 @@ passes the audit.
 ## Configure
 
 ```bash
-cd /home/pthorpe001/github_repos/kmersutra
+REPO="/path/to/kmersutra"
+DATABASE_ROOT="/path/to/kmersutra_db"
+AI_MODEL="/path/to/final_internal_calibrator_all_training.json"
+BENCHMARK_ROOT="/path/to/kmersutra_atcc_msa1003"
 
-cp benchmarks/atcc_msa1003_hifi/config.example.json \
-    benchmarks/atcc_msa1003_hifi/config.cluster.json
-
-export KMERSUTRA_DB_ROOT="/home/pthorpe001/data/databases/kmersutra_db"
-export KMERSUTRA_AI_MODEL="/absolute/path/to/final_internal_calibrator_all_training.json"
+cd "${REPO}"
 ```
 
-Edit only local paths and optional `module_manifest`. Do not alter the locked
-scientific settings.
+The example JSON is kept portable. Do not copy private paths into it and do not
+alter the locked scientific settings.
 
 Run the preflight before spending compute:
 
 ```bash
 conda run --name kmersutra \
     kmersutra-run-benchmark \
-    --config benchmarks/atcc_msa1003_hifi/config.cluster.json \
-    --output-root /home/pthorpe001/data/benchmarks/kmersutra_atcc_msa1003 \
+    --config benchmarks/atcc_msa1003_hifi/config.example.json \
+    --database-root "${DATABASE_ROOT}" \
+    --ai-model "${AI_MODEL}" \
+    --output-root "${BENCHMARK_ROOT}" \
     --threads 8 \
     --stop-after 00_preflight \
     --resume \
@@ -93,8 +94,10 @@ conda run --name kmersutra \
 
 ```bash
 bash benchmarks/atcc_msa1003_hifi/submit_atcc_msa1003_benchmark.sh \
-    --config benchmarks/atcc_msa1003_hifi/config.cluster.json \
-    --output-root /home/pthorpe001/data/benchmarks/kmersutra_atcc_msa1003 \
+    --config benchmarks/atcc_msa1003_hifi/config.example.json \
+    --database-root "${DATABASE_ROOT}" \
+    --ai-model "${AI_MODEL}" \
+    --output-root "${BENCHMARK_ROOT}" \
     --account barton \
     --partition barton \
     --threads 8 \
@@ -112,8 +115,10 @@ To rerun one stage deliberately:
 
 ```bash
 bash benchmarks/atcc_msa1003_hifi/submit_atcc_msa1003_benchmark.sh \
-    --config benchmarks/atcc_msa1003_hifi/config.cluster.json \
-    --output-root /home/pthorpe001/data/benchmarks/kmersutra_atcc_msa1003 \
+    --config benchmarks/atcc_msa1003_hifi/config.example.json \
+    --database-root "${DATABASE_ROOT}" \
+    --ai-model "${AI_MODEL}" \
+    --output-root "${BENCHMARK_ROOT}" \
     --account barton \
     --partition barton \
     --threads 8 \

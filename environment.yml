@@ -18,4 +18,4 @@ dependencies:
   - sra-tools
   - pigz
   - pip:
-      - -e .[dev,reporting,ncbi,ml,parquet]
+      - -e .[dev,reporting,ncbi,ml,parquet,docs]

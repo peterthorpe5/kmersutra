@@ -15,6 +15,7 @@ from kmersutra.benchmark_workflow import (
     BenchmarkWorkflow,
     StageResult,
     WorkflowOptions,
+    build_parser,
     filter_panel_by_k,
     load_benchmark_config,
     selected_stages,
@@ -130,6 +131,60 @@ class TestBenchmarkWorkflowHelpers(unittest.TestCase):
         self.assertEqual(config["from_config"], str(root / "file.tsv"))
         self.assertTrue(str(config["from_repo"]).endswith("/README.md"))
         self.assertEqual(len(digest), 64)
+
+    def test_load_config_rejects_unresolved_environment_variables(self) -> None:
+        """Unresolved paths should fail with the missing variable name."""
+        with tempfile.TemporaryDirectory() as temporary:
+            config_path = Path(temporary) / "config.json"
+            config_path.write_text(
+                json.dumps({"model": "${MISSING_TEST_MODEL}/model.json"}),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                ValueError,
+                "MISSING_TEST_MODEL",
+            ):
+                load_benchmark_config(config_path=config_path)
+
+    def test_load_config_accepts_explicit_environment_overrides(self) -> None:
+        """Named CLI path values should resolve without exported variables."""
+        with tempfile.TemporaryDirectory() as temporary:
+            config_path = Path(temporary) / "config.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "database": "${KMERSUTRA_DB_ROOT}/panel",
+                        "model": "${KMERSUTRA_AI_MODEL}",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            config, _ = load_benchmark_config(
+                config_path=config_path,
+                environment_overrides={
+                    "KMERSUTRA_DB_ROOT": "/database",
+                    "KMERSUTRA_AI_MODEL": "/models/calibrator.json",
+                },
+            )
+        self.assertEqual(config["database"], "/database/panel")
+        self.assertEqual(config["model"], "/models/calibrator.json")
+
+    def test_parser_accepts_named_benchmark_paths(self) -> None:
+        """The controller should expose portable path overrides."""
+        args = build_parser().parse_args(
+            [
+                "--config",
+                "config.json",
+                "--output-root",
+                "outputs",
+                "--database-root",
+                "/database",
+                "--ai-model",
+                "/models/calibrator.json",
+            ]
+        )
+        self.assertEqual(args.database_root, "/database")
+        self.assertEqual(args.ai_model, "/models/calibrator.json")
 
     def test_filter_panel_by_k_supports_gzip(self) -> None:
         """Single-k filtering should retain only the requested panel rows."""

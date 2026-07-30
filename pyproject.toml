@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kmersutra"
-version = "0.51.0"
+version = "0.51.1"
 description = "Outgroup-aware k-mer framework for clade and species-resolved metagenomic detection"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -62,6 +62,7 @@ kmersutra-audit-reference-panel = "kmersutra.cli.audit_reference_panel:main"
 kmersutra-subset-reads = "kmersutra.cli.subset_reads:main"
 kmersutra-run-benchmark = "kmersutra.cli.run_benchmark:main"
 kmersutra-summarise-mock-benchmark = "kmersutra.cli.summarise_mock_benchmark:main"
+kmersutra-package-inventory = "kmersutra.package_inventory:main"
 
 [project.optional-dependencies]
 dev = [
@@ -76,15 +77,13 @@ stats = ["scipy"]
 ml = ["scikit-learn", "joblib"]
 parquet = ["pyarrow"]
 ncbi = ["requests", "biopython"]
+docs = ["Sphinx>=7.4,<10", "sphinx-rtd-theme>=3.0,<4"]
 all = ["matplotlib", "openpyxl", "plotly", "scipy", "pyarrow", "requests", "biopython", "scikit-learn", "joblib"]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["kmersutra", "kmersutra.*"]
 exclude = ["tests*", "kmersutra_ai_validation*"]
-
-[tool.nose2]
-start-dir = "tests"
 
 [tool.coverage.run]
 branch = true
@@ -99,9 +98,9 @@ exclude_also = [
     "if TYPE_CHECKING:",
     "raise NotImplementedError",
 ]
-# The historical codebase starts this release at 76% branch coverage. Keep CI
-# above a ratcheted floor while new work advances towards the 90% target.
-fail_under = 75
+# Version 0.51.1 reaches 80% whole-package branch coverage. Keep CI at that
+# ratcheted floor while new work advances towards the 90% target.
+fail_under = 80
 show_missing = true
 skip_covered = false
 

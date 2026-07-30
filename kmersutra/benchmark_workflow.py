@@ -10,12 +10,13 @@ import json
 import logging
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
 import time
 import uuid
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,6 +46,9 @@ LOCKED_ATCC_BENCHMARK_ID = "atcc_msa1003_hifi_srr9328980_locked_v1"
 LOCKED_ATCC_K_VALUES = [51, 77, 101, 151]
 LOCKED_ATCC_MINMIXED = 0.05
 LOCKED_ATCC_NOVELTY_SCALE = 2.9
+UNRESOLVED_VARIABLE_PATTERN = re.compile(
+    r"\$\{(?P<name>[A-Za-z_][A-Za-z0-9_]*)\}"
+)
 
 
 @dataclass(frozen=True)
@@ -116,38 +120,97 @@ def atomic_write_json(*, path: Path, value: Any) -> None:
     temporary.replace(path)
 
 
-def _expand_string(*, value: str, config_path: Path) -> str:
-    """Expand environment and repository placeholders in config text."""
+def _expand_string(
+    *,
+    value: str,
+    config_path: Path,
+    environment_overrides: Mapping[str, str] | None = None,
+) -> str:
+    """Expand environment and repository placeholders in config text.
+
+    Args:
+        value: Configuration string.
+        config_path: Source configuration path.
+        environment_overrides: Optional explicit values that take precedence
+            over process environment variables.
+
+    Returns:
+        Expanded configuration string.
+    """
     repo_root = Path(__file__).resolve().parents[1]
     replaced = (
         value.replace("${CONFIG_DIR}", str(config_path.parent))
         .replace("${REPO_ROOT}", str(repo_root))
     )
+    for name, replacement in (environment_overrides or {}).items():
+        replaced = replaced.replace(f"${{{name}}}", replacement)
     return os.path.expandvars(os.path.expanduser(replaced))
 
 
-def _expand_config_value(*, value: Any, config_path: Path) -> Any:
+def _expand_config_value(
+    *,
+    value: Any,
+    config_path: Path,
+    environment_overrides: Mapping[str, str] | None = None,
+) -> Any:
     """Recursively expand string values in a JSON configuration."""
     if isinstance(value, str):
-        return _expand_string(value=value, config_path=config_path)
+        return _expand_string(
+            value=value,
+            config_path=config_path,
+            environment_overrides=environment_overrides,
+        )
     if isinstance(value, list):
         return [
-            _expand_config_value(value=item, config_path=config_path)
+            _expand_config_value(
+                value=item,
+                config_path=config_path,
+                environment_overrides=environment_overrides,
+            )
             for item in value
         ]
     if isinstance(value, dict):
         return {
-            key: _expand_config_value(value=item, config_path=config_path)
+            key: _expand_config_value(
+                value=item,
+                config_path=config_path,
+                environment_overrides=environment_overrides,
+            )
             for key, item in value.items()
         }
     return value
 
 
-def load_benchmark_config(*, config_path: str | Path) -> tuple[dict[str, Any], str]:
+def _find_unresolved_variables(*, value: Any) -> set[str]:
+    """Return unresolved ``${VARIABLE}`` names from nested configuration."""
+    if isinstance(value, str):
+        return {
+            match.group("name")
+            for match in UNRESOLVED_VARIABLE_PATTERN.finditer(value)
+        }
+    if isinstance(value, list):
+        return set().union(
+            *(_find_unresolved_variables(value=item) for item in value),
+            set(),
+        )
+    if isinstance(value, dict):
+        return set().union(
+            *(_find_unresolved_variables(value=item) for item in value.values()),
+            set(),
+        )
+    return set()
+
+
+def load_benchmark_config(
+    *,
+    config_path: str | Path,
+    environment_overrides: Mapping[str, str] | None = None,
+) -> tuple[dict[str, Any], str]:
     """Load, expand and digest a benchmark JSON configuration.
 
     Args:
         config_path: JSON configuration path.
+        environment_overrides: Optional explicit placeholder values.
 
     Returns:
         Expanded configuration and canonical SHA-256 digest.
@@ -163,7 +226,23 @@ def load_benchmark_config(*, config_path: str | Path) -> tuple[dict[str, Any], s
         raw = json.load(handle)
     if not isinstance(raw, dict):
         raise ValueError("Benchmark configuration root must be a JSON object")
-    config = _expand_config_value(value=raw, config_path=path)
+    config = _expand_config_value(
+        value=raw,
+        config_path=path,
+        environment_overrides=environment_overrides,
+    )
+    unresolved = sorted(_find_unresolved_variables(value=config))
+    if unresolved:
+        exports = "\n".join(
+            f"  export {name}=/absolute/path" for name in unresolved
+        )
+        raise ValueError(
+            "Unresolved benchmark configuration variable(s): "
+            f"{', '.join(unresolved)}.\n"
+            "Set them in the environment or pass the corresponding named "
+            "path option. For example:\n"
+            f"{exports}"
+        )
     canonical = json.dumps(
         config,
         sort_keys=True,
@@ -1336,6 +1415,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--config", required=True)
     parser.add_argument("--output-root", required=True)
+    parser.add_argument(
+        "--database-root",
+        default=None,
+        help=(
+            "Override ${KMERSUTRA_DB_ROOT} in the configuration with this "
+            "absolute database root."
+        ),
+    )
+    parser.add_argument(
+        "--ai-model",
+        default=None,
+        help=(
+            "Override ${KMERSUTRA_AI_MODEL} in the configuration with this "
+            "frozen calibrator JSON."
+        ),
+    )
     parser.add_argument("--run-name", default=None)
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--resume", action="store_true")
@@ -1364,7 +1459,19 @@ def run_benchmark(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.threads <= 0:
         raise ValueError("--threads must be positive")
-    config, digest = load_benchmark_config(config_path=args.config)
+    environment_overrides = {}
+    if args.database_root:
+        environment_overrides["KMERSUTRA_DB_ROOT"] = str(
+            Path(args.database_root).expanduser().resolve()
+        )
+    if args.ai_model:
+        environment_overrides["KMERSUTRA_AI_MODEL"] = str(
+            Path(args.ai_model).expanduser().resolve()
+        )
+    config, digest = load_benchmark_config(
+        config_path=args.config,
+        environment_overrides=environment_overrides,
+    )
     validate_locked_atcc_config(config=config)
     output_root = Path(args.output_root).expanduser().resolve()
     run_name = (

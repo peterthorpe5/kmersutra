@@ -49,6 +49,8 @@ venv/
 *.tar.gz
 benchmark_runs/
 stage_work/
+test_results/*
+!test_results/README.md
 
 # Keep deliberately versioned small examples and benchmark specifications.
 !examples/*.fna

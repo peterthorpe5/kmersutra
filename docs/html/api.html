@@ -1,0 +1,1261 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Python API &mdash; KmerSutra 0.51.1</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=1cd31b6b"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Development and testing" href="development.html" />
+    <link rel="prev" title="Command reference" href="cli_reference.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            KmerSutra
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="concepts.html">Scientific concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="panel_building.html">Building reference panels</a></li>
+<li class="toctree-l1"><a class="reference internal" href="screening.html">Screening reads</a></li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Output guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hpc.html">Slurm execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reproducibility.html">Reproducibility and provenance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Benchmarks</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="benchmarks/index.html">Benchmark workflows</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="cli_reference.html">Command reference</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Python API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#module-kmersutra.benchmark_workflow">Benchmark workflow</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.flat_panel_path"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.flat_panel_path()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.manifest_path"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.manifest_path()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.panel_genome_config_path"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.panel_genome_config_path()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.prepare_run_root"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.prepare_run_root()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.resolve_reads_path"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.resolve_reads_path()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.run"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.run()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_acquire_reads"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.stage_acquire_reads()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_ai_validation"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.stage_ai_validation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_depth_subsets"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.stage_depth_subsets()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_dir"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.stage_dir()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_is_complete"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.stage_is_complete()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_preflight"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.stage_preflight()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_provenance"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.stage_provenance()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_screen_depths"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.stage_screen_depths()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_screen_full"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.stage_screen_full()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_screen_hierarchical"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.stage_screen_hierarchical()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_screen_single_k"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.stage_screen_single_k()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_summarise"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.stage_summarise()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.truth_manifest_path"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.truth_manifest_path()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.write_stage_state"><code class="docutils literal notranslate"><span class="pre">BenchmarkWorkflow.write_stage_state()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.benchmark_workflow.atomic_write_json"><code class="docutils literal notranslate"><span class="pre">atomic_write_json()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.benchmark_workflow.build_parser"><code class="docutils literal notranslate"><span class="pre">build_parser()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.benchmark_workflow.command_display"><code class="docutils literal notranslate"><span class="pre">command_display()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.benchmark_workflow.filter_panel_by_k"><code class="docutils literal notranslate"><span class="pre">filter_panel_by_k()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.benchmark_workflow.load_benchmark_config"><code class="docutils literal notranslate"><span class="pre">load_benchmark_config()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.benchmark_workflow.require_mapping"><code class="docutils literal notranslate"><span class="pre">require_mapping()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.benchmark_workflow.require_path"><code class="docutils literal notranslate"><span class="pre">require_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.benchmark_workflow.run_benchmark"><code class="docutils literal notranslate"><span class="pre">run_benchmark()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.benchmark_workflow.run_command"><code class="docutils literal notranslate"><span class="pre">run_command()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.benchmark_workflow.selected_stages"><code class="docutils literal notranslate"><span class="pre">selected_stages()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.benchmark_workflow.sha256_bytes"><code class="docutils literal notranslate"><span class="pre">sha256_bytes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.benchmark_workflow.sha256_path"><code class="docutils literal notranslate"><span class="pre">sha256_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.benchmark_workflow.utc_now"><code class="docutils literal notranslate"><span class="pre">utc_now()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.benchmark_workflow.validate_locked_atcc_config"><code class="docutils literal notranslate"><span class="pre">validate_locked_atcc_config()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.benchmark_workflow.validate_stage_name"><code class="docutils literal notranslate"><span class="pre">validate_stage_name()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#module-kmersutra.mock_community">Mock-community truth</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.mock_community.build_mock_ai_feature_records"><code class="docutils literal notranslate"><span class="pre">build_mock_ai_feature_records()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.mock_community.classify_mock_truth_category"><code class="docutils literal notranslate"><span class="pre">classify_mock_truth_category()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.mock_community.count_records_by_column"><code class="docutils literal notranslate"><span class="pre">count_records_by_column()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.mock_community.load_truth_manifest"><code class="docutils literal notranslate"><span class="pre">load_truth_manifest()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.mock_community.normalise_accession"><code class="docutils literal notranslate"><span class="pre">normalise_accession()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.mock_community.normalise_species_key"><code class="docutils literal notranslate"><span class="pre">normalise_species_key()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.mock_community.parse_bool"><code class="docutils literal notranslate"><span class="pre">parse_bool()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.mock_community.parse_fraction"><code class="docutils literal notranslate"><span class="pre">parse_fraction()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.mock_community.sha256_file"><code class="docutils literal notranslate"><span class="pre">sha256_file()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.mock_community.split_values"><code class="docutils literal notranslate"><span class="pre">split_values()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.mock_community.truth_by_species"><code class="docutils literal notranslate"><span class="pre">truth_by_species()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.mock_community.write_mock_ai_feature_table"><code class="docutils literal notranslate"><span class="pre">write_mock_ai_feature_table()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#module-kmersutra.reference_audit">Reference audit</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.reference_audit.audit_reference_panel"><code class="docutils literal notranslate"><span class="pre">audit_reference_panel()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.reference_audit.fasta_header_accessions"><code class="docutils literal notranslate"><span class="pre">fasta_header_accessions()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.reference_audit.open_text_auto"><code class="docutils literal notranslate"><span class="pre">open_text_auto()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.reference_audit.truth_accession_sets"><code class="docutils literal notranslate"><span class="pre">truth_accession_sets()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.reference_audit.truth_checksums"><code class="docutils literal notranslate"><span class="pre">truth_checksums()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.reference_audit.write_reference_panel_audit"><code class="docutils literal notranslate"><span class="pre">write_reference_panel_audit()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#module-kmersutra.package_inventory">Package inventory</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.package_inventory.build_parser"><code class="docutils literal notranslate"><span class="pre">build_parser()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.package_inventory.create_package_inventory"><code class="docutils literal notranslate"><span class="pre">create_package_inventory()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.package_inventory.iter_package_files"><code class="docutils literal notranslate"><span class="pre">iter_package_files()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.package_inventory.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#kmersutra.package_inventory.sha256_file"><code class="docutils literal notranslate"><span class="pre">sha256_file()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="development.html">Development and testing</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">KmerSutra</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Python API</li>
+      <li class="wy-breadcrumbs-aside">
+              <a href="https://github.com/peterthorpe5/kmersutra/blob/main/docs/source/api.rst" class="fa fa-github"> Edit on GitHub</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="python-api">
+<h1>Python API<a class="headerlink" href="#python-api" title="Link to this heading"></a></h1>
+<section id="module-kmersutra.benchmark_workflow">
+<span id="benchmark-workflow"></span><h2>Benchmark workflow<a class="headerlink" href="#module-kmersutra.benchmark_workflow" title="Link to this heading"></a></h2>
+<p>Restartable, checksummed KmerSutra benchmark workflow.</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">kmersutra.benchmark_workflow.</span></span><span class="sig-name descname"><span class="pre">BenchmarkWorkflow</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_digest</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">options</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Run restartable benchmark stages.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>Any</em><em>]</em>)</p></li>
+<li><p><strong>config_digest</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+<li><p><strong>options</strong> (<em>WorkflowOptions</em>)</p></li>
+<li><p><strong>logger</strong> (<a class="reference external" href="https://docs.python.org/3/library/logging.html#logging.Logger" title="(in Python v3.14)"><em>logging.Logger</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.flat_panel_path">
+<span class="sig-name descname"><span class="pre">flat_panel_path</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.flat_panel_path"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.flat_panel_path" title="Link to this definition"></a></dt>
+<dd><p>Return the primary flat panel path.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.manifest_path">
+<span class="sig-name descname"><span class="pre">manifest_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.manifest_path"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.manifest_path" title="Link to this definition"></a></dt>
+<dd><p>Return the control manifest path for a stage.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>stage</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.panel_genome_config_path">
+<span class="sig-name descname"><span class="pre">panel_genome_config_path</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.panel_genome_config_path"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.panel_genome_config_path" title="Link to this definition"></a></dt>
+<dd><p>Return the panel genome configuration path.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.prepare_run_root">
+<span class="sig-name descname"><span class="pre">prepare_run_root</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.prepare_run_root"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.prepare_run_root" title="Link to this definition"></a></dt>
+<dd><p>Create or validate the benchmark run root.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.resolve_reads_path">
+<span class="sig-name descname"><span class="pre">resolve_reads_path</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.resolve_reads_path"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.resolve_reads_path" title="Link to this definition"></a></dt>
+<dd><p>Return local reads from config or the acquisition stage.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.run"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.run" title="Link to this definition"></a></dt>
+<dd><p>Run the selected stage range.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_acquire_reads">
+<span class="sig-name descname"><span class="pre">stage_acquire_reads</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage_dir</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.stage_acquire_reads"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_acquire_reads" title="Link to this definition"></a></dt>
+<dd><p>Resolve a local input or acquire an SRA FASTQ.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>stage_dir</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>StageResult</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_ai_validation">
+<span class="sig-name descname"><span class="pre">stage_ai_validation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage_dir</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.stage_ai_validation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_ai_validation" title="Link to this definition"></a></dt>
+<dd><p>Apply the frozen AI model without retraining.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>stage_dir</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>StageResult</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_depth_subsets">
+<span class="sig-name descname"><span class="pre">stage_depth_subsets</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage_dir</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.stage_depth_subsets"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_depth_subsets" title="Link to this definition"></a></dt>
+<dd><p>Create deterministic depth subsets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>stage_dir</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>StageResult</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_dir">
+<span class="sig-name descname"><span class="pre">stage_dir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.stage_dir"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_dir" title="Link to this definition"></a></dt>
+<dd><p>Return the durable directory for a stage.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>stage</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_is_complete">
+<span class="sig-name descname"><span class="pre">stage_is_complete</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.stage_is_complete"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_is_complete" title="Link to this definition"></a></dt>
+<dd><p>Return whether a stage manifest and all declared outputs are valid.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>stage</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)">bool</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_preflight">
+<span class="sig-name descname"><span class="pre">stage_preflight</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage_dir</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.stage_preflight"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_preflight" title="Link to this definition"></a></dt>
+<dd><p>Validate frozen configuration and reference independence.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>stage_dir</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>StageResult</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_provenance">
+<span class="sig-name descname"><span class="pre">stage_provenance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage_dir</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.stage_provenance"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_provenance" title="Link to this definition"></a></dt>
+<dd><p>Write final checksums, environment and run-state summary.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>stage_dir</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>StageResult</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_screen_depths">
+<span class="sig-name descname"><span class="pre">stage_screen_depths</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage_dir</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.stage_screen_depths"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_screen_depths" title="Link to this definition"></a></dt>
+<dd><p>Screen every deterministic depth subset.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>stage_dir</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>StageResult</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_screen_full">
+<span class="sig-name descname"><span class="pre">stage_screen_full</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage_dir</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.stage_screen_full"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_screen_full" title="Link to this definition"></a></dt>
+<dd><p>Run the primary full-depth flat screen.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>stage_dir</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>StageResult</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_screen_hierarchical">
+<span class="sig-name descname"><span class="pre">stage_screen_hierarchical</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage_dir</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.stage_screen_hierarchical"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_screen_hierarchical" title="Link to this definition"></a></dt>
+<dd><p>Run the pre-specified secondary hierarchical screen.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>stage_dir</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>StageResult</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_screen_single_k">
+<span class="sig-name descname"><span class="pre">stage_screen_single_k</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage_dir</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.stage_screen_single_k"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_screen_single_k" title="Link to this definition"></a></dt>
+<dd><p>Run full-depth single-k ablations.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>stage_dir</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>StageResult</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_summarise">
+<span class="sig-name descname"><span class="pre">stage_summarise</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">stage_dir</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.stage_summarise"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.stage_summarise" title="Link to this definition"></a></dt>
+<dd><p>Summarise primary, depth, ablation and hierarchical tasks.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>stage_dir</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>StageResult</em></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.truth_manifest_path">
+<span class="sig-name descname"><span class="pre">truth_manifest_path</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.truth_manifest_path"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.truth_manifest_path" title="Link to this definition"></a></dt>
+<dd><p>Return the truth manifest path.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.BenchmarkWorkflow.write_stage_state">
+<span class="sig-name descname"><span class="pre">write_stage_state</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">stage</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">status</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">started_at</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outputs</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">()</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">detail</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">error</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#BenchmarkWorkflow.write_stage_state"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.BenchmarkWorkflow.write_stage_state" title="Link to this definition"></a></dt>
+<dd><p>Write a stage control manifest.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>stage</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+<li><p><strong>status</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+<li><p><strong>started_at</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+<li><p><strong>outputs</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a><em>]</em>)</p></li>
+<li><p><strong>detail</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+<li><p><strong>error</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.atomic_write_json">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.benchmark_workflow.</span></span><span class="sig-name descname"><span class="pre">atomic_write_json</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#atomic_write_json"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.atomic_write_json" title="Link to this definition"></a></dt>
+<dd><p>Write JSON through a same-directory temporary file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – Output JSON path.</p></li>
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a>) – JSON-serialisable value.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.build_parser">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.benchmark_workflow.</span></span><span class="sig-name descname"><span class="pre">build_parser</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#build_parser"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.build_parser" title="Link to this definition"></a></dt>
+<dd><p>Build the benchmark-controller argument parser.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/argparse.html#argparse.ArgumentParser" title="(in Python v3.14)"><em>ArgumentParser</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.command_display">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.benchmark_workflow.</span></span><span class="sig-name descname"><span class="pre">command_display</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">command</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#command_display"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.command_display" title="Link to this definition"></a></dt>
+<dd><p>Return a shell-readable command without executing shell syntax.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>command</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>]</em>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.filter_panel_by_k">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.benchmark_workflow.</span></span><span class="sig-name descname"><span class="pre">filter_panel_by_k</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">panel_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#filter_panel_by_k"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.filter_panel_by_k" title="Link to this definition"></a></dt>
+<dd><p>Stream one k value from a TSV/TSV.GZ panel.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>panel_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – Input panel.</p></li>
+<li><p><strong>output_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – Filtered output panel.</p></li>
+<li><p><strong>k_value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Required k value.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Number of retained rows.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the panel has no recognised k column or retains no rows.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)">int</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.load_benchmark_config">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.benchmark_workflow.</span></span><span class="sig-name descname"><span class="pre">load_benchmark_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">environment_overrides</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#load_benchmark_config"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.load_benchmark_config" title="Link to this definition"></a></dt>
+<dd><p>Load, expand and digest a benchmark JSON configuration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – JSON configuration path.</p></li>
+<li><p><strong>environment_overrides</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Mapping" title="(in Python v3.14)"><em>Mapping</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>] </em><em>| </em><em>None</em>) – Optional explicit placeholder values.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Expanded configuration and canonical SHA-256 digest.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FileNotFoundError" title="(in Python v3.14)"><strong>FileNotFoundError</strong></a> – If the configuration is missing.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the root is not a JSON object.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)">tuple</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>, <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a>], <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.require_mapping">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.benchmark_workflow.</span></span><span class="sig-name descname"><span class="pre">require_mapping</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#require_mapping"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.require_mapping" title="Link to this definition"></a></dt>
+<dd><p>Return a required mapping from configuration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a><em>]</em>) – Configuration mapping.</p></li>
+<li><p><strong>key</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Required key.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Nested mapping.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the key is absent or not an object.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>, <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.require_path">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.benchmark_workflow.</span></span><span class="sig-name descname"><span class="pre">require_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">must_exist</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#require_path"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.require_path" title="Link to this definition"></a></dt>
+<dd><p>Resolve a required path from configuration.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a><em>]</em>) – Configuration mapping.</p></li>
+<li><p><strong>key</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Required key.</p></li>
+<li><p><strong>must_exist</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Require an existing non-empty file.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Resolved path.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the setting is blank.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FileNotFoundError" title="(in Python v3.14)"><strong>FileNotFoundError</strong></a> – If the required file is missing or empty.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.run_benchmark">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.benchmark_workflow.</span></span><span class="sig-name descname"><span class="pre">run_benchmark</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#run_benchmark"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.run_benchmark" title="Link to this definition"></a></dt>
+<dd><p>Parse arguments and run the benchmark controller.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>argv</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>] </em><em>| </em><em>None</em>) – Optional explicit argument list.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Process exit status.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)">int</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.run_command">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.benchmark_workflow.</span></span><span class="sig-name descname"><span class="pre">run_command</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">command</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cwd</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">environment</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#run_command"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.run_command" title="Link to this definition"></a></dt>
+<dd><p>Run a command with combined file logging.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>command</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>]</em>) – Command and arguments.</p></li>
+<li><p><strong>log_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – Combined stdout/stderr log.</p></li>
+<li><p><strong>logger</strong> (<a class="reference external" href="https://docs.python.org/3/library/logging.html#logging.Logger" title="(in Python v3.14)"><em>Logger</em></a>) – Workflow logger.</p></li>
+<li><p><strong>cwd</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a><em> | </em><em>None</em>) – Optional working directory.</p></li>
+<li><p><strong>environment</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>] </em><em>| </em><em>None</em>) – Optional complete environment.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#RuntimeError" title="(in Python v3.14)"><strong>RuntimeError</strong></a> – If the command exits unsuccessfully.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.selected_stages">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.benchmark_workflow.</span></span><span class="sig-name descname"><span class="pre">selected_stages</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_at</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stop_after</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#selected_stages"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.selected_stages" title="Link to this definition"></a></dt>
+<dd><p>Resolve an inclusive stage range.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>start_at</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><em>None</em>) – Optional first stage.</p></li>
+<li><p><strong>stop_after</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><em>None</em>) – Optional final stage.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Ordered selected stages.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the range is reversed or a stage is invalid.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)">list</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.sha256_bytes">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.benchmark_workflow.</span></span><span class="sig-name descname"><span class="pre">sha256_bytes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#sha256_bytes"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.sha256_bytes" title="Link to this definition"></a></dt>
+<dd><p>Return a SHA-256 digest for bytes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#bytes" title="(in Python v3.14)"><em>bytes</em></a>)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.sha256_path">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.benchmark_workflow.</span></span><span class="sig-name descname"><span class="pre">sha256_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1048576</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#sha256_path"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.sha256_path" title="Link to this definition"></a></dt>
+<dd><p>Return a SHA-256 digest for one file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – File to hash.</p></li>
+<li><p><strong>chunk_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Read size in bytes.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Hexadecimal digest.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.utc_now">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.benchmark_workflow.</span></span><span class="sig-name descname"><span class="pre">utc_now</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#utc_now"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.utc_now" title="Link to this definition"></a></dt>
+<dd><p>Return a second-resolution UTC timestamp.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.validate_locked_atcc_config">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.benchmark_workflow.</span></span><span class="sig-name descname"><span class="pre">validate_locked_atcc_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#validate_locked_atcc_config"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.validate_locked_atcc_config" title="Link to this definition"></a></dt>
+<dd><p>Validate the pre-specified ATCC primary analysis settings.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>config</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><em>Any</em></a><em>]</em>) – Expanded benchmark configuration.</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If a locked setting differs from the registered design.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.benchmark_workflow.validate_stage_name">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.benchmark_workflow.</span></span><span class="sig-name descname"><span class="pre">validate_stage_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">option</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/benchmark_workflow.html#validate_stage_name"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.benchmark_workflow.validate_stage_name" title="Link to this definition"></a></dt>
+<dd><p>Validate an optional stage name.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>option</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-kmersutra.mock_community">
+<span id="mock-community-truth"></span><h2>Mock-community truth<a class="headerlink" href="#module-kmersutra.mock_community" title="Link to this heading"></a></h2>
+<p>Manifest-driven truth labelling for mock-community benchmarks.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.mock_community.build_mock_ai_feature_records">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.mock_community.</span></span><span class="sig-name descname"><span class="pre">build_mock_ai_feature_records</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">records</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">truth_records</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/mock_community.html#build_mock_ai_feature_records"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.mock_community.build_mock_ai_feature_records" title="Link to this definition"></a></dt>
+<dd><p>Build AI-ready records with generic mock-community truth labels.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>records</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a><em>]</em><em>]</em>) – KmerSutra call rows.</p></li>
+<li><p><strong>truth_records</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a><em>[</em><em>MockCommunityTruth</em><em>]</em>) – Validated truth records.</p></li>
+<li><p><strong>logger</strong> (<a class="reference external" href="https://docs.python.org/3/library/logging.html#logging.Logger" title="(in Python v3.14)"><em>Logger</em></a><em> | </em><em>None</em>) – Optional logger.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>AI-ready records with truth metadata.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)">list</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)">object</a>]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.mock_community.classify_mock_truth_category">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.mock_community.</span></span><span class="sig-name descname"><span class="pre">classify_mock_truth_category</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">record</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">truth_mapping</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/mock_community.html#classify_mock_truth_category"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.mock_community.classify_mock_truth_category" title="Link to this definition"></a></dt>
+<dd><p>Classify one KmerSutra call row against mock-community truth.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>record</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a><em>]</em>) – KmerSutra species-call row.</p></li>
+<li><p><strong>truth_mapping</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>MockCommunityTruth</em><em>]</em>) – Mapping returned by <a class="reference internal" href="#kmersutra.mock_community.truth_by_species" title="kmersutra.mock_community.truth_by_species"><code class="xref py py-func docutils literal notranslate"><span class="pre">truth_by_species()</span></code></a>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Truth categories and benchmark metadata for the call row.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)">object</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.mock_community.count_records_by_column">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.mock_community.</span></span><span class="sig-name descname"><span class="pre">count_records_by_column</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">records</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/mock_community.html#count_records_by_column"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.mock_community.count_records_by_column" title="Link to this definition"></a></dt>
+<dd><p>Count records by one output column.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>records</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a><em>]</em><em>]</em>) – Input rows.</p></li>
+<li><p><strong>column</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Column to count.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Sorted count records.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)">list</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)">object</a>]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.mock_community.load_truth_manifest">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.mock_community.</span></span><span class="sig-name descname"><span class="pre">load_truth_manifest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">manifest_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">require_expected</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/mock_community.html#load_truth_manifest"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.mock_community.load_truth_manifest" title="Link to this definition"></a></dt>
+<dd><p>Load and validate a mock-community truth manifest.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>manifest_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – TSV, TSV.GZ or Parquet truth manifest.</p></li>
+<li><p><strong>require_expected</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Require at least one expected organism.</p></li>
+<li><p><strong>logger</strong> (<a class="reference external" href="https://docs.python.org/3/library/logging.html#logging.Logger" title="(in Python v3.14)"><em>Logger</em></a><em> | </em><em>None</em>) – Optional logger.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Validated truth records.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the manifest is empty or internally inconsistent.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)">list</a>[<em>MockCommunityTruth</em>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.mock_community.normalise_accession">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.mock_community.</span></span><span class="sig-name descname"><span class="pre">normalise_accession</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/mock_community.html#normalise_accession"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.mock_community.normalise_accession" title="Link to this definition"></a></dt>
+<dd><p>Return an upper-case accession without a version suffix.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Assembly or sequence accession.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Normalised accession.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.mock_community.normalise_species_key">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.mock_community.</span></span><span class="sig-name descname"><span class="pre">normalise_species_key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/mock_community.html#normalise_species_key"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.mock_community.normalise_species_key" title="Link to this definition"></a></dt>
+<dd><p>Normalise a species label for robust exact matching.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Species-like value.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Case-folded, whitespace-normalised species label.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.mock_community.parse_bool">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.mock_community.</span></span><span class="sig-name descname"><span class="pre">parse_bool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/mock_community.html#parse_bool"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.mock_community.parse_bool" title="Link to this definition"></a></dt>
+<dd><p>Parse a conservative boolean value.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Boolean-like value.</p></li>
+<li><p><strong>default</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Value returned for blank input.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Parsed boolean.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If a non-blank value is not recognised.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)">bool</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.mock_community.parse_fraction">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.mock_community.</span></span><span class="sig-name descname"><span class="pre">parse_fraction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">field_name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/mock_community.html#parse_fraction"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.mock_community.parse_fraction" title="Link to this definition"></a></dt>
+<dd><p>Parse a fraction bounded between zero and one.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Numeric fraction.</p></li>
+<li><p><strong>field_name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Field name used in diagnostics.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Parsed floating-point fraction.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the value is missing, non-numeric or outside [0, 1].</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)">float</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.mock_community.sha256_file">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.mock_community.</span></span><span class="sig-name descname"><span class="pre">sha256_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1048576</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/mock_community.html#sha256_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.mock_community.sha256_file" title="Link to this definition"></a></dt>
+<dd><p>Calculate a file SHA-256 digest.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – File to hash.</p></li>
+<li><p><strong>chunk_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Read size in bytes.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Lower-case hexadecimal SHA-256 digest.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">chunk_size</span></code> is not positive.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FileNotFoundError" title="(in Python v3.14)"><strong>FileNotFoundError</strong></a> – If the file does not exist.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.mock_community.split_values">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.mock_community.</span></span><span class="sig-name descname"><span class="pre">split_values</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/mock_community.html#split_values"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.mock_community.split_values" title="Link to this definition"></a></dt>
+<dd><p>Split semicolon-delimited manifest values.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)"><em>object</em></a>) – Semicolon-delimited text.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Non-empty stripped values.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#frozenset" title="(in Python v3.14)">frozenset</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.mock_community.truth_by_species">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.mock_community.</span></span><span class="sig-name descname"><span class="pre">truth_by_species</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">truth_records</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/mock_community.html#truth_by_species"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.mock_community.truth_by_species" title="Link to this definition"></a></dt>
+<dd><p>Map canonical and accepted species labels to truth records.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>truth_records</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a><em>[</em><em>MockCommunityTruth</em><em>]</em>) – Validated truth records.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Mapping from normalised species label to truth record.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the same accepted name maps to multiple truth records.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>, <em>MockCommunityTruth</em>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.mock_community.write_mock_ai_feature_table">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.mock_community.</span></span><span class="sig-name descname"><span class="pre">write_mock_ai_feature_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">calls_table</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">truth_manifest</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_table</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">category_counts_table</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coarse_label_counts_table</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/mock_community.html#write_mock_ai_feature_table"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.mock_community.write_mock_ai_feature_table" title="Link to this definition"></a></dt>
+<dd><p>Label a call table using a generic mock-community manifest.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>calls_table</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – KmerSutra species-call table.</p></li>
+<li><p><strong>truth_manifest</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – Mock-community truth manifest.</p></li>
+<li><p><strong>output_table</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – Labelled AI feature table.</p></li>
+<li><p><strong>category_counts_table</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a><em> | </em><em>None</em>) – Optional fine-category count output.</p></li>
+<li><p><strong>coarse_label_counts_table</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a><em> | </em><em>None</em>) – Optional coarse-label count output.</p></li>
+<li><p><strong>logger</strong> (<a class="reference external" href="https://docs.python.org/3/library/logging.html#logging.Logger" title="(in Python v3.14)"><em>Logger</em></a><em> | </em><em>None</em>) – Optional logger.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Written feature records.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If no feature records are generated.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)">list</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)">object</a>]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-kmersutra.reference_audit">
+<span id="reference-audit"></span><h2>Reference audit<a class="headerlink" href="#module-kmersutra.reference_audit" title="Link to this heading"></a></h2>
+<p>Reference-panel leakage auditing for independent benchmarks.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.reference_audit.audit_reference_panel">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.reference_audit.</span></span><span class="sig-name descname"><span class="pre">audit_reference_panel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">genome_config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">truth_manifest</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_missing_fastas</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/reference_audit.html#audit_reference_panel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.reference_audit.audit_reference_panel" title="Link to this definition"></a></dt>
+<dd><p>Audit a KmerSutra genome configuration for benchmark leakage.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>genome_config</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – KmerSutra genome configuration table.</p></li>
+<li><p><strong>truth_manifest</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – Mock-community truth manifest.</p></li>
+<li><p><strong>allow_missing_fastas</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Keep metadata-only rows when FASTAs are missing.</p></li>
+<li><p><strong>logger</strong> (<a class="reference external" href="https://docs.python.org/3/library/logging.html#logging.Logger" title="(in Python v3.14)"><em>Logger</em></a><em> | </em><em>None</em>) – Optional logger.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>One audit row per panel genome.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the genome configuration is empty or invalid.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FileNotFoundError" title="(in Python v3.14)"><strong>FileNotFoundError</strong></a> – If a required panel FASTA is missing.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)">list</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)">object</a>]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.reference_audit.fasta_header_accessions">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.reference_audit.</span></span><span class="sig-name descname"><span class="pre">fasta_header_accessions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/reference_audit.html#fasta_header_accessions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.reference_audit.fasta_header_accessions" title="Link to this definition"></a></dt>
+<dd><p>Collect normalised accession-like tokens from FASTA headers.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – FASTA or FASTA.GZ file.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Normalised accession tokens found in header lines.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#set" title="(in Python v3.14)">set</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.reference_audit.open_text_auto">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.reference_audit.</span></span><span class="sig-name descname"><span class="pre">open_text_auto</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/reference_audit.html#open_text_auto"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.reference_audit.open_text_auto" title="Link to this definition"></a></dt>
+<dd><p>Open a plain or gzip-compressed text file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – Text file path.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Readable text handle.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.reference_audit.truth_accession_sets">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.reference_audit.</span></span><span class="sig-name descname"><span class="pre">truth_accession_sets</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">truth_records</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/reference_audit.html#truth_accession_sets"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.reference_audit.truth_accession_sets" title="Link to this definition"></a></dt>
+<dd><p>Collect truth assembly and sequence accession sets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>truth_records</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a><em>[</em><em>MockCommunityTruth</em><em>]</em>) – Truth records.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Assembly accession set and sequence accession set.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)">tuple</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#set" title="(in Python v3.14)">set</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>], <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#set" title="(in Python v3.14)">set</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.reference_audit.truth_checksums">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.reference_audit.</span></span><span class="sig-name descname"><span class="pre">truth_checksums</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">truth_records</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/reference_audit.html#truth_checksums"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.reference_audit.truth_checksums" title="Link to this definition"></a></dt>
+<dd><p>Resolve exact truth FASTA checksums.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>truth_records</strong> (<a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a><em>[</em><em>MockCommunityTruth</em><em>]</em>) – Truth records.</p></li>
+<li><p><strong>logger</strong> (<a class="reference external" href="https://docs.python.org/3/library/logging.html#logging.Logger" title="(in Python v3.14)"><em>Logger</em></a><em> | </em><em>None</em>) – Optional logger.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Mapping from SHA-256 digest to truth record.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FileNotFoundError" title="(in Python v3.14)"><strong>FileNotFoundError</strong></a> – If a declared truth FASTA is missing.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If a declared truth checksum does not match its FASTA.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>, <em>MockCommunityTruth</em>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.reference_audit.write_reference_panel_audit">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.reference_audit.</span></span><span class="sig-name descname"><span class="pre">write_reference_panel_audit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">genome_config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">truth_manifest</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_table</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">allow_missing_fastas</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fail_on_leakage</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/reference_audit.html#write_reference_panel_audit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.reference_audit.write_reference_panel_audit" title="Link to this definition"></a></dt>
+<dd><p>Run and write a reference-panel leakage audit.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>genome_config</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – KmerSutra genome configuration table.</p></li>
+<li><p><strong>truth_manifest</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – Mock-community truth manifest.</p></li>
+<li><p><strong>output_table</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – Audit output table.</p></li>
+<li><p><strong>allow_missing_fastas</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Permit metadata-only audit rows.</p></li>
+<li><p><strong>fail_on_leakage</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Raise when exact truth identity is found.</p></li>
+<li><p><strong>logger</strong> (<a class="reference external" href="https://docs.python.org/3/library/logging.html#logging.Logger" title="(in Python v3.14)"><em>Logger</em></a><em> | </em><em>None</em>) – Optional logger.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Written audit rows.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">fail_on_leakage</span></code> is true and leakage is detected.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)">list</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.14)">dict</a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.14)">object</a>]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-kmersutra.package_inventory">
+<span id="package-inventory"></span><h2>Package inventory<a class="headerlink" href="#module-kmersutra.package_inventory" title="Link to this heading"></a></h2>
+<p>Create reproducible package file inventories.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.package_inventory.build_parser">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.package_inventory.</span></span><span class="sig-name descname"><span class="pre">build_parser</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/package_inventory.html#build_parser"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.package_inventory.build_parser" title="Link to this definition"></a></dt>
+<dd><p>Build the package-inventory argument parser.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/argparse.html#argparse.ArgumentParser" title="(in Python v3.14)"><em>ArgumentParser</em></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.package_inventory.create_package_inventory">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.package_inventory.</span></span><span class="sig-name descname"><span class="pre">create_package_inventory</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">repo_root</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/package_inventory.html#create_package_inventory"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.package_inventory.create_package_inventory" title="Link to this definition"></a></dt>
+<dd><p>Write a tab-separated package inventory.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>repo_root</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – Repository directory.</p></li>
+<li><p><strong>output_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – Destination TSV path.</p></li>
+<li><p><strong>logger</strong> (<a class="reference external" href="https://docs.python.org/3/library/logging.html#logging.Logger" title="(in Python v3.14)"><em>Logger</em></a><em> | </em><em>None</em>) – Optional logger.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Number of inventoried files.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#NotADirectoryError" title="(in Python v3.14)"><strong>NotADirectoryError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">repo_root</span></code> is not a directory.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)">int</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.package_inventory.iter_package_files">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.package_inventory.</span></span><span class="sig-name descname"><span class="pre">iter_package_files</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">repo_root</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/package_inventory.html#iter_package_files"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.package_inventory.iter_package_files" title="Link to this definition"></a></dt>
+<dd><p>Yield package files while excluding generated result directories.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>repo_root</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – Repository directory.</p>
+</dd>
+<dt class="field-even">Yields<span class="colon">:</span></dt>
+<dd class="field-even"><p>Files in deterministic relative-path order.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Iterable" title="(in Python v3.14)"><em>Iterable</em></a>[<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.package_inventory.main">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.package_inventory.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/package_inventory.html#main"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.package_inventory.main" title="Link to this definition"></a></dt>
+<dd><p>Run the package-inventory command.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>argv</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>] </em><em>| </em><em>None</em>) – Optional explicit command-line arguments.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Process exit status.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)">int</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="kmersutra.package_inventory.sha256_file">
+<span class="sig-prename descclassname"><span class="pre">kmersutra.package_inventory.</span></span><span class="sig-name descname"><span class="pre">sha256_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1048576</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/kmersutra/package_inventory.html#sha256_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#kmersutra.package_inventory.sha256_file" title="Link to this definition"></a></dt>
+<dd><p>Return a SHA-256 digest for one file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><em>Path</em></a>) – File to hash.</p></li>
+<li><p><strong>chunk_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Number of bytes read per block.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Hexadecimal SHA-256 digest.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="cli_reference.html" class="btn btn-neutral float-left" title="Command reference" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="development.html" class="btn btn-neutral float-right" title="Development and testing" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Peter Thorpe.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

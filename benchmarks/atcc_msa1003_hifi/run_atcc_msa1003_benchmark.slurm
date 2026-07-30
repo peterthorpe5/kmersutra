@@ -11,6 +11,8 @@ set -Eeuo pipefail
 required_environment=(
     KS_CONFIG
     KS_OUTPUT_ROOT
+    KS_DATABASE_ROOT
+    KS_AI_MODEL
     KS_THREADS
     KS_CONDA_ENV
 )
@@ -46,6 +48,8 @@ write_status() {
         printf "slurm_cpus_per_task\t%s\n" "${SLURM_CPUS_PER_TASK:-}"
         printf "config\t%s\n" "${KS_CONFIG}"
         printf "output_root\t%s\n" "${KS_OUTPUT_ROOT}"
+        printf "database_root\t%s\n" "${KS_DATABASE_ROOT}"
+        printf "ai_model\t%s\n" "${KS_AI_MODEL}"
         printf "run_name\t%s\n" "${KS_RUN_NAME:-}"
         printf "conda_env\t%s\n" "${KS_CONDA_ENV}"
     } > "${STATUS_TABLE}"
@@ -88,6 +92,8 @@ RUN_COMMAND=(
     kmersutra-run-benchmark
     --config "${KS_CONFIG}"
     --output-root "${KS_OUTPUT_ROOT}"
+    --database-root "${KS_DATABASE_ROOT}"
+    --ai-model "${KS_AI_MODEL}"
     --threads "${KS_THREADS}"
     --verbose
 )
@@ -119,6 +125,8 @@ fi
     printf "slurm_cpus_per_task\t%s\n" "${SLURM_CPUS_PER_TASK:-}"
     printf "conda_executable\t%s\n" "${CONDA_EXE_PATH}"
     printf "conda_env\t%s\n" "${KS_CONDA_ENV}"
+    printf "database_root\t%s\n" "${KS_DATABASE_ROOT}"
+    printf "ai_model\t%s\n" "${KS_AI_MODEL}"
 } > "${RUNTIME_ROOT}/job_start.tsv"
 
 "${CONDA_EXE_PATH}" run --name "${KS_CONDA_ENV}" python --version

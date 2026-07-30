@@ -1,0 +1,175 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Troubleshooting &mdash; KmerSutra 0.51.1</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=1cd31b6b"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Benchmark workflows" href="benchmarks/index.html" />
+    <link rel="prev" title="Reproducibility and provenance" href="reproducibility.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            KmerSutra
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User guide</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="concepts.html">Scientific concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="panel_building.html">Building reference panels</a></li>
+<li class="toctree-l1"><a class="reference internal" href="screening.html">Screening reads</a></li>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Output guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hpc.html">Slurm execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="reproducibility.html">Reproducibility and provenance</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Troubleshooting</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#unresolved-configuration-variable">Unresolved configuration variable</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#reference-leakage-failure">Reference leakage failure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#only-13-tests-appear">Only 13 tests appear</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#nose2-configuration-error"><code class="docutils literal notranslate"><span class="pre">nose2</span></code> configuration error</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#slurm-command-cannot-find-conda">Slurm command cannot find Conda</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Benchmarks</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="benchmarks/index.html">Benchmark workflows</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="cli_reference.html">Command reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="development.html">Development and testing</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">KmerSutra</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Troubleshooting</li>
+      <li class="wy-breadcrumbs-aside">
+              <a href="https://github.com/peterthorpe5/kmersutra/blob/main/docs/source/troubleshooting.rst" class="fa fa-github"> Edit on GitHub</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="troubleshooting">
+<h1>Troubleshooting<a class="headerlink" href="#troubleshooting" title="Link to this heading"></a></h1>
+<section id="unresolved-configuration-variable">
+<h2>Unresolved configuration variable<a class="headerlink" href="#unresolved-configuration-variable" title="Link to this heading"></a></h2>
+<p>If preflight reports <code class="docutils literal notranslate"><span class="pre">KMERSUTRA_AI_MODEL</span></code> or <code class="docutils literal notranslate"><span class="pre">KMERSUTRA_DB_ROOT</span></code> as
+unresolved, pass explicit named paths:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>kmersutra-run-benchmark<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--config<span class="w"> </span>benchmarks/atcc_msa1003_hifi/config.example.json<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--database-root<span class="w"> </span>/absolute/path/to/kmersutra_db<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--ai-model<span class="w"> </span>/absolute/path/to/final_internal_calibrator_all_training.json<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output-root<span class="w"> </span>/absolute/path/to/benchmark_outputs<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--stop-after<span class="w"> </span>00_preflight<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--resume
+</pre></div>
+</div>
+</section>
+<section id="reference-leakage-failure">
+<h2>Reference leakage failure<a class="headerlink" href="#reference-leakage-failure" title="Link to this heading"></a></h2>
+<p>Do not disable the audit. Inspect
+<code class="docutils literal notranslate"><span class="pre">reference_panel_leakage_audit.tsv</span></code>, remove truth assemblies or sequences
+from the panel source configuration, rebuild and rerun preflight.</p>
+</section>
+<section id="only-13-tests-appear">
+<h2>Only 13 tests appear<a class="headerlink" href="#only-13-tests-appear" title="Link to this heading"></a></h2>
+<p>The 13 tests are the separate historical AI-validation suite. The main suite
+runs first. Use:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>bash<span class="w"> </span>run_quality_checks.sh<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--results-dir<span class="w"> </span>/absolute/project/path/kmersutra_test_results
+</pre></div>
+</div>
+<p>The main test count and branch coverage are recorded in the dated result
+directory.</p>
+</section>
+<section id="nose2-configuration-error">
+<h2><code class="docutils literal notranslate"><span class="pre">nose2</span></code> configuration error<a class="headerlink" href="#nose2-configuration-error" title="Link to this heading"></a></h2>
+<p>KmerSutra uses Python <code class="docutils literal notranslate"><span class="pre">unittest</span></code> and does not require <code class="docutils literal notranslate"><span class="pre">nose2</span></code>. Run the
+supplied scripts rather than invoking <code class="docutils literal notranslate"><span class="pre">nose2</span></code>.</p>
+</section>
+<section id="slurm-command-cannot-find-conda">
+<h2>Slurm command cannot find Conda<a class="headerlink" href="#slurm-command-cannot-find-conda" title="Link to this heading"></a></h2>
+<p>Run submission from a login shell where <code class="docutils literal notranslate"><span class="pre">conda</span></code> is on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>. The supplied
+batch wrappers then use the resolved executable through <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">run</span></code>.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="reproducibility.html" class="btn btn-neutral float-left" title="Reproducibility and provenance" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="benchmarks/index.html" class="btn btn-neutral float-right" title="Benchmark workflows" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Peter Thorpe.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

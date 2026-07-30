@@ -1,0 +1,155 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ONT ZymoBIOMICS D6300 &mdash; KmerSutra 0.51.1</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=1cd31b6b"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Command reference" href="../cli_reference.html" />
+    <link rel="prev" title="ATCC MSA-1003 PacBio HiFi" href="atcc_msa1003.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            KmerSutra
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">User guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../concepts.html">Scientific concepts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../panel_building.html">Building reference panels</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../screening.html">Screening reads</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../outputs.html">Output guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../hpc.html">Slurm execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../reproducibility.html">Reproducibility and provenance</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../troubleshooting.html">Troubleshooting</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Benchmarks</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Benchmark workflows</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="atcc_msa1003.html">ATCC MSA-1003 PacBio HiFi</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">ONT ZymoBIOMICS D6300</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../cli_reference.html">Command reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api.html">Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../development.html">Development and testing</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">KmerSutra</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Benchmark workflows</a></li>
+      <li class="breadcrumb-item active">ONT ZymoBIOMICS D6300</li>
+      <li class="wy-breadcrumbs-aside">
+              <a href="https://github.com/peterthorpe5/kmersutra/blob/main/docs/source/benchmarks/zymo_d6300.rst" class="fa fa-github"> Edit on GitHub</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="ont-zymobiomics-d6300">
+<h1>ONT ZymoBIOMICS D6300<a class="headerlink" href="#ont-zymobiomics-d6300" title="Link to this heading"></a></h1>
+<p>The public ONT Q20 Zymo D6300 dataset is <code class="docutils literal notranslate"><span class="pre">ERR5396170</span></code>. The historical
+same-species reference-label wrapper lived inside the dataset workspace rather
+than the Git repository:</p>
+<p><code class="docutils literal notranslate"><span class="pre">qsub_screen_zymo_same_species_reference_labels_v046_exact_minmixed_tmpdir.sh</span></code></p>
+<p>KmerSutra v0.51.1 supplies a Slurm replacement:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>bash<span class="w"> </span>benchmarks/zymo_d6300_ont/submit_zymo_d6300_screen.sh<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--reads<span class="w"> </span>/absolute/path/to/ERR5396170.fastq.gz<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--panel<span class="w"> </span>/absolute/path/to/species_kmer_panel.tsv.gz<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output-root<span class="w"> </span>/absolute/path/to/zymo_d6300_screen<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--min-mixed<span class="w"> </span><span class="m">0</span>.05<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--account<span class="w"> </span>barton<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--partition<span class="w"> </span>barton<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--threads<span class="w"> </span><span class="m">24</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--conda-env<span class="w"> </span>kmersutra
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">0.05</span></code> setting is the manuscript-facing operating point from the
+same-species reference-label challenge. It recovered all ten expected
+organisms with no reportable non-expected species. Other threshold points were
+exploratory and must be labelled as such.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">kmersutra-label-zymo-calls</span></code> and the existing benchmark-summary commands
+to separate expected organisms, same-species alternatives and non-expected
+species in the resulting report.</p>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="atcc_msa1003.html" class="btn btn-neutral float-left" title="ATCC MSA-1003 PacBio HiFi" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../cli_reference.html" class="btn btn-neutral float-right" title="Command reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Peter Thorpe.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

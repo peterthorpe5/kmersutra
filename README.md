@@ -5,24 +5,44 @@ species-resolved metagenomic detection. It combines exact evidence across
 multiple k-mer lengths, outgroup-aware marker construction, explicit
 species/lineage reporting and optional interpretable evidence calibration.
 
+It was developed in response to a practical problem identified in an ONT
+Plasmodium benchmark: Kraken2 and Metabuli detected low-abundance targets
+sensitively, but their positive reports also contained numerous non-expected
+Plasmodium labels. KmerSutra tests a different operating point, prioritising
+clean, inspectable species-level evidence rather than maximal read assignment
+or earliest-read detection. It complements general-purpose classifiers rather
+than replacing them.
+
 The deterministic evidence and reporting layers remain the scientific core.
 The optional AI model calibrates summary evidence; it does not replace the
 rule-based calls and it does not perform per-read neural classification.
 
+**Documentation:** [browsable user guide](https://peterthorpe5.github.io/kmersutra/)
+· [offline HTML](docs/html/index.html)
+· [installation](docs/source/installation.rst)
+· [command reference](docs/source/cli_reference.rst)
+
 ## Current release
 
-Version 0.51.0 is the benchmark-ready release for locked independent
-validation. It preserves all v0.50.1 commands and adds:
+Version 0.51.1 is the benchmark and documentation repair release. It preserves
+the installed v0.50.1 command surface and adds:
 
 - generic mock-community truth manifests;
 - truth-accession exclusion and reference-panel leakage auditing;
 - deterministic depth-series generation;
 - a restartable benchmark controller;
 - a Slurm workflow for ATCC MSA-1003 HiFi, SRR9328980;
-- continuous integration, coverage and wheel-content checks.
+- restored, Slurm-native ONT Zymo D6300 screening;
+- explicit ATCC `--database-root` and `--ai-model` options;
+- early rejection of unresolved configuration placeholders;
+- dated test, coverage and package-inventory result directories;
+- Read the Docs-style HTML documentation;
+- continuous integration, coverage, documentation and wheel-content checks.
 
 See the [changelog](https://github.com/peterthorpe5/kmersutra/blob/main/CHANGELOG.md)
-and the [v0.51.0 release notes](https://github.com/peterthorpe5/kmersutra/blob/main/docs/releases/V0_51_0_RELEASE_NOTES.md).
+and the [v0.51.1 release notes](docs/releases/V0_51_1_RELEASE_NOTES.md). The
+[overlay and cluster handoff](docs/DEPLOYMENT_COMMANDS_v0_51_1.md) uses named
+paths and keeps generated validation artefacts outside the repository root.
 
 ## Installation
 
@@ -36,10 +56,11 @@ conda run --name kmersutra kmersutra-screen --help
 Install into an existing environment:
 
 ```bash
-python -m pip install --editable ".[dev,reporting,ncbi,ml,parquet]"
+python -m pip install --editable ".[all,dev,docs]"
 ```
 
-The package requires Python 3.10 or newer.
+The package supports Python 3.10–3.12. See the
+[complete installation guide](docs/source/installation.rst).
 
 ## Core workflow
 
@@ -100,15 +121,19 @@ Its primary settings are frozen before examining SRR9328980:
 - hierarchical result secondary;
 - no primary threshold sweep.
 
-Prepare a site-specific configuration, then submit:
+Pass site-specific paths explicitly. The example JSON remains portable and is
+not edited to contain private cluster paths:
 
 ```bash
-cp benchmarks/atcc_msa1003_hifi/config.example.json \
-    benchmarks/atcc_msa1003_hifi/config.cluster.json
+DATABASE_ROOT="/absolute/path/to/kmersutra_db"
+AI_MODEL="/absolute/path/to/final_internal_calibrator_all_training.json"
+OUTPUT_ROOT="/absolute/path/to/kmersutra_atcc_msa1003"
 
 bash benchmarks/atcc_msa1003_hifi/submit_atcc_msa1003_benchmark.sh \
-    --config benchmarks/atcc_msa1003_hifi/config.cluster.json \
-    --output-root /home/pthorpe001/data/benchmarks/kmersutra_atcc_msa1003 \
+    --config benchmarks/atcc_msa1003_hifi/config.example.json \
+    --database-root "${DATABASE_ROOT}" \
+    --ai-model "${AI_MODEL}" \
+    --output-root "${OUTPUT_ROOT}" \
     --account barton \
     --partition barton \
     --conda-env kmersutra \
@@ -116,7 +141,28 @@ bash benchmarks/atcc_msa1003_hifi/submit_atcc_msa1003_benchmark.sh \
 ```
 
 Full instructions are in
-[ATCC_MSA1003_HIFI.md](https://github.com/peterthorpe5/kmersutra/blob/main/docs/benchmarking/ATCC_MSA1003_HIFI.md).
+[the ATCC guide](docs/source/benchmarks/atcc_msa1003.rst).
+
+## Existing ONT Zymo benchmark
+
+The public ONT Q20 Zymo D6300 benchmark (`ERR5396170`) remains part of the
+package and manuscript evidence. Its original qsub wrapper was stored inside
+the cluster dataset directory rather than GitHub. Version 0.51.1 provides a
+current Slurm replacement:
+
+```bash
+bash benchmarks/zymo_d6300_ont/submit_zymo_d6300_screen.sh \
+    --reads /absolute/path/to/ERR5396170.fastq.gz \
+    --panel /absolute/path/to/species_kmer_panel.tsv.gz \
+    --output-root /absolute/path/to/zymo_d6300_screen \
+    --min-mixed 0.05 \
+    --account barton \
+    --partition barton \
+    --threads 24 \
+    --conda-env kmersutra
+```
+
+See the [Zymo benchmark guide](docs/source/benchmarks/zymo_d6300.rst).
 
 ## Manifest-driven truth labelling
 
@@ -154,36 +200,49 @@ truth FASTA.
 
 ## Testing and quality checks
 
-Run the compatibility test suite:
+Run the compatibility test suite and keep its logs beneath a dedicated result
+directory:
 
 ```bash
-bash run_tests.sh
+bash run_tests.sh \
+    --results-dir /absolute/project/path/kmersutra_test_results
 ```
 
-Run release checks:
+Run release checks, including branch coverage and an HTML coverage browser:
 
 ```bash
-bash run_quality_checks.sh
+bash run_quality_checks.sh \
+    --results-dir /absolute/project/path/kmersutra_test_results
 ```
 
-The release gate includes unit tests, a ratcheted 75% branch-coverage floor,
-Ruff static checks, wheel construction and a wheel-content audit. The verified
-v0.51.0 rebuild is at 78%; the next engineering target is at least 90%.
+Each run writes its logs, coverage reports and package inventory below one dated
+directory. Generated `test_results_*` and `PACKAGE_FILE_INVENTORY_*` files no
+longer accumulate in the repository root or home directory.
+
+Historical SGE and AI-validation wrappers are retained for provenance beneath
+[`scripts/legacy`](scripts/legacy/README.md). Current Slurm launchers live with
+their benchmark specifications under `benchmarks/`.
 
 ## Documentation
 
-- [Installation and cluster deployment](https://github.com/peterthorpe5/kmersutra/blob/main/docs/INSTALLATION.md)
-- [v0.51.0 Mac/GitHub/cluster commands](https://github.com/peterthorpe5/kmersutra/blob/main/docs/DEPLOYMENT_COMMANDS_v0_51_0.md)
-- [v0.51.0 rebuild handoff](https://github.com/peterthorpe5/kmersutra/blob/main/docs/REBUILD_HANDOFF_v0_51_0.md)
-- [Command compatibility](https://github.com/peterthorpe5/kmersutra/blob/main/docs/CLI_COMPATIBILITY.md)
-- [Reproducibility model](https://github.com/peterthorpe5/kmersutra/blob/main/docs/REPRODUCIBILITY.md)
-- [ATCC benchmark design](https://github.com/peterthorpe5/kmersutra/blob/main/docs/benchmarking/ATCC_MSA1003_HIFI.md)
-- [Historical README](https://github.com/peterthorpe5/kmersutra/blob/main/docs/history/README_v0_50_1_legacy.md)
+Build the Read the Docs-style site locally:
+
+```bash
+python -m pip install --editable ".[docs]"
+bash scripts/build_documentation.sh --output-dir docs/html
+```
+
+Then open `docs/html/index.html`. The repository also includes a Read the Docs
+configuration and a GitHub Actions documentation build.
+
+The guide covers installation, scientific concepts, panel construction,
+screening, outputs, Slurm, reproducibility, troubleshooting, ATCC, Zymo, the
+command catalogue and the Python API.
 
 ## Citation and licence
 
 Citation metadata are provided in [CITATION.cff](https://github.com/peterthorpe5/kmersutra/blob/main/CITATION.cff). A permanent
-software archive identifier should be added after the public v0.51.0 release.
+software archive identifier should be added after the public release.
 
 An institutional licence decision is still required; see
 [LICENCE_SELECTION_REQUIRED.md](https://github.com/peterthorpe5/kmersutra/blob/main/docs/LICENCE_SELECTION_REQUIRED.md). No open-source
