@@ -2,8 +2,8 @@ cff-version: 1.2.0
 message: "If you use KmerSutra, please cite the software and associated manuscript."
 title: "KmerSutra"
 type: software
-version: 0.51.1
-date-released: 2026-07-30
+version: 0.51.2
+date-released: 2026-07-31
 authors:
   - family-names: "Thorpe"
     given-names: "Peter"

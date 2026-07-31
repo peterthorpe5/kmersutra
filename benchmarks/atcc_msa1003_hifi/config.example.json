@@ -12,7 +12,7 @@
     "truth_manifest": "${REPO_ROOT}/benchmarks/atcc_msa1003_hifi/truth_manifest.tsv",
     "flat_panel": "${KMERSUTRA_DB_ROOT}/atcc_msa1003_heldout_v1/species_kmer_panel.tsv.gz",
     "panel_genome_config": "${KMERSUTRA_DB_ROOT}/atcc_msa1003_heldout_v1/kmersutra_genome_config.tsv",
-    "module_manifest": ""
+    "module_manifest": "${KMERSUTRA_DB_ROOT}/atcc_msa1003_heldout_v1/kmersutra_module_manifest.tsv"
   },
   "screen": {
     "screen_preset": "exact",

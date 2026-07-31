@@ -3,6 +3,33 @@
 All notable user-facing changes are recorded here. Historical release notes are
 retained under [`docs/history/release_notes`](docs/history/release_notes).
 
+## 0.51.2 - 2026-07-31
+
+### Fixed
+
+- Replaced the unusable ATCC placeholder panel path with a complete,
+  leakage-controlled reference-preparation workflow.
+- Removed the shell-specific AWK reference gate that failed on implementations
+  where `index` is reserved; the gate is now implemented and tested in Python.
+- Prevented the established Plasmodium/outgroup v4 panel from being treated as
+  an ATCC target panel. It remains background evidence in the extended build.
+
+### Added
+
+- `kmersutra-prepare-atcc-reference` commands for taxid planning, genome-config
+  finalisation and reference-gate evaluation.
+- Restartable Slurm stages for target and genus-neighbour acquisition, truth
+  accession exclusion, reference audit, v0.46-profile panel construction and
+  atomic completion tokens.
+- Unit tests for target/genus planning, role and accession deduplication,
+  held-out target coverage, truth-sequence leakage and gate blocking.
+
+### Changed
+
+- Package version increased from 0.51.1 to 0.51.2.
+- The ATCC example configuration now enables the hierarchical module manifest
+  produced by the reference build.
+
 ## 0.51.1 - 2026-07-30
 
 ### Fixed

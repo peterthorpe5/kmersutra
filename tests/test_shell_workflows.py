@@ -69,6 +69,26 @@ class TestShellWorkflows(unittest.TestCase):
         self.assertIn("--database-root DIR", completed.stdout)
         self.assertIn("--ai-model FILE", completed.stdout)
 
+    def test_atcc_reference_submit_help_documents_required_inputs(self) -> None:
+        """The ATCC reference builder should require explicit provenance inputs."""
+        path = (
+            REPOSITORY_ROOT
+            / "benchmarks"
+            / "atcc_msa1003_hifi"
+            / "submit_atcc_reference_panel.sh"
+        )
+        completed = subprocess.run(
+            ["bash", str(path), "--help"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("--background-config FILE", completed.stdout)
+        self.assertIn("--truth-manifest FILE", completed.stdout)
+        self.assertIn("--taxonomy-dir DIR", completed.stdout)
+        self.assertIn("--email ADDRESS", completed.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

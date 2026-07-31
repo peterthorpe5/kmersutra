@@ -24,7 +24,7 @@ rule-based calls and it does not perform per-read neural classification.
 
 ## Current release
 
-Version 0.51.1 is the benchmark and documentation repair release. It preserves
+Version 0.51.2 is the ATCC reference-preparation repair release. It preserves
 the installed v0.50.1 command surface and adds:
 
 - generic mock-community truth manifests;
@@ -38,10 +38,14 @@ the installed v0.50.1 command surface and adds:
 - dated test, coverage and package-inventory result directories;
 - Read the Docs-style HTML documentation;
 - continuous integration, coverage, documentation and wheel-content checks.
+- a leakage-controlled ATCC reference builder using held-out target genomes,
+  genus-level near neighbours and the established v4 collection as background;
+- a tested Python reference gate that prevents screening when any ATCC target
+  is missing or any published truth accession leaks into the panel.
 
 See the [changelog](https://github.com/peterthorpe5/kmersutra/blob/main/CHANGELOG.md)
-and the [v0.51.1 release notes](docs/releases/V0_51_1_RELEASE_NOTES.md). The
-[overlay and cluster handoff](docs/DEPLOYMENT_COMMANDS_v0_51_1.md) uses named
+and the [v0.51.2 release notes](docs/releases/V0_51_2_RELEASE_NOTES.md). The
+[overlay and cluster handoff](docs/DEPLOYMENT_COMMANDS_v0_51_2.md) uses named
 paths and keeps generated validation artefacts outside the repository root.
 
 ## Installation
