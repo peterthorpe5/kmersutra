@@ -16,6 +16,7 @@ import subprocess
 import sys
 import time
 import uuid
+from collections import deque
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -422,6 +423,19 @@ def run_command(
             text=True,
         )
     if completed.returncode != 0:
+        with log_path.open(
+            "r",
+            encoding="utf-8",
+            errors="replace",
+        ) as handle:
+            log_tail = "".join(deque(handle, maxlen=40)).rstrip()
+        if log_tail:
+            logger.error(
+                "Command exited with status %d. Last log lines from %s:\n%s",
+                completed.returncode,
+                log_path,
+                log_tail,
+            )
         raise RuntimeError(
             f"Command failed with exit status {completed.returncode}: "
             f"{command_display(command)}. See {log_path}"
@@ -1026,9 +1040,33 @@ class BenchmarkWorkflow:
             if task_root.exists():
                 shutil.rmtree(task_root)
             temporary.replace(task_root)
-        except Exception:
-            shutil.rmtree(temporary, ignore_errors=True)
-            raise
+        except Exception as exc:
+            failed_root = task_root.parent / "failed_tasks"
+            failed_root.mkdir(parents=True, exist_ok=True)
+            failure_timestamp = datetime.now(timezone.utc).strftime(
+                "%Y%m%dT%H%M%SZ"
+            )
+            failed_task = failed_root / (
+                f"{task_root.name}.{failure_timestamp}"
+                f".{uuid.uuid4().hex}"
+            )
+            try:
+                temporary.replace(failed_task)
+            except OSError:
+                self.logger.exception(
+                    "Could not preserve failed screen task directory %s",
+                    temporary,
+                )
+                raise
+            self.logger.error(
+                "Screen task %s failed; diagnostics preserved at %s",
+                sample_id,
+                failed_task,
+            )
+            raise RuntimeError(
+                f"Screen task {sample_id} failed; diagnostics preserved at "
+                f"{failed_task}"
+            ) from exc
         return calls
 
     def stage_screen_full(self, stage_dir: Path) -> StageResult:

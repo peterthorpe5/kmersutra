@@ -5,9 +5,11 @@ from __future__ import annotations
 import gzip
 import json
 import logging
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from kmersutra.benchmark_workflow import (
     LOCKED_ATCC_BENCHMARK_ID,
@@ -18,6 +20,7 @@ from kmersutra.benchmark_workflow import (
     build_parser,
     filter_panel_by_k,
     load_benchmark_config,
+    run_command,
     selected_stages,
     validate_locked_atcc_config,
 )
@@ -220,6 +223,23 @@ class TestBenchmarkWorkflowHelpers(unittest.TestCase):
                     k_value=77,
                 )
 
+    def test_run_command_preserves_child_output_on_failure(self) -> None:
+        """A failed command should retain its combined diagnostic log."""
+        with tempfile.TemporaryDirectory() as temporary:
+            log_path = Path(temporary) / "command.log"
+            with self.assertRaisesRegex(RuntimeError, "exit status 7"):
+                run_command(
+                    command=[
+                        sys.executable,
+                        "-c",
+                        "import sys; print('diagnostic marker'); sys.exit(7)",
+                    ],
+                    log_path=log_path,
+                    logger=logging.getLogger("test"),
+                )
+            log_text = log_path.read_text(encoding="utf-8")
+        self.assertIn("diagnostic marker", log_text)
+
 
 class TestBenchmarkStageState(unittest.TestCase):
     """Test completion-state validation independently of scientific stages."""
@@ -280,6 +300,45 @@ class TestBenchmarkStageState(unittest.TestCase):
         path = Path("/tmp/example.tsv")
         result = StageResult(outputs=(path,), detail="test")
         self.assertEqual(result.outputs, (path,))
+
+    def test_failed_screen_task_preserves_diagnostics(self) -> None:
+        """A failed child screen should move its logs to failed_tasks."""
+        with tempfile.TemporaryDirectory() as temporary:
+            workflow = self.build_workflow(Path(temporary))
+            workflow.prepare_run_root()
+            workflow.current_stage = "05_screen_single_k"
+            stage_dir = workflow.stage_dir("05_screen_single_k")
+            stage_dir.mkdir(parents=True, exist_ok=True)
+            task_root = stage_dir / "sample_single_k_77"
+
+            def fail_screen(**kwargs: object) -> None:
+                log_path = Path(str(kwargs["log_path"]))
+                log_path.write_text("child traceback\n", encoding="utf-8")
+                raise RuntimeError("synthetic child failure")
+
+            with patch(
+                "kmersutra.benchmark_workflow.run_command",
+                side_effect=fail_screen,
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "diagnostics preserved",
+                ):
+                    workflow._run_screen_task(
+                        task_root=task_root,
+                        reads=Path("reads.fastq"),
+                        panel=Path("panel_k77.tsv.gz"),
+                        sample_id="sample_single_k_77",
+                        single_k=True,
+                    )
+
+            failed_tasks = list((stage_dir / "failed_tasks").iterdir())
+            self.assertEqual(len(failed_tasks), 1)
+            self.assertEqual(
+                (failed_tasks[0] / "command.log").read_text(encoding="utf-8"),
+                "child traceback\n",
+            )
+            self.assertFalse(task_root.exists())
 
 
 class TestBenchmarkWorkflowIntegration(unittest.TestCase):
