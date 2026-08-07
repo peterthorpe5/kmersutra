@@ -64,7 +64,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--feature_columns", nargs="+", default=None)
     parser.add_argument(
         "--feature_profile",
-        choices=["legacy", "safe_raw", "safe_transformed"],
+        choices=["legacy", "safe_raw", "safe_transformed", "safe_transformed_bounded"],
         default="legacy",
         help=(
             "Feature profile used when --feature_columns is not supplied. "

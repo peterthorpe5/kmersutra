@@ -24,7 +24,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out_dir", required=True)
     parser.add_argument(
         "--feature_profile",
-        choices=["legacy", "safe_raw", "safe_transformed"],
+        choices=["legacy", "safe_raw", "safe_transformed", "safe_transformed_bounded"],
         default="safe_transformed",
     )
     parser.add_argument("--feature_columns", nargs="+", default=None)
